@@ -1,75 +1,56 @@
-# Building Tailroute from Source
+# Building from Source
 
 ## Prerequisites
 
-- Xcode 14+ (or Swift 5.9 via Command Line Tools)
+- Bash 3.2+ (macOS default)
+- Go 1.22+ (for proxy binary)
 - macOS 12+ (Monterey or later)
-- Tailscale installed (for testing)
 
-## Quick Start
+## Build the Proxy Binary
 
 ```bash
-cd macos
+cd proxy
 ./build.sh
 ```
 
-This creates `build/Tailroute-0.2.0.dmg` ready for distribution.
+This creates `proxy/build/tailroute-proxy` for your architecture.
 
-## Development Build
-
-```bash
-cd macos
-swift build
-# Binary at: .build/debug/tailroute
-```
-
-## Release Build
+### Cross-compile
 
 ```bash
-cd macos
-swift build -c release
-# Binary at: .build/release/tailroute
+# ARM64 (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o build/tailroute-proxy-darwin-arm64
+
+# AMD64 (Intel Mac)
+GOOS=darwin GOARCH=amd64 go build -o build/tailroute-proxy-darwin-amd64
 ```
 
-## Running Tests
-
-Requires Xcode (XCTest framework is not included in Command Line Tools).
+## Install
 
 ```bash
-cd macos
-swift test   # Requires Xcode toolchain
+sudo ./install.sh
 ```
 
-Test suites:
-- `StatusMenuControllerTests` — Menu structure and icon updates
-- `InterfaceDetectionTests` — IPv4 validation, CIDR matching, edge cases
-- `ConfigTests` — Default values, persistence round-trip
-- `NotificationManagerTests` — State change message content
+This:
+- Copies `bin/tailroute.sh` to `/usr/local/bin/tailroute`
+- Copies library files to `/usr/local/bin/lib-*.sh`
+- Copies proxy binary to `/usr/local/bin/tailroute-proxy` (if built)
+- Installs launchd plist to `/Library/LaunchDaemons/`
+- Starts the daemon
 
-### Manual Testing
+## Run Tests
 
 ```bash
-cd macos
-./build.sh
-open build/Tailroute-0.2.0.dmg
+cd tests
+./run-tests.sh
 ```
-
-See [INTEGRATION-TESTS.md](docs/ref/INTEGRATION-TESTS.md) for full manual verification steps.
-
-## Troubleshooting
-
-### "Swift not found"
-Install Xcode Command Line Tools:
-```bash
-xcode-select --install
-```
-
-### "Cannot import AppKit"
-Ensure building from `macos/` directory where Package.swift is located.
-
-### "tailroute binary not found"
-Run `swift build` first. Binary is in `.build/debug/` or `.build/release/`.
 
 ## Architecture
 
-See [SWIFT-ARCHITECTURE.md](docs/ref/SWIFT-ARCHITECTURE.md) for module organization.
+See [docs/architecture.md](docs/architecture.md) for technical overview.
+
+## Uninstall
+
+```bash
+sudo ./uninstall.sh
+```

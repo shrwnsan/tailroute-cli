@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	version   = "0.2.2"
+	version   = "0.5.0-beta.1"
 	hostname  string
 	stateDir  string
 	authKey   string
