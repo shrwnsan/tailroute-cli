@@ -14,8 +14,9 @@ That's it. The daemon runs automatically in the background.
 ## What it does
 
 When you have both Tailscale and a VPN (NordVPN, ProtonVPN, etc.) connected:
-- Tailscale's MagicDNS breaks your internet
-- tailroute fixes it by toggling MagicDNS automatically
+
+- **DNS fix**: MagicDNS breaks your internet → tailroute toggles it automatically
+- **Mesh access**: VPN blocks Tailscale IPs → use the built-in SOCKS5 proxy to reach peers
 
 ## Usage
 
