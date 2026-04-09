@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.5.0-beta.1
+# tailroute v0.5.0-beta.2
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Version
-readonly VERSION="0.5.0-beta.1"
+readonly VERSION="0.5.0-beta.2"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -608,11 +608,19 @@ do_proxy_start() {
     
     echo "Starting proxy on $PROXY_SOCKS_ADDR..."
     
-    # Start proxy in background
-    "$PROXY_BIN_PATH" \
-        --socks-addr "$PROXY_SOCKS_ADDR" \
-        --state-dir "$PROXY_STATE_DIR" \
-        >"$HOME/.tailroute/proxy.log" 2>&1 &
+    # Start proxy in background (pass TS_AUTHKEY if available)
+    if [[ -n "$TS_AUTHKEY" ]]; then
+        "$PROXY_BIN_PATH" \
+            --socks-addr "$PROXY_SOCKS_ADDR" \
+            --state-dir "$PROXY_STATE_DIR" \
+            --auth-key "$TS_AUTHKEY" \
+            >"$HOME/.tailroute/proxy.log" 2>&1 &
+    else
+        "$PROXY_BIN_PATH" \
+            --socks-addr "$PROXY_SOCKS_ADDR" \
+            --state-dir "$PROXY_STATE_DIR" \
+            >"$HOME/.tailroute/proxy.log" 2>&1 &
+    fi
     
     local pid=$!
     echo "$pid" > "$PROXY_PID_FILE"

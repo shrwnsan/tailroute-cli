@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	version   = "0.5.0-beta.1"
+	version   = "0.5.0-beta.2"
 	hostname  string
 	stateDir  string
 	authKey   string
@@ -29,7 +29,7 @@ func init() {
 	flag.StringVar(&hostname, "hostname", "tailroute-proxy", "tsnet hostname")
 	flag.StringVar(&stateDir, "state-dir", os.ExpandEnv("$HOME/.tailroute/proxy-state"), "tsnet state directory")
 	flag.StringVar(&authKey, "auth-key", os.Getenv("TS_AUTHKEY"), "Tailscale auth key (or TS_AUTHKEY env)")
-	flag.BoolVar(&ephemeral, "ephemeral", true, "Use ephemeral node")
+	flag.BoolVar(&ephemeral, "ephemeral", false, "Use ephemeral node (single-use key, re-auth required each restart)")
 	flag.StringVar(&socksAddr, "socks-addr", "127.0.0.1:1055", "SOCKS5 bind address (localhost only)")
 	flag.BoolVar(&printVers, "version", false, "Print version and exit")
 }
@@ -66,36 +66,40 @@ func main() {
 		log.Fatalf("tsnet server error: %v", err)
 	}
 
-	// Wait for tsnet to be running
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Wait for tsnet to be authenticated and running
+	// Polls for up to 2 minutes, printing the auth URL if browser auth is needed
+	authCtx, authCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer authCancel()
 
+	var authURL string
 	for {
 		cl, err := server.LocalClient()
 		if err == nil {
-			status, statusErr := cl.Status(ctx)
+			status, statusErr := cl.Status(authCtx)
 			if statusErr != nil {
 				log.Printf("Failed to read tsnet status: %v", statusErr)
 			} else {
 				log.Printf("tsnet connected, state: %v", status.BackendState)
-				if status.AuthURL != "" {
+
+				if status.BackendState == "Running" {
+					break
+				}
+
+				if status.AuthURL != "" && status.AuthURL != authURL {
+					authURL = status.AuthURL
 					log.Printf("Authorize this node: %s", status.AuthURL)
 				}
 			}
-			break
 		}
 
 		select {
-		case <-ctx.Done():
-			log.Fatalf("Timeout waiting for tsnet to start")
-		case <-time.After(500 * time.Millisecond):
+		case <-authCtx.Done():
+			log.Fatalf("Timeout waiting for tsnet authentication")
+		case <-time.After(2 * time.Second):
 		}
 	}
 
-	log.Printf("tsnet server started, hostname: %s, state dir: %s", hostname, stateDir)
-	if authKey == "" {
-		log.Printf("No TS_AUTHKEY set - will require browser authentication on first run")
-	}
+	log.Printf("tsnet authenticated and running, hostname: %s, state dir: %s", hostname, stateDir)
 
 	// Create SOCKS5 server with custom dialer that routes through tsnet
 	socksServer := socks5.NewServer(
