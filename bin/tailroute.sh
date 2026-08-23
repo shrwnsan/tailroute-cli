@@ -21,6 +21,76 @@ readonly VERSION="0.5.0-beta.2"
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Install-time integrity manifest (see SECURITY.md — Installed File Integrity)
+readonly INTEGRITY_MANIFEST="/var/db/tailroute/installed.checksums"
+readonly INSTALLED_PROXY_BIN="/usr/local/bin/tailroute-proxy"
+
+# =============================================================================
+# Installed file integrity
+# =============================================================================
+# The wrapper is a bash script and cannot be meaningfully codesigned. Instead,
+# do_install() records SHA-256 checksums of the installed wrapper and lib
+# files, and the root daemon verifies them (plus the proxy binary's code
+# signature) before sourcing anything. These functions must live here, above
+# the lib sources: they gate the very files that are about to be sourced.
+
+# integrity_fail — Log CRITICAL before lib-log.sh is loaded/trusted
+integrity_fail() {
+    echo "[$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)] [CRITICAL] $*" >&2
+}
+
+# verify_checksum_manifest — Refuse to run if any installed file was replaced.
+# Absent manifest (dev checkout or pre-install) means nothing to verify.
+verify_checksum_manifest() {
+    local manifest="$1"
+    [[ -r "$manifest" ]] || return 0
+
+    local output
+    if ! output=$(/usr/bin/shasum -a 256 --check "$manifest" 2>&1); then
+        integrity_fail "Installed file checksum mismatch - refusing to run as root"
+        integrity_fail "Files listed in $manifest do not match their install-time checksums:"
+        printf '%s\n' "$output" >&2
+        integrity_fail "Reinstall from a trusted source: sudo tailroute install"
+        return 1
+    fi
+}
+
+# verify_code_signature — Refuse to run a proxy binary with a broken signature.
+# Absent binary means the optional proxy is simply not installed.
+verify_code_signature() {
+    local binary="$1"
+    [[ -f "$binary" ]] || return 0
+
+    if ! /usr/bin/codesign --verify --strict "$binary" >/dev/null 2>&1; then
+        integrity_fail "Code signature invalid for $binary - refusing to run"
+        return 1
+    fi
+}
+
+# generate_checksum_manifest — Record install-time checksums (do_install only).
+# Writes "<sha256>  <path>" lines atomically as root:wheel 0600. Overwriting a
+# previous manifest is expected: every install records the new version's files.
+# chown is best-effort: do_install() runs as root and already creates the
+# tmp file root-owned, so failure only occurs for non-root test invocations.
+generate_checksum_manifest() {
+    local manifest="$1"
+    shift
+    local tmp="${manifest}.tmp"
+    /usr/bin/shasum -a 256 "$@" > "$tmp"
+    chown root:wheel "$tmp" 2>/dev/null || true
+    chmod 0600 "$tmp"
+    mv -f "$tmp" "$manifest"
+}
+
+# The root daemon must never source lib files that were replaced after
+# install, so verification runs before the sources below. launchd invokes
+# `/usr/local/bin/tailroute daemon`; dev checkouts have no manifest and all
+# other commands are unaffected.
+if [[ "${BASH_SOURCE[0]}" == "$0" && "${1:-}" == "daemon" ]]; then
+    verify_checksum_manifest "$INTEGRITY_MANIFEST" || exit 1
+    verify_code_signature "$INSTALLED_PROXY_BIN" || exit 1
+fi
+
 # Source all required libraries
 # shellcheck source=lib-log.sh
 source "$SCRIPT_DIR/lib-log.sh"
@@ -213,8 +283,13 @@ do_install() {
     chown root:wheel /usr/local/bin/tailroute
     chmod 0755 /usr/local/bin/tailroute
 
-    # Copy proxy binary if it exists
+    # Copy proxy binary if it exists (verify signature before installing)
     if [[ -f "$project_root/proxy/build/tailroute-proxy" ]]; then
+        echo "  Verifying proxy code signature..."
+        if ! verify_code_signature "$project_root/proxy/build/tailroute-proxy"; then
+            echo "ERROR: tailroute-proxy failed code signature verification - aborting install"
+            exit 1
+        fi
         echo "  Installing /usr/local/bin/tailroute-proxy..."
         cp -f "$project_root/proxy/build/tailroute-proxy" /usr/local/bin/tailroute-proxy
         chown root:wheel /usr/local/bin/tailroute-proxy
@@ -262,6 +337,10 @@ do_install() {
     mkdir -p /var/db/tailroute
     chown root:wheel /var/db/tailroute
     chmod 0755 /var/db/tailroute
+    
+    # Record checksums so the daemon can detect replaced files at startup
+    echo "  Generating integrity manifest..."
+    generate_checksum_manifest "$INTEGRITY_MANIFEST" /usr/local/bin/tailroute /usr/local/bin/lib-*.sh
     
     # Load daemon
     echo "  Loading launchd daemon..."
@@ -1126,4 +1205,7 @@ main() {
     esac
 }
 
-main "$@"
+# Only run as a command when executed directly (tests source this file)
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
