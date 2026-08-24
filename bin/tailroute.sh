@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.5.0-beta.2
+# tailroute v0.6.0
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Version
-readonly VERSION="0.5.0-beta.2"
+readonly VERSION="0.6.0"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -463,7 +463,8 @@ PROXY_PID_FILE="$HOME/.tailroute/proxy.pid"
 PROXY_VERSION="${VERSION}"
 
 # Download URL (update for public releases)
-PROXY_DOWNLOAD_BASE="https://github.com/shrwnsan/tailroute/releases/download"
+# Proxy binaries are released from the tailroute-cli repo (tag-matched)
+PROXY_DOWNLOAD_BASE="https://github.com/shrwnsan/tailroute-cli/releases/download"
 
 get_proxy_download_url() {
     local arch
