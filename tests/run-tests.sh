@@ -168,9 +168,11 @@ run_test_file() {
 main() {
     local test_files=("$@")
 
-    # Default to all test files
+    # Default to all test files (bash 3.2-safe: no mapfile)
     if [[ ${#test_files[@]} -eq 0 ]]; then
-        mapfile -t test_files < <(find "$SCRIPT_DIR" -name 'test-*.sh' -type f | sort)
+        while IFS= read -r f; do
+            test_files+=("$f")
+        done < <(find "$SCRIPT_DIR" -name 'test-*.sh' -type f | sort)
     fi
 
     echo "======================================"

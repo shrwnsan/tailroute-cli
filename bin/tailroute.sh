@@ -96,6 +96,8 @@ fi
 source "$SCRIPT_DIR/lib-log.sh"
 # shellcheck source=lib-event-loop.sh
 source "$SCRIPT_DIR/lib-event-loop.sh"
+# shellcheck source=lib-tunnel.sh
+source "$SCRIPT_DIR/lib-tunnel.sh"
 
 # =============================================================================
 # show_help — Print usage information
@@ -115,6 +117,12 @@ Usage:
                                   uninstall Remove proxy binary
   tailroute proxy-config ssh    Generate SSH config for Tailscale peers
   tailroute proxy-config shell  Generate shell helpers (sshproxy/curlproxy)
+  tailroute tunnel <command>    Manage browser tunnels to Tailscale Serve:
+                                  add <peer>    Register a tunnel (launchd + hosts)
+                                  remove <peer> Tear down and clean up
+                                  status        Health of all tunnels
+                                  list          Registered tunnels (JSON)
+                                  restart       Restart tunnel jobs
   tailroute --version           Show version
   tailroute --dry-run           Preview actions without modifying DNS
   tailroute install             Install daemon (requires sudo)
@@ -417,6 +425,13 @@ do_uninstall() {
         fi
     fi
     
+    # Remove user tunnels first (per-user state; run as the invoking user)
+    if [[ -n "${SUDO_USER:-}" ]] && command -v sudo >/dev/null 2>&1; then
+        echo "  Removing browser tunnels (user: $SUDO_USER)..."
+        sudo -u "$SUDO_USER" "$0" tunnel remove-all >/dev/null 2>&1 || \
+            echo "  Note: tunnel cleanup skipped/failed — run 'tailroute tunnel list' as that user"
+    fi
+
     # Remove installed files
     echo "  Removing installed files..."
     rm -f /usr/local/bin/tailroute
@@ -838,10 +853,20 @@ do_proxy_config_ssh() {
     local user_name=""
     local append_file=""
     local identity_file=""
+    local adaptive="yes"
+    local replace_wrapper="no"
     local ts_status
-    
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --no-adaptive)
+                adaptive="no"
+                shift
+                ;;
+            --replace-wrapper)
+                replace_wrapper="yes"
+                shift
+                ;;
             --peer)
                 if [[ -z "${2:-}" ]]; then
                     echo "ERROR: --peer requires a value" >&2
@@ -877,6 +902,7 @@ do_proxy_config_ssh() {
             --help|-h)
                 echo "Usage: tailroute proxy-config ssh [user@]<peer> [--identity <key>] [--append <file>]"
                 echo "       tailroute proxy-config ssh [--peer <name>] [--user <name>] [--identity <key>] [--append <file>]"
+                echo "       [--no-adaptive] (raw always-proxy ProxyCommand) | [--replace-wrapper] (overwrite ~/.ssh/tailroute-proxy.sh)"
                 return 0
                 ;;
             -*)
@@ -916,7 +942,14 @@ do_proxy_config_ssh() {
     fi
     
     local output
-    if ! output=$(PEER_FILTER="$peer_filter" USER_NAME="$user_name" IDENTITY_FILE="$identity_file" SOCKS_ADDR="$socks_addr" APPEND_FILE="$append_file" TS_STATUS="$ts_status" python3 - <<'PY'
+    # ProxyCommand form: adaptive wrapper (probe :1055 → SOCKS, else direct)
+    # by default; raw always-proxy form with --no-adaptive for compatibility.
+    local proxy_command="nc -X 5 -x ${socks_addr} %h %p"
+    if [[ "$adaptive" == "yes" ]]; then
+        proxy_command="${TUNNEL_SSH_WRAPPER/#$HOME/\~} %h %p"
+    fi
+
+    if ! output=$(PEER_FILTER="$peer_filter" USER_NAME="$user_name" IDENTITY_FILE="$identity_file" SOCKS_ADDR="$socks_addr" APPEND_FILE="$append_file" TS_STATUS="$ts_status" PROXYCOMMAND="$proxy_command" python3 - <<'PY'
 import os
 import sys
 import json
@@ -927,6 +960,7 @@ identity_file = os.environ.get("IDENTITY_FILE", "").strip()
 socks_addr = os.environ.get("SOCKS_ADDR", "127.0.0.1:1055").strip()
 append_file = os.environ.get("APPEND_FILE", "").strip()
 ts_status = os.environ.get("TS_STATUS", "")
+proxy_command = os.environ.get("PROXYCOMMAND") or f"nc -X 5 -x {socks_addr} %h %p"
 
 def parse_proxy_hostnames(path):
     if not path or not os.path.exists(path):
@@ -1020,7 +1054,7 @@ else:
             lines.append(f"    IdentitiesOnly yes")
         lines.append(f"    ServerAliveInterval 60")
         lines.append(f"    ServerAliveCountMax 3")
-        lines.append(f"    ProxyCommand nc -X 5 -x {socks_addr} %h %p")
+        lines.append(f"    ProxyCommand {proxy_command}")
         lines.append("")
 
 print("\n".join(lines))
@@ -1037,6 +1071,15 @@ PY
         echo "Appended proxy config to $append_file"
     else
         printf "%s\n" "$output"
+    fi
+
+    # Adaptive entries need the wrapper script installed to work
+    if [[ "$adaptive" == "yes" ]] && declare -f tunnel_install_ssh_wrapper >/dev/null 2>&1; then
+        tunnel_install_ssh_wrapper "$replace_wrapper" || {
+            echo "" >&2
+            echo "NOTE: entries use $TUNNEL_SSH_WRAPPER which was not installed." >&2
+            echo "Re-run with --replace-wrapper to overwrite the existing file, or --no-adaptive for the raw form." >&2
+        }
     fi
 }
 
@@ -1159,6 +1202,71 @@ PY
 }
 
 # =============================================================================
+# do_tunnel — Manage browser tunnels (lib-tunnel.sh)
+# =============================================================================
+do_tunnel() {
+    local subcommand="${1:-}"
+
+    case "$subcommand" in
+        ""|--help|-h)
+            cat <<'EOF'
+Usage: tailroute tunnel <command> [args]
+
+Commands:
+  add <peer> [--port N] [--remote-port N]... [--adopt] [--ssh-alias A] [--yes]
+        Register a browser tunnel for a peer: launchd SSH forward +
+        managed /etc/hosts override (sudo needed for hosts only).
+        --adopt takes over an existing prototype job for the peer.
+        --ssh-alias A uses the existing 'proxy-A' ssh entry when the
+        alias differs from the peer's Tailscale hostname.
+  remove <peer>
+        Tear down the tunnel and clean up hosts, plist, and registry.
+  status [<peer>] [--json] [--skip-remote-check]
+        Health: job, local port, hosts mapping, IP/suffix drift, backend.
+        Exit codes: 0 healthy, 1 degraded, 2 error, 3 not found.
+  list
+        Registered tunnels as JSON, one per line.
+  restart [<peer>]
+        Restart one or all tunnel jobs.
+
+Browser URL after add: https://<peer>.<tailnet>.ts.net:<local-port>
+Works with VPN active (via SOCKS5) or inactive (direct) — adaptive.
+EOF
+            ;;
+        add)
+            shift
+            tunnel_do_add "$@"
+            ;;
+        remove)
+            shift
+            tunnel_do_remove "$@"
+            ;;
+        status)
+            shift
+            tunnel_do_status "$@"
+            ;;
+        list)
+            shift
+            tunnel_do_list "$@"
+            ;;
+        restart)
+            shift
+            tunnel_do_restart "$@"
+            ;;
+        remove-all)
+            # Used by `tailroute uninstall` (per-user cleanup); not interactive
+            shift
+            tunnel_remove_all "$@"
+            ;;
+        *)
+            echo "ERROR: unknown tunnel command '$subcommand'" >&2
+            echo "Run 'tailroute tunnel --help' for usage." >&2
+            exit 1
+            ;;
+    esac
+}
+
+# =============================================================================
 # Main entry point
 # =============================================================================
 main() {
@@ -1191,6 +1299,10 @@ main() {
         proxy-config)
             shift
             do_proxy_config "$@"
+            ;;
+        tunnel)
+            shift
+            do_tunnel "$@"
             ;;
         --help|-h)
             show_help
