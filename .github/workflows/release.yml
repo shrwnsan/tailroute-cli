@@ -46,15 +46,16 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ steps.get_version.outputs.VERSION }}" \
             -o build/tailroute-proxy-darwin-amd64 .
 
-      # Go's internal linker adhoc-signs darwin binaries when linking on
-      # macOS (both architectures). arm64 macOS refuses to RUN unsigned
+      # Go's linker adhoc-signs darwin/arm64 unconditionally, but NOT the
+      # cross-compiled amd64 binary. arm64 macOS refuses to RUN unsigned
       # binaries, and tailroute's do_install() runs `codesign --verify` on
-      # the proxy before installing it -- so an unsigned asset would be
-      # unusable. Fail the release here if either signature is missing.
-      - name: Verify adhoc code signatures
+      # the proxy before installing it -- so sign both explicitly (adhoc)
+      # and fail the release unless verification passes.
+      - name: Adhoc-sign and verify
         working-directory: proxy/build
         run: |
           for bin in tailroute-proxy-darwin-arm64 tailroute-proxy-darwin-amd64; do
+            /usr/bin/codesign --force --sign - "$bin"
             /usr/bin/codesign --verify --strict "$bin" || {
               echo "::error::$bin is not validly signed - release aborted" >&2
               exit 1
