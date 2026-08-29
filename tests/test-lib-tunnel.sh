@@ -455,7 +455,50 @@ test_wrapper_install_and_replace_guard() {
     printf '#!/bin/sh\nexec /bin/evil\n' > "$TUNNEL_SSH_WRAPPER"
     assert_fail tunnel_install_ssh_wrapper no    # different content, no replace
     assert_ok tunnel_install_ssh_wrapper yes
-    assert_contains "tailroute SOCKS5" "$(cat "$TUNNEL_SSH_WRAPPER")"
+    assert_contains "SOCKS5 proxy" "$(cat "$TUNNEL_SSH_WRAPPER")"
+}
+
+# Legacy wrapper migration (T-433)
+
+test_wrapper_detects_legacy_nc_z_probe() {
+    _tunnel_setup_sandbox
+    # Write old-style wrapper
+    cat > "$TUNNEL_SSH_WRAPPER" <<'WRAP'
+#!/bin/sh
+if /usr/bin/nc -z 127.0.0.1 1055 2>/dev/null; then
+    exec /usr/bin/nc -X 5 -x 127.0.0.1:1055 "$@"
+else
+    exec /usr/bin/nc "$@"
+fi
+WRAP
+    assert_ok tunnel_ssh_wrapper_is_legacy
+}
+
+test_wrapper_not_legacy_after_migration() {
+    _tunnel_setup_sandbox
+    assert_ok tunnel_install_ssh_wrapper no
+    assert_fail tunnel_ssh_wrapper_is_legacy
+}
+
+test_wrapper_auto_migrates_legacy() {
+    _tunnel_setup_sandbox
+    # Write old-style wrapper
+    cat > "$TUNNEL_SSH_WRAPPER" <<'WRAP'
+#!/bin/sh
+if /usr/bin/nc -z 127.0.0.1 1055 2>/dev/null; then
+    exec /usr/bin/nc -X 5 -x 127.0.0.1:1055 "$@"
+else
+    exec /usr/bin/nc "$@"
+fi
+WRAP
+    chmod 0755 "$TUNNEL_SSH_WRAPPER"
+    # Install with replace=no should auto-migrate (no prompt)
+    assert_ok tunnel_install_ssh_wrapper no
+    # New wrapper should be in place (no nc -z)
+    if grep -q 'nc -z' "$TUNNEL_SSH_WRAPPER"; then
+        _assert_fail "legacy nc -z probe survived migration"
+    fi
+    assert_contains "SOCKS5 proxy" "$(cat "$TUNNEL_SSH_WRAPPER")"
 }
 
 # =============================================================================
