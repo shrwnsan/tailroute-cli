@@ -52,6 +52,8 @@ TUNNEL_HOSTS_END="# END tailroute-tunnel"
 
 # Commands (absolute paths; overridable for tests; TUNNEL_SUDO_CMD="" runs
 # the privileged code path unprivileged against a test hosts file)
+DSCL_CMD="${DSCL_CMD:-/usr/bin/dscl}"
+ID_CMD="${ID_CMD:-/usr/bin/id}"
 TAILSCALE_CMD="${TAILSCALE_CMD:-/opt/homebrew/bin/tailscale}"
 SSH_CMD="${SSH_CMD:-/usr/bin/ssh}"
 NC_CMD="${NC_CMD:-/usr/bin/nc}"
@@ -65,6 +67,53 @@ MKTEMP_CMD="${MKTEMP_CMD:-/usr/bin/mktemp}"
 if [ -z "${TUNNEL_SUDO_CMD+x}" ]; then
     TUNNEL_SUDO_CMD="sudo"
 fi
+
+# -----------------------------------------------------------------------------
+# Target user resolution (for sudo contexts)
+# -----------------------------------------------------------------------------
+# When tailroute runs under sudo, $HOME points to root's home, not the
+# invoking user's.  _tr_resolve_target_user determines the real user and
+# their home directory so that per-user state (config, tunnels, launchd)
+# is cleaned up correctly.
+#
+# Sets _TR_TARGET_USER and _TR_TARGET_HOME on success.
+# Returns 0 on success, 1 on error (message printed to stderr).
+# Overridable for tests: DSCL_CMD, ID_CMD.
+_tr_resolve_target_user() {
+    _TR_TARGET_USER=""
+    _TR_TARGET_HOME=""
+
+    # Not under sudo — use current environment
+    if [ -z "${SUDO_USER:-}" ]; then
+        _TR_TARGET_USER="${USER:-$(id -un)}"
+        _TR_TARGET_HOME="$HOME"
+        return 0
+    fi
+
+    # SUDO_USER=root is an error (someone did sudo -u root)
+    if [ "$SUDO_USER" = "root" ]; then
+        echo "ERROR: SUDO_USER=root — cannot determine the real user" >&2
+        return 1
+    fi
+
+    _TR_TARGET_USER="$SUDO_USER"
+
+    # Look up home directory via dscl (authoritative on macOS)
+    local dscl_home
+    dscl_home="$("$DSCL_CMD" . -read "/Users/$SUDO_USER" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory:[[:space:]]*//')" || true
+
+    if [ -n "$dscl_home" ]; then
+        _TR_TARGET_HOME="$dscl_home"
+    elif [ -d "/Users/$SUDO_USER" ]; then
+        # Fallback: conventional home path
+        _TR_TARGET_HOME="/Users/$SUDO_USER"
+    else
+        echo "ERROR: user '$SUDO_USER' does not exist or has no home directory" >&2
+        return 1
+    fi
+
+    return 0
+}
 
 # Tunnel ssh options: forwards must fail loudly, and the tunnel must never
 # join a user's ControlMaster session (closing an interactive

@@ -403,33 +403,65 @@ do_uninstall() {
         echo "ERROR: uninstall requires root (use 'sudo tailroute uninstall')"
         exit 1
     fi
-    
+
+    # Resolve the real user when running under sudo
+    if ! _tr_resolve_target_user; then
+        exit 1
+    fi
+    local target_user="$_TR_TARGET_USER"
+    local target_home="$_TR_TARGET_HOME"
     echo "Uninstalling tailroute daemon..."
+    echo "  Target user: $target_user (home: $target_home)"
     echo ""
-    
-    # Unload daemon
+
+    # Unload daemon (system-level, unchanged)
     if launchctl list | grep -q "com.tailroute.daemon"; then
         echo "  Unloading launchd daemon..."
         launchctl bootout system/com.tailroute.daemon 2>/dev/null || true
         sleep 1
     fi
-    
+
     # Restore MagicDNS if we disabled it
     if [[ -f "/var/db/tailroute/state.manifest" ]]; then
         local last_line
         last_line=$(tail -n 1 /var/db/tailroute/state.manifest 2>/dev/null) || last_line=""
-        
+
         if [[ "$last_line" == *"disable"* ]]; then
             echo "  Restoring MagicDNS..."
             /usr/local/bin/tailscale set --accept-dns=true 2>/dev/null || true
         fi
     fi
-    
-    # Remove user tunnels first (per-user state; run as the invoking user)
-    if [[ -n "${SUDO_USER:-}" ]] && command -v sudo >/dev/null 2>&1; then
-        echo "  Removing browser tunnels (user: $SUDO_USER)..."
-        sudo -u "$SUDO_USER" "$0" tunnel remove-all >/dev/null 2>&1 || \
-            echo "  Note: tunnel cleanup skipped/failed — run 'tailroute tunnel list' as that user"
+
+    # Remove user tunnels (per-user state; run as the invoking user).
+    # When under sudo, use the resolved target user — not $SUDO_USER
+    # directly, to ensure correctness even if the env is unusual.
+    if [[ "$target_user" != "root" ]] && command -v sudo >/dev/null 2>&1; then
+        echo "  Removing browser tunnels (user: $target_user)..."
+        sudo -u "$target_user" \
+            TUNNEL_CONFIG_DIR="$target_home/.config/tailroute" \
+            TUNNEL_REGISTRY="$target_home/.config/tailroute/tunnels.json" \
+            TUNNEL_LOCK_DIR="$target_home/.config/tailroute/tunnel.lock" \
+            TUNNEL_LAUNCHAGENTS_DIR="$target_home/Library/LaunchAgents" \
+            TUNNEL_LOG_DIR="$target_home/Library/Logs/Tailroute" \
+            TUNNEL_SSH_CONFIG="$target_home/.ssh/config" \
+            TUNNEL_SSH_WRAPPER="$target_home/.ssh/tailroute-proxy.sh" \
+            HOME="$target_home" \
+            "$0" tunnel remove-all >/dev/null 2>&1 || \
+            echo "  Note: tunnel cleanup skipped/failed — run 'tailroute tunnel list' as $target_user"
+
+        # Also unload any per-user launchd tunnel jobs that may not be
+        # tracked in the registry (belt-and-suspenders)
+        local target_uid
+        target_uid=$(/usr/bin/id -u "$target_user") || target_uid=""
+        if [[ -n "$target_uid" ]]; then
+            local launchd_labels
+            launchd_labels=$(launchctl print gui/$target_uid 2>/dev/null | grep -o 'com\.tailroute\.tunnel\.[^ ]*' || true)
+            local label
+            for label in $launchd_labels; do
+                echo "  Unloading $label (uid $target_uid)..."
+                launchctl bootout "gui/$target_uid/$label" 2>/dev/null || true
+            done
+        fi
     fi
 
     # Remove installed files
