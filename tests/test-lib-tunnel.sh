@@ -100,6 +100,34 @@ MOCK
 JSON
     export FAKE_TS_JSON="$TUNNEL_SANDBOX/ts.json"
 
+    # --- openssl mock (T-430) ---
+    cat > "$TUNNEL_SANDBOX/bin/openssl" <<'MOCK'
+#!/bin/sh
+# Mock openssl s_client for TLS verification tests.
+# Set FAKE_TLS_HOSTNAME to control what the mock certificate returns.
+case "$1" in
+    s_client)
+        hostname="${FAKE_TLS_HOSTNAME:-prime.tailnet.ts.net}"
+        case "$hostname" in
+            fail-connect) exit 1 ;;
+            no-cert)
+                echo "depth=0 CN = $hostname" ;;
+            wrong-host)
+                echo "subject= /CN=evil.example.com" ;;
+            expired)
+                echo "subject= /O=Expired/CN=$hostname" ;;
+            wildcard)
+                printf ' \nDNS:*.tailnet.ts.net\n' ;;
+            *)
+                echo "subject= /CN=$hostname" ;;
+        esac
+        exit 0 ;;
+    *) exit 0 ;;
+esac
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/openssl"
+    export OPENSSL_CMD="$TUNNEL_SANDBOX/bin/openssl"
+
     # SSH config fixture with an adaptive proxy-prime entry
     cat > "$TUNNEL_SSH_CONFIG" <<'CFG'
 Host proxy-prime
@@ -616,4 +644,73 @@ test_list_json() {
     line="$(tunnel_do_list)"
     assert_contains '"peer": "prime"' "$line"
     echo "$line" | "$PYTHON3_CMD" -c 'import json,sys; json.loads(sys.stdin.read())' || { echo "list is not JSON"; return 1; }
+}
+
+# =============================================================================
+# TLS identity verification (T-430)
+# =============================================================================
+
+test_tls_verify_valid_cert() {
+    _tunnel_setup_sandbox
+    FAKE_TLS_HOSTNAME="prime.tailnet.ts.net"
+    assert_ok _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_rejects_wrong_hostname() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    assert_fail _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_rejects_expired() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="expired"
+    assert_fail _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_rejects_connection_failure() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="fail-connect"
+    assert_fail _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_accepts_wildcard() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wildcard"
+    assert_ok _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_skip_flag() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    assert_ok tunnel_tls_verify_or_skip prime.tailnet.ts.net 8443 yes
+}
+
+test_tls_verify_no_skip() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    assert_fail tunnel_tls_verify_or_skip prime.tailnet.ts.net 8443 no
+}
+
+test_add_rollback_on_tls_failure() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    local rc=0
+    tunnel_do_add prime --yes >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc"
+    # Full rollback: no registry, no hosts mapping, no plist
+    assert_fail tunnel_registry_get prime
+    if grep -q "prime.tailnet.ts.net" "$TUNNEL_HOSTS_FILE"; then
+        _assert_fail "hosts mapping survived TLS rollback"
+    fi
+    [ ! -f "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist" ] || { echo "plist survived TLS rollback"; return 1; }
+}
+
+test_add_with_allow_unverified_tls_flag() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    local out
+    out="$(tunnel_do_add prime --allow-unverified-tls --yes 2>&1)" || { echo "add with --allow-unverified-tls failed: $out"; return 1; }
+    assert_contains "skipping TLS identity verification" "$out"
+    assert_contains "Tunnel added: prime" "$out"
 }

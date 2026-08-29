@@ -43,6 +43,8 @@ TUNNEL_SSH_WRAPPER="${TUNNEL_SSH_WRAPPER:-$HOME/.ssh/tailroute-proxy.sh}"
 
 TUNNEL_REGISTRY_VERSION=1
 TUNNEL_PORT_START="${TUNNEL_PORT_START:-8443}"
+OPENSSL_CMD="${OPENSSL_CMD:-/usr/bin/openssl}"
+TUNNEL_TLS_VERIFY_TIMEOUT="${TUNNEL_TLS_VERIFY_TIMEOUT:-5}"
 TUNNEL_PORT_END="${TUNNEL_PORT_END:-8499}"
 TUNNEL_LABEL_PREFIX="com.tailroute.tunnel"
 TUNNEL_HOSTS_BEGIN="# BEGIN tailroute-tunnel"
@@ -781,6 +783,72 @@ tunnel_check_remote_backend() {
         "/usr/bin/nc -z 127.0.0.1 $2" >/dev/null 2>&1
 }
 
+# TLS identity verification (T-430): after the SSH tunnel is up and /etc/hosts
+# points 127.0.0.1:<port> to the peer's hostname, verify that the certificate
+# presented through the tunnel matches that hostname.
+#
+# Returns 0 if the certificate hostname matches.
+# Returns 1 on mismatch, expired, untrusted, or connection failure.
+#
+# Uses openssl s_client (macOS built-in) with a short timeout.
+# The --allow-unverified-tls flag skips this check.
+_tun_tls_verify() { # <hostname> <port>
+    local hostname="$1" port="$2"
+    local cert_out
+    cert_out="$("$OPENSSL_CMD" s_client -connect "127.0.0.1:$port" \
+        -servername "$hostname" \
+        -showcerts \
+        -verify_return_error \
+        2>/dev/null </dev/null)" || {
+        echo "WARN: TLS handshake failed on 127.0.0.1:$port for $hostname" >&2
+        return 1
+    }
+
+    # Extract the CN and SAN from the certificate
+    local subject san
+    # Extract SAN from the certificate (modern certs use this)
+    san="$(printf '%s' "$cert_out" | grep -A1 '^ ' | grep 'DNS:' | sed 's/.*DNS:\([^,]*\).*/\1/' | head -1)"
+    # Extract CN from subject line as fallback
+    cn="$(printf '%s' "$cert_out" | grep '^subject=' | sed 's/.*CN[[:space:]]*=[[:space:]]*\([^,/]*\).*/\1/' | head -1)"
+
+    # Check SAN first (modern certs), fall back to CN
+    local cert_hostname=""
+    if [ -n "$san" ]; then
+        cert_hostname="$san"
+    elif [ -n "$cn" ]; then
+        cert_hostname="$cn"
+    fi
+
+    if [ -z "$cert_hostname" ]; then
+        echo "WARN: no hostname found in TLS certificate on 127.0.0.1:$port" >&2
+        return 1
+    fi
+
+    # Exact match or wildcard match
+    if [ "$cert_hostname" = "$hostname" ]; then
+        return 0
+    fi
+    # Wildcard: *.tailnet.ts.net matches prime.tailnet.ts.net
+    case "$cert_hostname" in
+        \*.*)
+            local wildcard_suffix="${cert_hostname#\*.}"
+            case "$hostname" in
+                *"$wildcard_suffix") return 0 ;;
+            esac ;;
+    esac
+
+    echo "WARN: TLS certificate hostname mismatch: expected '$hostname', got '$cert_hostname'" >&2
+    return 1
+}
+
+tunnel_tls_verify_or_skip() { # <hostname> <port> <allow_unverified>
+    if [ "${3:-no}" = "yes" ]; then
+        echo "WARN: --allow-unverified-tls: skipping TLS identity verification" >&2
+        return 0
+    fi
+    _tun_tls_verify "$1" "$2"
+}
+
 # -----------------------------------------------------------------------------
 # Transactional add / remove (T-405.1 / T-405.2)
 # -----------------------------------------------------------------------------
@@ -820,6 +888,7 @@ tailroute_proxy_config_ssh_generate() {
 
 tunnel_do_add() {
     local peer="" port="" adopt="no" assume_yes="no" raw_remote="" ssh_alias="" r
+    local allow_unverified_tls="no"
     while [ $# -gt 0 ]; do
         case "$1" in
             --ssh-alias)
@@ -832,6 +901,7 @@ tunnel_do_add() {
                 [ -n "${2:-}" ] || { echo "ERROR: --remote-port requires a value" >&2; return 2; }
                 raw_remote="$raw_remote $2"; shift 2 ;;
             --adopt) adopt="yes"; shift ;;
+            --allow-unverified-tls) allow_unverified_tls="yes"; shift ;;
             --yes|-y) assume_yes="yes"; shift ;;
             -*) echo "ERROR: unknown tunnel add flag '$1'" >&2; return 2 ;;
             *)
@@ -1023,6 +1093,16 @@ tunnel_do_add() {
     fi
     if ! tunnel_wait_for_port "$lport"; then
         echo "WARN: job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path" >&2
+    fi
+
+    # --- TLS identity verification (T-430) ---
+    if ! tunnel_tls_verify_or_skip "$full_hostname" "$lport" "$allow_unverified_tls"; then
+        echo "ROLLED BACK: TLS identity verification failed — certificate does not match '$full_hostname'" >&2
+        tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
+        rm -f "$plist"
+        tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || true
+        tunnel_registry_remove "$peer" >/dev/null 2>&1
+        tunnel_lock_release; return 1
     fi
 
     tunnel_lock_release
