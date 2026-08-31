@@ -865,3 +865,18 @@ test_remove_all_clears_journal() {
     tunnel_remove_all >/dev/null 2>&1
     [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { echo "journal survives remove_all"; return 1; }
 }
+
+test_plist_contains_batchmode_and_stricthostkey() {
+    _tunnel_setup_sandbox
+    local plist="$TUNNEL_SANDBOX/t.plist"
+    mkdir -p "$TUNNEL_SANDBOX/logs"
+    tunnel_generate_plist prime 100.97.245.83 "$TUNNEL_SANDBOX/logs/t.log" prime 8443:443 > "$plist"
+    local content
+    content="$(cat "$plist")"
+    assert_ok tunnel_plist_lint "$plist"
+    assert_contains "BatchMode=yes" "$content"
+    assert_contains "ConnectTimeout=10" "$content"
+    assert_contains "StrictHostKeyChecking=yes" "$content"
+    # Original options still present
+    assert_contains "ExitOnForwardFailure" "$content"
+}
