@@ -1175,6 +1175,112 @@ tailroute_proxy_config_ssh_generate() {
     fi
 }
 
+# T-436: append one or more forwards to an existing peer's job, replacing the
+# launchd job transactionally (restore the previous healthy job on failure).
+# Per-user lock must already be held. Local ports come from tunnel_pick_port,
+# which skips every registered local port, so (peer, localPort, remotePort)
+# identities stay unique.
+tunnel_update_add_forward() { # <peer> <remote-port>...
+    local peer="$1"; shift
+    local entry new_fwd lport rport
+    entry="$(tunnel_registry_get "$peer")" || {
+        echo "ERROR: no registry entry for '$peer'" >&2; return 1; }
+
+    local ip hostname alias allow_tls pairs lport
+    ip="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["tailscaleIP"])')"
+    hostname="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["hostname"])')"
+    alias="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("sshAlias", ""))')"
+    allow_tls="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print("yes" if json.load(sys.stdin).get("allowUnverifiedTLS") else "no")')"
+    pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+
+    new_fwd="$entry"
+    local added_lports="" added_pairs=""
+    for rport in "$@"; do
+        # Forward identity is (peer, localPort, remotePort); local ports are
+        # freshly allocated, so a duplicate reduces to a repeated remote port.
+        if ! printf '%s' "$new_fwd" | "$PYTHON3_CMD" -c '
+import json, sys
+e = json.load(sys.stdin)
+sys.exit(1 if any(f["remotePort"] == int(sys.argv[1]) for f in e["forwards"]) else 0)
+' "$rport"; then
+            echo "ERROR: remote port $rport is already forwarded for '$peer'" >&2
+            return 1
+        fi
+        lport="$(tunnel_pick_port)" || return 1
+        new_fwd="$(printf '%s' "$new_fwd" | "$PYTHON3_CMD" -c '
+import json, sys
+e = json.load(sys.stdin)
+e["forwards"].append({"localPort": int(sys.argv[1]), "remotePort": int(sys.argv[2])})
+print(json.dumps(e, sort_keys=True))
+' "$lport" "$rport")" || {
+            echo "ERROR: failed to build updated entry for '$peer'" >&2; return 1; }
+        added_lports="$added_lports $lport"
+        added_pairs="$added_pairs $lport:$rport"
+        pairs="$pairs $lport:$rport"
+    done
+    added_lports="${added_lports# }"
+    added_pairs="${added_pairs# }"
+    pairs="${pairs# }"
+
+    tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+    tunnel_registry_add "$peer" "$new_fwd" || return 1
+
+    local label plist log_path
+    label="$(tunnel_label_for_peer "$peer")"
+    plist="$(tunnel_plist_path_for_peer "$peer")"
+    log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
+
+    # Restore the previous healthy job: old plist bytes + old registry entry.
+    cp "$plist" "$plist.prev" 2>/dev/null || true
+    tunnel_job_bootout "$label" >/dev/null 2>&1 || true
+
+    # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pair args
+    if ! tunnel_generate_plist "$peer" "$ip" "$log_path" "${alias:-$peer}" $pairs > "$plist" \
+        || ! tunnel_plist_lint "$plist"; then
+        echo "ROLLED BACK: could not regenerate job — previous job restored" >&2
+        if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
+        [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        return 1
+    fi
+    chmod 0644 "$plist"
+
+    if ! tunnel_job_bootstrap "$plist"; then
+        echo "ROLLED BACK: job bootstrap failed — previous job restored" >&2
+        if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
+        [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    # TLS identity verification on every newly bound local port (T-430 rule)
+    local lp
+    for lp in $added_lports; do
+        tunnel_wait_for_port "$lp" || \
+            echo "WARN: job loaded but 127.0.0.1:$lp is not listening yet — check: tail -f $log_path" >&2
+        if ! tunnel_tls_verify_or_skip "$hostname" "$lp" "$allow_tls"; then
+            echo "ROLLED BACK: TLS identity verification failed on 127.0.0.1:$lp — previous job restored" >&2
+            tunnel_job_bootout "$label" >/dev/null 2>&1 || true
+            if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; fi
+            [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+            tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+            tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+            return 1
+        fi
+    done
+
+    rm -f "$plist.prev"
+    echo "Forward added: $peer"
+    local ap
+    for ap in $added_pairs; do
+        lport="${ap%%:*}"; rport="${ap##*:}"
+        echo "  URL: https://$hostname:$lport (forwards to remote port $rport)"
+    done
+    return 0
+}
+
 tunnel_do_add() {
     local peer="" port="" adopt="no" assume_yes="no" raw_remote="" ssh_alias="" r
     local allow_unverified_tls="no"
@@ -1246,6 +1352,13 @@ tunnel_do_add() {
     if [ -n "$dnsname" ]; then full_hostname="$dnsname"; else full_hostname="$hostname.$suffix"; fi
 
     if tunnel_registry_get "$peer" >/dev/null 2>&1; then
+        if [ -n "$(printf '%s' "$raw_remote" | tr -d ' ')" ]; then
+            # T-436: incremental forward onto the existing job
+            tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
+            tunnel_lock_release
+            echo "Forward added: $peer"
+            return 0
+        fi
         echo "ERROR: tunnel for '$peer' already registered — remove it first: tailroute tunnel remove $peer" >&2
         tunnel_lock_release; return 1
     fi
