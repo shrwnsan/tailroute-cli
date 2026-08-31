@@ -1769,6 +1769,15 @@ tunnel_status_rows() {
             fi
         fi
 
+        # T-435: registry says this tunnel exists — its plist must too
+        local plist_state
+        if [ -f "$(tunnel_plist_path_for_peer "$p")" ]; then
+            plist_state="present"
+        else
+            plist_state="missing"
+            notes="${notes:+$notes; }plist missing — repair: tailroute tunnel remove $p && tailroute tunnel add $p"
+        fi
+
         # One row per forward (T-436): identity is (peer, localPort, remotePort)
         for pair in $fwd_pairs; do
             lport="${pair%%:*}"; rport="${pair##*:}"
@@ -1780,12 +1789,46 @@ tunnel_status_rows() {
             else
                 backend="not accepting"
             fi
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state"
         done
     done <<EOF
 $(tunnel_registry_entries)
 EOF
+}
+
+# T-435: recognized orphan state — managed hosts lines and launchd jobs with
+# no registry entry. Emits kind<TAB>detail<TAB>repair rows.
+tunnel_status_orphans() {
+    local entry p h reg_peers=" " reg_hosts=" " oh label pl
+    while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        p="$(tunnel_registry_field "$entry" peer)"
+        h="$(tunnel_registry_field "$entry" hostname)"
+        reg_peers="$reg_peers$p "
+        reg_hosts="$reg_hosts$h "
+    done <<EOF
+$(tunnel_registry_entries 2>/dev/null || true)
+EOF
+    if [ -f "$TUNNEL_HOSTS_FILE" ]; then
+        while IFS= read -r oh; do
+            [ -n "$oh" ] || continue
+            case " $reg_hosts " in *" $oh "*) continue ;; esac
+            printf 'hosts\t%s\tremove the "%s" line inside the managed %s markers (sudo)\n' "$oh" "$oh" "$TUNNEL_HOSTS_FILE"
+        done <<EOF
+$(awk -F'\t' '/^# BEGIN tailroute-tunnel$/{inblk=1;next} /^# END tailroute-tunnel$/{inblk=0;next} inblk && NF==2 {print $2}' "$TUNNEL_HOSTS_FILE" 2>/dev/null || true)
+EOF
+    fi
+    if [ -d "$TUNNEL_LAUNCHAGENTS_DIR" ]; then
+        for pl in "$TUNNEL_LAUNCHAGENTS_DIR"/$TUNNEL_LABEL_PREFIX.*.plist; do
+            [ -f "$pl" ] || continue
+            label="$(basename "$pl" .plist)"
+            p="${label#$TUNNEL_LABEL_PREFIX.}"
+            case " $reg_peers " in *" $p "*) continue ;; esac
+            printf 'job\t%s\tlaunchctl bootout gui/$UID/%s 2>/dev/null; rm %s\n' "$label" "$label" "$pl"
+        done
+    fi
+    return 0
 }
 
 tunnel_do_status() {
@@ -1824,6 +1867,12 @@ tunnel_do_status() {
         echo '{"error":"registry corrupt or unreadable"}'
         return 2
     }
+    # T-435: adaptive path + orphan state, reported in both modes
+    local adaptive="direct"
+    tunnel_port_in_use 1055 && adaptive="socks5"
+    local orphans
+    orphans="$(tunnel_status_orphans)"
+
     if [ -n "$peer" ]; then
         rows="$(printf '%s\n' "$rows" | awk -F'\t' -v p="$peer" '$1 == p')"
         if [ -z "$rows" ]; then
@@ -1831,29 +1880,20 @@ tunnel_do_status() {
             return 3
         fi
     fi
-    if ! printf '%s\n' "$rows" | grep -q '^.'; then
-        if [ "$json_mode" = "yes" ]; then
-            echo '{"version":2,"tunnels":[]}'
-        else
-            echo "No tunnels configured."
-            echo "Add one: tailroute tunnel add <peer>"
-        fi
-        return 0
-    fi
 
     if [ "$json_mode" = "yes" ]; then
-        printf '%s\n' "$rows" | "$PYTHON3_CMD" -c '
-import json, sys
+        printf '%s\n' "$rows" | T435_ORPHANS="$orphans" T435_ADAPTIVE="$adaptive" "$PYTHON3_CMD" -c '
+import json, os, sys
 tunnels = {}
 order = []
 for line in sys.stdin:
     parts = line.rstrip("\n").split("\t")
-    if len(parts) < 10: continue
-    p, hostname, lport, rport, listener, backend, tls, job, hosts, notes = parts[:10]
+    if len(parts) < 11: continue
+    p, hostname, lport, rport, listener, backend, tls, job, hosts, notes, plist = parts[:11]
     if p not in tunnels:
         order.append(p)
         tunnels[p] = {"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
-                      "job": job, "hosts": hosts, "notes": notes, "forwards": []}
+                      "job": job, "hosts": hosts, "plist": plist, "notes": notes, "forwards": []}
     fwd = {"localPort": int(lport), "remotePort": int(rport), "listener": listener,
            "backend": backend, "tls": tls}
     # backend n/a (--skip-remote-check) is unknown, not unhealthy
@@ -1863,44 +1903,71 @@ out = []
 for p in order:
     t = tunnels[p]
     t["healthy"] = (t["job"] == "running" and t["hosts"] == "present"
+                    and t["plist"] == "present"
                     and all(f["listener"] == "listening" for f in t["forwards"]))
     out.append(t)
-print(json.dumps({"version": 2, "tunnels": out}))
+orphans = []
+for line in os.environ.get("T435_ORPHANS", "").splitlines():
+    parts = line.split("\t")
+    if len(parts) >= 3:
+        orphans.append({"kind": parts[0], "detail": parts[1], "repair": parts[2]})
+print(json.dumps({"version": 2, "adaptivePath": os.environ.get("T435_ADAPTIVE", "direct"),
+                  "tunnels": out, "orphans": orphans}))
 '
-        printf '%s\n' "$rows" | "$PYTHON3_CMD" -c '
-import sys
-degraded = False
+        printf '%s\n' "$rows" | T435_ORPHANS="$orphans" "$PYTHON3_CMD" -c '
+import os, sys
+degraded = bool(os.environ.get("T435_ORPHANS", "").strip())
 for line in sys.stdin:
     parts = line.rstrip("\n").split("\t")
-    if len(parts) < 10: continue
-    p, hostname, lport, rport, listener, backend, tls, job, hosts, notes = parts[:10]
-    if job != "running" or hosts != "present" or listener != "listening":
+    if len(parts) < 11: continue
+    listener, job, hosts, plist = parts[4], parts[7], parts[8], parts[10]
+    if job != "running" or hosts != "present" or listener != "listening" or plist != "present":
         degraded = True
 sys.exit(1 if degraded else 0)
 ' || return 1
         return 0
     fi
-    local worst=0 p hostname lport rport listener backend tls job hosts_state notes prev_peer=""
-    while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes; do
-        [ -n "$p" ] || continue
-        if [ "$p" != "$prev_peer" ]; then
-            [ -n "$prev_peer" ] && echo ""
-            echo "$p:"
-            echo "  URL:      https://$hostname:$lport"
-            echo "  Job:      $job"
-            echo "  Hosts:    $hosts_state"
-            echo "  Forwards:"
-            [ -n "$notes" ] && echo "  Notes:    $notes"
-            prev_peer="$p"
-        fi
-        echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
-        if [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
-            worst=1
-        fi
-    done <<EOF
+
+    echo "Adaptive path: $adaptive"
+    echo ""
+    local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state prev_peer=""
+    if printf '%s\n' "$rows" | grep -q '^.'; then
+        while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes plist_state; do
+            [ -n "$p" ] || continue
+            if [ "$p" != "$prev_peer" ]; then
+                [ -n "$prev_peer" ] && echo ""
+                echo "$p:"
+                echo "  URL:      https://$hostname:$lport"
+                echo "  Job:      $job"
+                echo "  Hosts:    $hosts_state"
+                echo "  Forwards:"
+                [ -n "$notes" ] && echo "  Notes:    $notes"
+                prev_peer="$p"
+            fi
+            echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
+            if [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
+                worst=1
+            fi
+        done <<EOF
 $rows
 EOF
-        return "$worst"
+    else
+        echo "No tunnels configured."
+        echo "Add one: tailroute tunnel add <peer>"
+    fi
+    if [ -n "$orphans" ]; then
+        echo "Orphans:"
+        local okind odetail orepair
+        while IFS="$(printf '\t')" read -r okind odetail orepair; do
+            [ -n "$okind" ] || continue
+            echo "  $okind: $odetail"
+            echo "    repair: $orepair"
+        done <<EOF
+$orphans
+EOF
+        worst=1
+    fi
+    return "$worst"
 }
 
 tunnel_do_list() {
