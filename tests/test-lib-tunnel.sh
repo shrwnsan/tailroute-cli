@@ -916,3 +916,157 @@ test_remove_all_cleans_all_logs() {
     [ ! -f "$TUNNEL_LOG_DIR/tunnel-prime.log" ] || { echo "prime log survived"; return 1; }
     [ ! -f "$TUNNEL_LOG_DIR/tunnel-alpha.log" ] || { echo "alpha log survived"; return 1; }
 }
+
+# =============================================================================
+# Incremental forwards and per-forward status (T-436)
+# =============================================================================
+
+test_t436_update_remote_port_appends_forward() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || { echo "incremental add failed: $out"; return 1; }
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_contains "8443:443" "$fwd"
+    assert_contains "8444:8080" "$fwd"
+}
+
+test_t436_update_rejects_duplicate_remote_port() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 443 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "duplicate remote port should be refused"
+    assert_contains "already forwarded" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be unchanged after refused duplicate"
+}
+
+test_t436_update_regenerates_job_with_all_forwards() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from plist"; return 1; }
+    grep -q "127.0.0.1:8444:$FX_IP:8080" "$plist" || { echo "new forward missing from plist"; return 1; }
+    tunnel_job_is_loaded "$(tunnel_label_for_peer "$FX_PEER")" || { echo "job not running after update"; return 1; }
+}
+
+test_t436_update_rollback_on_tls_failure_restores_previous_job() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    FAKE_TLS_HOSTNAME="wrong-host"
+    export FAKE_TLS_HOSTNAME
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should fail on TLS identity mismatch"
+    assert_contains "ROLLED BACK" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be rolled back to one forward"
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from restored plist"; return 1; }
+    if grep -q "8080" "$plist"; then echo "new forward leaked into restored plist"; return 1; fi
+    tunnel_job_is_loaded "$(tunnel_label_for_peer "$FX_PEER")" || { echo "previous job not restored"; return 1; }
+}
+
+test_t436_update_rollback_on_bootstrap_failure() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    FAIL_BOOTSTRAP=1
+    export FAIL_BOOTSTRAP
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should fail when bootstrap fails"
+    assert_contains "ROLLED BACK" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be rolled back"
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from restored plist"; return 1; }
+    if grep -q "8080" "$plist"; then echo "new forward leaked into restored plist"; return 1; fi
+    [ ! -f "$plist.prev" ] || { echo "stale .prev backup left behind"; return 1; }
+}
+
+test_t436_status_lists_every_forward() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_status --skip-remote-check 2>&1)"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
+}
+
+test_t436_status_json_exposes_per_forward_state() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+d = json.load(sys.stdin)
+fw = d["tunnels"][0]["forwards"]
+assert len(fw) == 2, fw
+assert [(f["localPort"], f["remotePort"]) for f in fw] == [(8443, 443), (8444, 8080)], fw
+assert fw[0]["listener"] == "closed", fw[0]
+assert fw[0]["backend"] == "n/a", fw[0]
+assert fw[0]["tls"] == "verified", fw[0]
+print("ok")
+' || { echo "json per-forward assertions failed: $json"; return 1; }
+}
+
+test_t436_status_json_reports_unverified_tls() {
+    _tunnel_setup_sandbox
+    local entry
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "$FX_PEER" yes)"
+    tunnel_registry_add "$FX_PEER" "$entry" >/dev/null
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+fw = json.load(sys.stdin)["tunnels"][0]["forwards"]
+assert fw[0]["tls"] == "unverified", fw[0]
+print("ok")
+' || { echo "unverified tls not reported: $json"; return 1; }
+}
+
+test_t436_status_mixed_forwards_exit_degraded() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    # 8443 listening, 8444 closed -> mixed: one healthy forward, one degraded
+    FAKE_NC_OPEN="8443"
+    export FAKE_NC_OPEN
+    local rc=0
+    tunnel_do_status "$FX_PEER" --skip-remote-check >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc" "mixed forwards should exit degraded"
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+t = json.load(sys.stdin)["tunnels"][0]
+states = {f["localPort"]: f["listener"] for f in t["forwards"]}
+assert states == {8443: "listening", 8444: "closed"}, states
+assert t["forwards"][0]["healthy"] is True, t["forwards"][0]
+assert t["forwards"][1]["healthy"] is False, t["forwards"][1]
+assert t["healthy"] is False, t  # any closed listener -> degraded peer
+print("ok")
+' || { echo "mixed-state json assertions failed: $json"; return 1; }
+}
+
+test_t436_update_blocked_by_incomplete_journal() {
+    _tunnel_setup_sandbox
+    local entry
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
+    tunnel_registry_add "$FX_PEER" "$entry" >/dev/null
+    printf '{"op":"update","peer":"prime","steps":["registry","plist"],"completed":["registry"],"pid":99999,"ts":"2026-08-31T00:00:00Z"}' > "$TUNNEL_JOURNAL_PATH"
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should refuse while an update journal is incomplete"
+    assert_contains "incomplete journal" "$out"
+    assert_contains '"forwards": [{"localPort": 8443, "remotePort": 443}]' "$(tunnel_registry_get "$FX_PEER")"
+}
