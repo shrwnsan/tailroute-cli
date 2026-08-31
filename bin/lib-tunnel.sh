@@ -1175,6 +1175,121 @@ tailroute_proxy_config_ssh_generate() {
     fi
 }
 
+# T-436: append one or more forwards to an existing peer's job, replacing the
+# launchd job transactionally (restore the previous healthy job on failure).
+# Per-user lock must already be held. Local ports come from tunnel_pick_port,
+# which skips every registered local port, so (peer, localPort, remotePort)
+# identities stay unique.
+tunnel_update_add_forward() { # <peer> <remote-port>...
+    local peer="$1"; shift
+    local entry new_fwd lport rport
+    entry="$(tunnel_registry_get "$peer")" || {
+        echo "ERROR: no registry entry for '$peer'" >&2; return 1; }
+
+    local ip hostname alias allow_tls pairs lport
+    ip="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["tailscaleIP"])')"
+    hostname="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["hostname"])')"
+    alias="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("sshAlias", ""))')"
+    allow_tls="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print("yes" if json.load(sys.stdin).get("allowUnverifiedTLS") else "no")')"
+    pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+
+    new_fwd="$entry"
+    local added_lports="" added_pairs=""
+    for rport in "$@"; do
+        # Forward identity is (peer, localPort, remotePort); local ports are
+        # freshly allocated, so a duplicate reduces to a repeated remote port.
+        if ! printf '%s' "$new_fwd" | "$PYTHON3_CMD" -c '
+import json, sys
+e = json.load(sys.stdin)
+sys.exit(1 if any(f["remotePort"] == int(sys.argv[1]) for f in e["forwards"]) else 0)
+' "$rport"; then
+            echo "ERROR: remote port $rport is already forwarded for '$peer'" >&2
+            return 1
+        fi
+        lport="$(tunnel_pick_port)" || return 1
+        new_fwd="$(printf '%s' "$new_fwd" | "$PYTHON3_CMD" -c '
+import json, sys
+e = json.load(sys.stdin)
+e["forwards"].append({"localPort": int(sys.argv[1]), "remotePort": int(sys.argv[2])})
+print(json.dumps(e, sort_keys=True))
+' "$lport" "$rport")" || {
+            echo "ERROR: failed to build updated entry for '$peer'" >&2; return 1; }
+        added_lports="$added_lports $lport"
+        added_pairs="$added_pairs $lport:$rport"
+        pairs="$pairs $lport:$rport"
+    done
+    added_lports="${added_lports# }"
+    added_pairs="${added_pairs# }"
+    pairs="${pairs# }"
+
+    tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+    tunnel_registry_add "$peer" "$new_fwd" || return 1
+
+    local label plist log_path
+    label="$(tunnel_label_for_peer "$peer")"
+    plist="$(tunnel_plist_path_for_peer "$peer")"
+    log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
+
+    # Restore the previous healthy job: old plist bytes + old registry entry.
+    local update_steps='["registry","plist","bootstrap","tls"]'
+    _tun_journal_write update "$peer" "$update_steps" '[]' || true
+    cp "$plist" "$plist.prev" 2>/dev/null || true
+    tunnel_job_bootout "$label" >/dev/null 2>&1 || true
+
+    # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pair args
+    if ! tunnel_generate_plist "$peer" "$ip" "$log_path" "${alias:-$peer}" $pairs > "$plist" \
+        || ! tunnel_plist_lint "$plist"; then
+        echo "ROLLED BACK: could not regenerate job — previous job restored" >&2
+        if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
+        [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        _tun_journal_clear
+        return 1
+    fi
+    chmod 0644 "$plist"
+    _tun_journal_write update "$peer" "$update_steps" '["registry","plist"]' || true
+
+    if ! tunnel_job_bootstrap "$plist"; then
+        echo "ROLLED BACK: job bootstrap failed — previous job restored" >&2
+        if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
+        [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        _tun_journal_clear
+        return 1
+    fi
+    _tun_journal_write update "$peer" "$update_steps" '["registry","plist","bootstrap"]' || true
+
+    # TLS identity verification on every newly bound local port (T-430 rule)
+    local lp
+    for lp in $added_lports; do
+        tunnel_wait_for_port "$lp" || \
+            echo "WARN: job loaded but 127.0.0.1:$lp is not listening yet — check: tail -f $log_path" >&2
+        if ! tunnel_tls_verify_or_skip "$hostname" "$lp" "$allow_tls"; then
+            echo "ROLLED BACK: TLS identity verification failed on 127.0.0.1:$lp — previous job restored" >&2
+            tunnel_job_bootout "$label" >/dev/null 2>&1 || true
+            if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; fi
+            [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
+            tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+            tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+            _tun_journal_clear
+            return 1
+        fi
+    done
+
+    rm -f "$plist.prev"
+    _tun_journal_write update "$peer" "$update_steps" '["registry","plist","bootstrap","tls"]' || true
+    _tun_journal_clear
+    echo "Forward added: $peer"
+    local ap
+    for ap in $added_pairs; do
+        lport="${ap%%:*}"; rport="${ap##*:}"
+        echo "  URL: https://$hostname:$lport (forwards to remote port $rport)"
+    done
+    return 0
+}
+
 tunnel_do_add() {
     local peer="" port="" adopt="no" assume_yes="no" raw_remote="" ssh_alias="" r
     local allow_unverified_tls="no"
@@ -1246,6 +1361,19 @@ tunnel_do_add() {
     if [ -n "$dnsname" ]; then full_hostname="$dnsname"; else full_hostname="$hostname.$suffix"; fi
 
     if tunnel_registry_get "$peer" >/dev/null 2>&1; then
+        if [ -n "$(printf '%s' "$raw_remote" | tr -d ' ')" ]; then
+            # T-436: incremental forward onto the existing job. Unlike add,
+            # update is not idempotent (the crashed attempt may have already
+            # appended the forward), so any incomplete journal gates it.
+            if _tun_journal_has_incomplete; then
+                echo "ERROR: incomplete journal for '$(_tun_journal_peer)' ($(_tun_journal_op)) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+                tunnel_lock_release; return 1
+            fi
+            tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
+            tunnel_lock_release
+            echo "Forward added: $peer"
+            return 0
+        fi
         echo "ERROR: tunnel for '$peer' already registered — remove it first: tailroute tunnel remove $peer" >&2
         tunnel_lock_release; return 1
     fi
@@ -1562,8 +1690,9 @@ EOF
 # TSV per tunnel: peer, hostname, localPort, job, port, hosts, remotePort, notes
 tunnel_status_rows() {
     local skip_remote="${1:-no}"
-    local entry p hostname ip suffix first_fwd lport rport label
-    local job port_state hosts_state notes lookup_row online cur_ip cur_suffix
+    local entry p hostname ip suffix label ssh_alias
+    local job hosts_state notes lookup_row online cur_ip cur_suffix
+    local fwd_pairs allow_tls pair lport rport listener backend
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         p="$(tunnel_registry_field "$entry" peer)"
@@ -1571,21 +1700,16 @@ tunnel_status_rows() {
         ip="$(tunnel_registry_field "$entry" tailscaleIP)"
         suffix="$(tunnel_registry_field "$entry" magicDNSSuffix)"
         ssh_alias="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("sshAlias", ""))')"
-        first_fwd="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; f=json.load(sys.stdin)["forwards"][0]; print(str(f["localPort"]) + ":" + str(f["remotePort"]))')"
-        lport="${first_fwd%%:*}"
-        rport="${first_fwd##*:}"
+        fwd_pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+        allow_tls="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print("unverified" if json.load(sys.stdin).get("allowUnverifiedTLS") else "verified")')"
         label="$(tunnel_label_for_peer "$p")"
 
         notes=""
         if tunnel_job_is_loaded "$label"; then job="running"; else job="not-running"; fi
-        if tunnel_port_in_use "$lport"; then port_state="listening"; else port_state="closed"; fi
         if tunnel_hosts_has_mapping "$hostname"; then hosts_state="present"; else hosts_state="missing"; fi
 
-        if [ "$job" = "running" ] && [ "$port_state" = "closed" ]; then
-            notes="may be starting or backend down"
-        fi
         if [ "$job" = "not-running" ] && [ "$hosts_state" = "present" ]; then
-            notes="${notes:+$notes; }stale hosts entry (browser gets connection refused)"
+            notes="stale hosts entry (browser gets connection refused)"
         fi
         if [ -f "$TUNNEL_LOG_DIR/tunnel-$p.log" ] && tail -20 "$TUNNEL_LOG_DIR/tunnel-$p.log" 2>/dev/null | grep -Eq "Permission denied|Host key verification failed"; then
             notes="${notes:+$notes; }ssh auth failing — key rotated? re-run: tailroute tunnel add $p"
@@ -1604,15 +1728,20 @@ tunnel_status_rows() {
             fi
         fi
 
-        if [ "$skip_remote" != "yes" ]; then
-            if tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}"; then
-                notes="${notes:+$notes; }backend: accepting"
+        # One row per forward (T-436): identity is (peer, localPort, remotePort)
+        for pair in $fwd_pairs; do
+            lport="${pair%%:*}"; rport="${pair##*:}"
+            if tunnel_port_in_use "$lport"; then listener="listening"; else listener="closed"; fi
+            if [ "$skip_remote" = "yes" ]; then
+                backend="n/a"
+            elif tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}"; then
+                backend="accepting"
             else
-                notes="${notes:+$notes; }backend: not accepting (or unreachable)"
+                backend="not accepting"
             fi
-        fi
-
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$hostname" "$lport" "$job" "$port_state" "$hosts_state" "$rport" "$notes"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes"
+        done
     done <<EOF
 $(tunnel_registry_entries)
 EOF
@@ -1674,43 +1803,63 @@ tunnel_do_status() {
     if [ "$json_mode" = "yes" ]; then
         printf '%s\n' "$rows" | "$PYTHON3_CMD" -c '
 import json, sys
-out = []
+tunnels = {}
+order = []
 for line in sys.stdin:
     parts = line.rstrip("\n").split("\t")
-    if len(parts) < 8: continue
-    p, hostname, lport, job, port_state, hosts_state, rport, notes = parts[:8]
-    healthy = job == "running" and port_state == "listening" and hosts_state == "present"
-    out.append({"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
-                "job": job, "port": port_state, "hosts": hosts_state,
-                "healthy": healthy, "notes": notes})
+    if len(parts) < 10: continue
+    p, hostname, lport, rport, listener, backend, tls, job, hosts, notes = parts[:10]
+    if p not in tunnels:
+        order.append(p)
+        tunnels[p] = {"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
+                      "job": job, "hosts": hosts, "notes": notes, "forwards": []}
+    fwd = {"localPort": int(lport), "remotePort": int(rport), "listener": listener,
+           "backend": backend, "tls": tls}
+    # backend n/a (--skip-remote-check) is unknown, not unhealthy
+    fwd["healthy"] = listener == "listening" and backend != "not accepting"
+    tunnels[p]["forwards"].append(fwd)
+out = []
+for p in order:
+    t = tunnels[p]
+    t["healthy"] = (t["job"] == "running" and t["hosts"] == "present"
+                    and all(f["listener"] == "listening" for f in t["forwards"]))
+    out.append(t)
 print(json.dumps({"version": 2, "tunnels": out}))
 '
-    else
-        local worst=0 p hostname lport job port_state hosts_state rport notes
-        while IFS="$(printf '\t')" read -r p hostname lport job port_state hosts_state rport notes; do
-            [ -n "$p" ] || continue
+        printf '%s\n' "$rows" | "$PYTHON3_CMD" -c '
+import sys
+degraded = False
+for line in sys.stdin:
+    parts = line.rstrip("\n").split("\t")
+    if len(parts) < 10: continue
+    p, hostname, lport, rport, listener, backend, tls, job, hosts, notes = parts[:10]
+    if job != "running" or hosts != "present" or listener != "listening":
+        degraded = True
+sys.exit(1 if degraded else 0)
+' || return 1
+        return 0
+    fi
+    local worst=0 p hostname lport rport listener backend tls job hosts_state notes prev_peer=""
+    while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes; do
+        [ -n "$p" ] || continue
+        if [ "$p" != "$prev_peer" ]; then
+            [ -n "$prev_peer" ] && echo ""
             echo "$p:"
             echo "  URL:      https://$hostname:$lport"
             echo "  Job:      $job"
-            echo "  Port:     $port_state (remote $rport)"
             echo "  Hosts:    $hosts_state"
-            [ -n "$notes" ] && echo "  Notes:    $notes" || true
-            echo ""
-            if [ "$job" != "running" ] || [ "$port_state" != "listening" ] || [ "$hosts_state" != "present" ]; then
-                worst=1
-            fi
-        done <<EOF
+            echo "  Forwards:"
+            [ -n "$notes" ] && echo "  Notes:    $notes"
+            prev_peer="$p"
+        fi
+        echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
+        if [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
+            worst=1
+        fi
+    done <<EOF
 $rows
 EOF
         return "$worst"
-    fi
-    # json mode: exit code only (0 healthy / 1 degraded)
-    printf '%s\n' "$rows" | while IFS="$(printf '\t')" read -r p hostname lport job port_state hosts_state rport notes; do
-        if [ "$job" != "running" ] || [ "$port_state" != "listening" ] || [ "$hosts_state" != "present" ]; then
-            exit 1
-        fi
-    done || return 1
-    return 0
 }
 
 tunnel_do_list() {

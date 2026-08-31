@@ -10,6 +10,15 @@ set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Shared fixture constants — generic Tailscale CGNAT address and example
+# tailnet, not real user data. Inputs (build/parse calls, fixture heredocs)
+# reference these; assertions pin the literal expected output instead.
+FX_PEER="prime"
+FX_IP="100.97.245.83"
+FX_HOSTNAME="prime.tailnet.ts.net"
+FX_SUFFIX="tailnet.ts.net"
+FX_FWD1="8443:443"
+
 _tunnel_setup_sandbox() {
     TUNNEL_SANDBOX="$(mktemp -d)"
     mkdir -p "$TUNNEL_SANDBOX/bin" "$TUNNEL_SANDBOX/launchagents" "$TUNNEL_SANDBOX/ssh" "$TUNNEL_SANDBOX/config"
@@ -87,14 +96,14 @@ MOCK
     export DSCACHEUTIL_CMD=/usr/bin/true
 
     # Tailscale status fixture: peer "prime" online in tailnet "tailnet.ts.net"
-    cat > "$TUNNEL_SANDBOX/ts.json" <<'JSON'
+    cat > "$TUNNEL_SANDBOX/ts.json" <<JSON
 {
-  "CurrentTailnet": {"MagicDNSSuffix": "tailnet.ts.net"},
+  "CurrentTailnet": {"MagicDNSSuffix": "$FX_SUFFIX"},
   "Peer": {
     "node1": {
-      "HostName": "prime",
-      "DNSName": "prime.tailnet.ts.net.",
-      "TailscaleIPs": ["100.97.245.83", "fd7a:115c:a1e0::1"],
+      "HostName": "$FX_PEER",
+      "DNSName": "${FX_HOSTNAME}.",
+      "TailscaleIPs": ["$FX_IP", "fd7a:115c:a1e0::1"],
       "Online": true
     }
   }
@@ -131,9 +140,9 @@ MOCK
     export OPENSSL_CMD="$TUNNEL_SANDBOX/bin/openssl"
 
     # SSH config fixture with an adaptive proxy-prime entry
-    cat > "$TUNNEL_SSH_CONFIG" <<'CFG'
-Host proxy-prime
-    HostName 100.97.245.83
+    cat > "$TUNNEL_SSH_CONFIG" <<CFG
+Host proxy-$FX_PEER
+    HostName $FX_IP
     ProxyCommand ~/.ssh/tailroute-proxy.sh %h %p
 CFG
 
@@ -198,7 +207,7 @@ test_validate_cgnat_ip() {
 test_registry_add_get_remove_roundtrip() {
     _tunnel_setup_sandbox
     local entry
-    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
     assert_ok tunnel_registry_add prime "$entry"
     local got
     got="$(tunnel_registry_get prime)"
@@ -212,7 +221,7 @@ test_registry_add_get_remove_roundtrip() {
 test_registry_version_field_and_bak() {
     _tunnel_setup_sandbox
     local entry
-    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
     tunnel_registry_add prime "$entry" >/dev/null
     assert_contains '"version": 2' "$(tunnel_registry_all)"
     [ -f "$TUNNEL_REGISTRY" ] || { echo "registry file missing"; return 1; }
@@ -226,7 +235,7 @@ test_registry_version_field_and_bak() {
 test_registry_duplicate_and_missing() {
     _tunnel_setup_sandbox
     local entry
-    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
     tunnel_registry_add prime "$entry" >/dev/null
     local rc=0
     tunnel_registry_add prime "$entry" >/dev/null 2>&1 || rc=$?
@@ -349,7 +358,7 @@ test_plist_lints_and_contains_hardening() {
     _tunnel_setup_sandbox
     local plist="$TUNNEL_SANDBOX/t.plist"
     mkdir -p "$TUNNEL_SANDBOX/logs"
-    tunnel_generate_plist prime 100.97.245.83 "$TUNNEL_SANDBOX/logs/tunnel-prime.log" prime 8443:443 > "$plist"
+    tunnel_generate_plist "$FX_PEER" "$FX_IP" "$TUNNEL_SANDBOX/logs/tunnel-prime.log" "$FX_PEER" "$FX_FWD1" > "$plist"
     assert_ok tunnel_plist_lint "$plist"
     local content
     content="$(cat "$plist")"
@@ -365,7 +374,7 @@ test_plist_lints_and_contains_hardening() {
 test_plist_two_forwards() {
     _tunnel_setup_sandbox
     local plist="$TUNNEL_SANDBOX/t.plist"
-    tunnel_generate_plist prime 100.97.245.83 "$TUNNEL_SANDBOX/t.log" prime 8443:443 9000:9000 > "$plist"
+    tunnel_generate_plist "$FX_PEER" "$FX_IP" "$TUNNEL_SANDBOX/t.log" "$FX_PEER" "$FX_FWD1" 9000:9000 > "$plist"
     assert_ok tunnel_plist_lint "$plist"
     grep -q "127.0.0.1:8443:100.97.245.83:443" "$plist" || { echo "first forward missing"; return 1; }
     grep -q "127.0.0.1:9000:100.97.245.83:9000" "$plist" || { echo "second forward missing"; return 1; }
@@ -767,7 +776,7 @@ test_add_with_allow_unverified_tls_flag() {
 test_registry_v2_schema_has_new_fields() {
     _tunnel_setup_sandbox
     local entry
-    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
     tunnel_registry_add prime "$entry" >/dev/null
     local got
     got="$(tunnel_registry_get prime)"
@@ -805,7 +814,7 @@ test_registry_v2_stores_allow_unverified_tls() {
     _tunnel_setup_sandbox
     local entry
     # args: peer ip hostname suffix forwards sshAlias allow_unverified_tls
-    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443 prime yes)"
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "$FX_PEER" yes)"
     tunnel_registry_add prime "$entry" >/dev/null 2>&1 || { echo "registry_add failed"; return 1; }
     assert_contains '"allowUnverifiedTLS": true' "$(tunnel_registry_get prime 2>&1)"
 }
@@ -874,7 +883,7 @@ test_plist_contains_batchmode_and_stricthostkey() {
     _tunnel_setup_sandbox
     local plist="$TUNNEL_SANDBOX/t.plist"
     mkdir -p "$TUNNEL_SANDBOX/logs"
-    tunnel_generate_plist prime 100.97.245.83 "$TUNNEL_SANDBOX/logs/t.log" prime 8443:443 > "$plist"
+    tunnel_generate_plist "$FX_PEER" "$FX_IP" "$TUNNEL_SANDBOX/logs/t.log" "$FX_PEER" "$FX_FWD1" > "$plist"
     local content
     content="$(cat "$plist")"
     assert_ok tunnel_plist_lint "$plist"
@@ -906,4 +915,158 @@ test_remove_all_cleans_all_logs() {
     tunnel_remove_all >/dev/null
     [ ! -f "$TUNNEL_LOG_DIR/tunnel-prime.log" ] || { echo "prime log survived"; return 1; }
     [ ! -f "$TUNNEL_LOG_DIR/tunnel-alpha.log" ] || { echo "alpha log survived"; return 1; }
+}
+
+# =============================================================================
+# Incremental forwards and per-forward status (T-436)
+# =============================================================================
+
+test_t436_update_remote_port_appends_forward() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || { echo "incremental add failed: $out"; return 1; }
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_contains "8443:443" "$fwd"
+    assert_contains "8444:8080" "$fwd"
+}
+
+test_t436_update_rejects_duplicate_remote_port() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 443 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "duplicate remote port should be refused"
+    assert_contains "already forwarded" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be unchanged after refused duplicate"
+}
+
+test_t436_update_regenerates_job_with_all_forwards() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from plist"; return 1; }
+    grep -q "127.0.0.1:8444:$FX_IP:8080" "$plist" || { echo "new forward missing from plist"; return 1; }
+    tunnel_job_is_loaded "$(tunnel_label_for_peer "$FX_PEER")" || { echo "job not running after update"; return 1; }
+}
+
+test_t436_update_rollback_on_tls_failure_restores_previous_job() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    FAKE_TLS_HOSTNAME="wrong-host"
+    export FAKE_TLS_HOSTNAME
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should fail on TLS identity mismatch"
+    assert_contains "ROLLED BACK" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be rolled back to one forward"
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from restored plist"; return 1; }
+    if grep -q "8080" "$plist"; then echo "new forward leaked into restored plist"; return 1; fi
+    tunnel_job_is_loaded "$(tunnel_label_for_peer "$FX_PEER")" || { echo "previous job not restored"; return 1; }
+}
+
+test_t436_update_rollback_on_bootstrap_failure() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    FAIL_BOOTSTRAP=1
+    export FAIL_BOOTSTRAP
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should fail when bootstrap fails"
+    assert_contains "ROLLED BACK" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry should be rolled back"
+    local plist="$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    grep -q "127.0.0.1:8443:$FX_IP:443" "$plist" || { echo "original forward missing from restored plist"; return 1; }
+    if grep -q "8080" "$plist"; then echo "new forward leaked into restored plist"; return 1; fi
+    [ ! -f "$plist.prev" ] || { echo "stale .prev backup left behind"; return 1; }
+}
+
+test_t436_status_lists_every_forward() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_status --skip-remote-check 2>&1)"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
+}
+
+test_t436_status_json_exposes_per_forward_state() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+d = json.load(sys.stdin)
+fw = d["tunnels"][0]["forwards"]
+assert len(fw) == 2, fw
+assert [(f["localPort"], f["remotePort"]) for f in fw] == [(8443, 443), (8444, 8080)], fw
+assert fw[0]["listener"] == "closed", fw[0]
+assert fw[0]["backend"] == "n/a", fw[0]
+assert fw[0]["tls"] == "verified", fw[0]
+print("ok")
+' || { echo "json per-forward assertions failed: $json"; return 1; }
+}
+
+test_t436_status_json_reports_unverified_tls() {
+    _tunnel_setup_sandbox
+    local entry
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "$FX_PEER" yes)"
+    tunnel_registry_add "$FX_PEER" "$entry" >/dev/null
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+fw = json.load(sys.stdin)["tunnels"][0]["forwards"]
+assert fw[0]["tls"] == "unverified", fw[0]
+print("ok")
+' || { echo "unverified tls not reported: $json"; return 1; }
+}
+
+test_t436_status_mixed_forwards_exit_degraded() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    # 8443 listening, 8444 closed -> mixed: one healthy forward, one degraded
+    FAKE_NC_OPEN="8443"
+    export FAKE_NC_OPEN
+    local rc=0
+    tunnel_do_status "$FX_PEER" --skip-remote-check >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc" "mixed forwards should exit degraded"
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+t = json.load(sys.stdin)["tunnels"][0]
+states = {f["localPort"]: f["listener"] for f in t["forwards"]}
+assert states == {8443: "listening", 8444: "closed"}, states
+assert t["forwards"][0]["healthy"] is True, t["forwards"][0]
+assert t["forwards"][1]["healthy"] is False, t["forwards"][1]
+assert t["healthy"] is False, t  # any closed listener -> degraded peer
+print("ok")
+' || { echo "mixed-state json assertions failed: $json"; return 1; }
+}
+
+test_t436_update_blocked_by_incomplete_journal() {
+    _tunnel_setup_sandbox
+    local entry
+    entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")"
+    tunnel_registry_add "$FX_PEER" "$entry" >/dev/null
+    printf '{"op":"update","peer":"prime","steps":["registry","plist"],"completed":["registry"],"pid":99999,"ts":"2026-08-31T00:00:00Z"}' > "$TUNNEL_JOURNAL_PATH"
+    local rc=0 out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update should refuse while an update journal is incomplete"
+    assert_contains "incomplete journal" "$out"
+    assert_contains '"forwards": [{"localPort": 8443, "remotePort": 443}]' "$(tunnel_registry_get "$FX_PEER")"
 }
