@@ -38,6 +38,7 @@ _tunnel_setup_sandbox() {
     export FAKE_NC_OPEN=""
     export FAIL_BOOTSTRAP=0
     export FAIL_SSH=0
+    export TUNNEL_WAIT_TRIES=1
     : > "$LAUNCHCTL_STATE"
     printf '127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n' > "$TUNNEL_HOSTS_FILE"
 

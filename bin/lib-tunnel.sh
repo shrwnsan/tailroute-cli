@@ -46,6 +46,9 @@ TUNNEL_PORT_START="${TUNNEL_PORT_START:-8443}"
 OPENSSL_CMD="${OPENSSL_CMD:-/usr/bin/openssl}"
 TUNNEL_TLS_VERIFY_TIMEOUT="${TUNNEL_TLS_VERIFY_TIMEOUT:-5}"
 TUNNEL_PORT_END="${TUNNEL_PORT_END:-8499}"
+# How long to poll for a freshly bound listener before warning (tries x 0.5s).
+# Tests set 1 so exhausted waits stay instant.
+TUNNEL_WAIT_TRIES="${TUNNEL_WAIT_TRIES:-30}"
 TUNNEL_LABEL_PREFIX="com.tailroute.tunnel"
 TUNNEL_HOSTS_BEGIN="# BEGIN tailroute-tunnel"
 TUNNEL_HOSTS_END="# END tailroute-tunnel"
@@ -791,7 +794,7 @@ tunnel_job_bootout() {
 
 tunnel_wait_for_port() {
     local i=0
-    while [ "$i" -lt 30 ]; do
+    while [ "$i" -lt "$TUNNEL_WAIT_TRIES" ]; do
         "$NC_CMD" -z 127.0.0.1 "$1" >/dev/null 2>&1 && return 0
         sleep 0.5
         i=$((i + 1))
