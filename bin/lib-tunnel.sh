@@ -45,6 +45,7 @@ TUNNEL_REGISTRY_VERSION=2
 TUNNEL_PORT_START="${TUNNEL_PORT_START:-8443}"
 OPENSSL_CMD="${OPENSSL_CMD:-/usr/bin/openssl}"
 TUNNEL_TLS_VERIFY_TIMEOUT="${TUNNEL_TLS_VERIFY_TIMEOUT:-5}"
+OPEN_CMD="${OPEN_CMD:-open}"
 TUNNEL_PORT_END="${TUNNEL_PORT_END:-8499}"
 # How long to poll for a freshly bound listener before warning (tries x 0.5s).
 # Tests set 1 so exhausted waits stay instant.
@@ -1904,6 +1905,25 @@ EOF
 
 tunnel_do_list() {
     tunnel_registry_entries
+}
+
+# T-420: open the tunnel's bookmarkable URL in the default browser.
+tunnel_do_open() { # <peer>
+    local peer="${1:-}"
+    [ -n "$peer" ] || { echo "ERROR: tunnel open requires <peer>" >&2; return 2; }
+    peer="$(tunnel_normalize_lower "$peer")"
+    local entry hostname lport url
+    entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
+        echo "ERROR: tunnel for '$peer' not found" >&2; return 3; }
+    hostname="$(tunnel_registry_field "$entry" hostname)"
+    lport="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["forwards"][0]["localPort"])')"
+    url="https://$hostname:$lport"
+    if ! "$OPEN_CMD" "$url"; then
+        echo "ERROR: could not open $url in a browser" >&2
+        return 1
+    fi
+    echo "Opened $url"
+    return 0
 }
 
 # Remove every tunnel (used by `tailroute uninstall`); runs per-user
