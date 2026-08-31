@@ -866,6 +866,10 @@ test_remove_all_clears_journal() {
     [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { echo "journal survives remove_all"; return 1; }
 }
 
+# =============================================================================
+# Non-interactive plists (T-432)
+# =============================================================================
+
 test_plist_contains_batchmode_and_stricthostkey() {
     _tunnel_setup_sandbox
     local plist="$TUNNEL_SANDBOX/t.plist"
@@ -879,4 +883,27 @@ test_plist_contains_batchmode_and_stricthostkey() {
     assert_contains "StrictHostKeyChecking=yes" "$content"
     # Original options still present
     assert_contains "ExitOnForwardFailure" "$content"
+    assert_contains "ControlMaster=no" "$content"
+}
+
+test_remove_cleans_log_file() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null
+    # Create a log file (the add doesn't actually create one in sandbox)
+    mkdir -p "$TUNNEL_LOG_DIR"
+    printf 'test log\n' > "$TUNNEL_LOG_DIR/tunnel-prime.log"
+    [ -f "$TUNNEL_LOG_DIR/tunnel-prime.log" ] || { echo "log not created"; return 1; }
+    assert_ok tunnel_do_remove prime
+    [ ! -f "$TUNNEL_LOG_DIR/tunnel-prime.log" ] || { echo "log survived remove"; return 1; }
+}
+
+test_remove_all_cleans_all_logs() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null
+    mkdir -p "$TUNNEL_LOG_DIR"
+    printf 'log1\n' > "$TUNNEL_LOG_DIR/tunnel-prime.log"
+    printf 'log2\n' > "$TUNNEL_LOG_DIR/tunnel-alpha.log"
+    tunnel_remove_all >/dev/null
+    [ ! -f "$TUNNEL_LOG_DIR/tunnel-prime.log" ] || { echo "prime log survived"; return 1; }
+    [ ! -f "$TUNNEL_LOG_DIR/tunnel-alpha.log" ] || { echo "alpha log survived"; return 1; }
 }
