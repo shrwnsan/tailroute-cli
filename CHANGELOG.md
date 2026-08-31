@@ -2,6 +2,26 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.0] - 2026-09-01
+
+Hardening release for browser tunnels (PRD-004): valid TLS is mandatory at `add`, tunnels survive crashes mid-setup, and `status` reports the full truthful state. Plus incremental forwards, serve port autodetect, and `tunnel open`.
+
+### Features
+- **TLS identity verification at `add`** — the peer's Serve certificate must match its hostname or the add rolls back completely (no partial state); `--allow-unverified-tls` is the explicit opt-out, recorded in the registry (#6).
+- **Durable, crash-safe transactions** — every add/update/remove step is journaled before it runs; after a crash, `status` reports the incomplete journal with recovery steps, and every failure path rolls back cleanly. `/etc/hosts` edits are serialized machine-wide (hosts lock), so concurrent users can't interleave. Registry schema bumped to v2 (`peerID`, `jobID`, `allowUnverifiedTLS`, `transactions[]`) with automatic in-place v1 migration (#9).
+- **Unattended-proof SSH jobs** — LaunchAgent jobs now carry `BatchMode=yes`, `ConnectTimeout=10`, `StrictHostKeyChecking=yes`: they fail fast instead of hanging on a prompt, and pre-flight failures explain how to establish trust first. Per-tunnel logs are cleaned up on remove (#10).
+- **Incremental forwards** — `tunnel add <peer> --remote-port N` on an existing tunnel appends a forward to the *running* job transactionally; any failure restores the previous healthy job, plist, and registry entry. Forward identity is `(peer, localPort, remotePort)`; duplicates are refused (#11).
+- **Per-forward, self-repairing status** — `status` reports listener, backend, and TLS state for *every* forward (human + JSON `forwards` array), the adaptive path in use (socks5/direct), plist presence, and recognized orphans (stray hosts lines / launchd jobs) with exact repair commands. Mixed healthy/degraded forwards degrade the exit code (#11, #15).
+- **Serve port autodetect** — `add` without `--remote-port` probes the peer's `tailscale serve status` and forwards to its real listen ports (silent fallback to 443 on locked-down peers) (#13).
+- **`tunnel open <peer>`** — opens the tunnel's bookmarkable URL in the default browser; unknown peers exit 3 like `status` (#14).
+
+### Fixes
+- **`sudo tailroute uninstall` cleans the correct user** — resolves the invoking user via `SUDO_USER`/dscl instead of root's `$HOME`; removes that user's tunnels, registry, LaunchAgents, and logs (#8).
+- **Target-aware SOCKS5 probe** — the adaptive wrapper checks SOCKS readiness per peer and falls back to direct; legacy always-proxy wrappers migrate automatically (#7).
+
+### Internal
+- `TUNNEL_WAIT_TRIES` knob — listener-wait depth configurable; test suite ~9 min → ~80 s, production default unchanged (#12).
+
 ## [0.6.0] - 2026-08-25
 
 ### Features

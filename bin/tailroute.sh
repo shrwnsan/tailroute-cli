@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.6.0
+# tailroute v0.7.0
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Version
-readonly VERSION="0.6.0"
+readonly VERSION="0.7.0"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
