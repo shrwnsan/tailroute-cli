@@ -39,6 +39,8 @@ _tunnel_setup_sandbox() {
     export FAIL_BOOTSTRAP=0
     export FAIL_SSH=0
     export TUNNEL_WAIT_TRIES=1
+    export FAKE_OPEN_LOG="$TUNNEL_SANDBOX/opened.log"
+    : > "$FAKE_OPEN_LOG"
     : > "$LAUNCHCTL_STATE"
     printf '127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n' > "$TUNNEL_HOSTS_FILE"
 
@@ -96,11 +98,18 @@ if [ "$1" = "status" ] && [ "$2" = "--json" ]; then
 fi
 exit 0
 MOCK
+    # T-420: records URLs handed to the macOS `open` command
+    cat > "$TUNNEL_SANDBOX/bin/open" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_OPEN_LOG"
+exit 0
+MOCK
     chmod +x "$TUNNEL_SANDBOX/bin/"*
     export NC_CMD="$TUNNEL_SANDBOX/bin/nc"
     export LAUNCHCTL_CMD="$TUNNEL_SANDBOX/bin/launchctl"
     export SSH_CMD="$TUNNEL_SANDBOX/bin/ssh"
     export TAILSCALE_CMD="$TUNNEL_SANDBOX/bin/tailscale"
+    export OPEN_CMD="$TUNNEL_SANDBOX/bin/open"
     export DSCACHEUTIL_CMD=/usr/bin/true
 
     # Tailscale status fixture: peer "prime" online in tailnet "tailnet.ts.net"
@@ -1114,4 +1123,24 @@ test_t413_add_autodetects_multiple_serve_ports() {
     local fwd
     fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
     assert_eq "8443:8443 8444:3000" "$fwd" "each serve listen port becomes a forward"
+}
+
+# =============================================================================
+# Tunnel open (T-420)
+# =============================================================================
+
+test_t420_open_opens_bookmark_url() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_open "$FX_PEER" 2>&1)" || { echo "open failed: $out"; return 1; }
+    assert_contains "https://$FX_HOSTNAME:8443" "$out"
+    assert_contains "https://$FX_HOSTNAME:8443" "$(cat "$FAKE_OPEN_LOG")"
+}
+
+test_t420_open_unknown_peer_fails() {
+    _tunnel_setup_sandbox
+    local rc=0
+    tunnel_do_open ghost >/dev/null 2>&1 || rc=$?
+    assert_eq 3 "$rc" "unknown peer should exit 3 like status"
 }

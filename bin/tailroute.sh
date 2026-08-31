@@ -1261,6 +1261,8 @@ Commands:
         Registered tunnels as JSON, one per line.
   restart [<peer>]
         Restart one or all tunnel jobs.
+  open <peer>
+        Open the tunnel's bookmarkable URL in the default browser.
 
 Browser URL after add: https://<peer>.<tailnet>.ts.net:<local-port>
 Works with VPN active (via SOCKS5) or inactive (direct) — adaptive.
@@ -1285,6 +1287,10 @@ EOF
         restart)
             shift
             tunnel_do_restart "$@"
+            ;;
+        open)
+            shift
+            tunnel_do_open "$@"
             ;;
         remove-all)
             # Used by `tailroute uninstall` (per-user cleanup); not interactive
