@@ -118,7 +118,7 @@ _tr_resolve_target_user() {
 # Tunnel ssh options: forwards must fail loudly, and the tunnel must never
 # join a user's ControlMaster session (closing an interactive
 # `ssh proxy-<peer>` would otherwise kill it).
-TUNNEL_SSH_OPTS="-o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ControlMaster=no -o ControlPath=none -o ControlPersist=no"
+TUNNEL_SSH_OPTS="-o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ControlMaster=no -o ControlPath=none -o ControlPersist=no -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes"
 
 # -----------------------------------------------------------------------------
 # Validation — hard gate before any peer-derived data is used
@@ -1045,7 +1045,9 @@ EOF
     fi
 
     if ! "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
-        echo "ERROR: ssh proxy-$ssh_alias failed (auth/host-key). Run: ssh proxy-$ssh_alias true" >&2
+        echo "ERROR: ssh proxy-$ssh_alias failed (auth or host-key not trusted)." >&2
+        echo "  Establish trust first:  ssh proxy-$ssh_alias true" >&2
+        echo "  Then re-run:         tailroute tunnel add $ssh_alias" >&2
         return 1
     fi
 
