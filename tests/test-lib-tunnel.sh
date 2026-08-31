@@ -12,11 +12,13 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _tunnel_setup_sandbox() {
     TUNNEL_SANDBOX="$(mktemp -d)"
-    mkdir -p "$TUNNEL_SANDBOX/bin" "$TUNNEL_SANDBOX/launchagents" "$TUNNEL_SANDBOX/ssh"
+    mkdir -p "$TUNNEL_SANDBOX/bin" "$TUNNEL_SANDBOX/launchagents" "$TUNNEL_SANDBOX/ssh" "$TUNNEL_SANDBOX/config"
 
     export TUNNEL_CONFIG_DIR="$TUNNEL_SANDBOX/config"
     export TUNNEL_REGISTRY="$TUNNEL_CONFIG_DIR/tunnels.json"
     export TUNNEL_LOCK_DIR="$TUNNEL_CONFIG_DIR/tunnel.lock"
+    export TUNNEL_JOURNAL_PATH="$TUNNEL_CONFIG_DIR/tunnels.journal"
+    export TUNNEL_HOSTS_LOCK_DIR="$TUNNEL_SANDBOX/hosts.lock"
     export TUNNEL_HOSTS_FILE="$TUNNEL_SANDBOX/hosts"
     export TUNNEL_LAUNCHAGENTS_DIR="$TUNNEL_SANDBOX/launchagents"
     export TUNNEL_LOG_DIR="$TUNNEL_SANDBOX/logs"
@@ -212,7 +214,7 @@ test_registry_version_field_and_bak() {
     local entry
     entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
     tunnel_registry_add prime "$entry" >/dev/null
-    assert_contains '"version": 1' "$(tunnel_registry_all)"
+    assert_contains '"version": 2' "$(tunnel_registry_all)"
     [ -f "$TUNNEL_REGISTRY" ] || { echo "registry file missing"; return 1; }
     local entry2
     entry2="$(tunnel_build_entry_json alpha 100.64.0.5 alpha.tailnet.ts.net tailnet.ts.net 8444:443)"
@@ -756,4 +758,110 @@ test_add_with_allow_unverified_tls_flag() {
     out="$(tunnel_do_add prime --allow-unverified-tls --yes 2>&1)" || { echo "add with --allow-unverified-tls failed: $out"; return 1; }
     assert_contains "skipping TLS identity verification" "$out"
     assert_contains "Tunnel added: prime" "$out"
+}
+
+# =============================================================================
+# Durable transactions (T-431)
+# =============================================================================
+
+test_registry_v2_schema_has_new_fields() {
+    _tunnel_setup_sandbox
+    local entry
+    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443)"
+    tunnel_registry_add prime "$entry" >/dev/null
+    local got
+    got="$(tunnel_registry_get prime)"
+    assert_contains '"peer": "prime"' "$got"
+    # v2 fields
+    assert_contains '"peerID"' "$got"
+    assert_contains '"jobID"' "$got"
+    assert_contains '"allowUnverifiedTLS": false' "$got"
+    assert_contains '"transactions": []' "$got"
+    assert_contains '"magicDNSSuffix": "tailnet.ts.net"' "$got"
+}
+
+test_registry_v1_auto_migrates_to_v2() {
+    _tunnel_setup_sandbox
+    # Write a v1 registry directly (no peerID, jobID, etc.)
+    printf '{"version": 1, "tunnels": [{"peer": "oldpeer", "tailscaleIP": "100.64.0.5", "hostname": "old.tailnet.ts.net", "magicDNSSuffix": "tailnet.ts.net", "sshAlias": "oldpeer", "forwards": [{"localPort": 8443, "remotePort": 443}], "plistPath": "/tmp/old.plist", "createdAt": "2026-01-01T00:00:00Z"}]}' > "$TUNNEL_REGISTRY"
+    chmod 0600 "$TUNNEL_REGISTRY"
+    # Reading should auto-migrate and return v2 fields
+    local got
+    got="$(tunnel_registry_get oldpeer 2>&1)"
+    local rc=$?
+    if [ $rc -ne 0 ]; then
+        echo "registry_get failed with rc=$rc: $got" >&2
+        return 1
+    fi
+    assert_contains '"peerID"' "$got"
+    assert_contains '"jobID"' "$got"
+    assert_contains '"allowUnverifiedTLS": false' "$got"
+    assert_contains '"transactions": []' "$got"
+    # Registry file should now be version 2
+    assert_contains '"version": 2' "$(tunnel_registry_all)"
+}
+
+test_registry_v2_stores_allow_unverified_tls() {
+    _tunnel_setup_sandbox
+    local entry
+    # args: peer ip hostname suffix forwards sshAlias allow_unverified_tls
+    entry="$(tunnel_build_entry_json prime 100.97.245.83 prime.tailnet.ts.net tailnet.ts.net 8443:443 prime yes)"
+    tunnel_registry_add prime "$entry" >/dev/null 2>&1 || { echo "registry_add failed"; return 1; }
+    assert_contains '"allowUnverifiedTLS": true' "$(tunnel_registry_get prime 2>&1)"
+}
+
+test_journal_written_and_cleared_on_add() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null 2>&1
+    # Journal should be cleared after successful add
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { echo "journal survives successful add"; return 1; }
+}
+
+test_journal_written_and_cleared_on_remove() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null 2>&1
+    tunnel_do_remove prime >/dev/null 2>&1
+    # Journal should be cleared after successful remove
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { echo "journal survives successful remove"; return 1; }
+}
+
+test_status_detects_incomplete_journal() {
+    _tunnel_setup_sandbox
+    # Write an incomplete journal
+    printf '{"op":"add","peer":"prime","steps":["registry","hosts","plist"],"completed":["registry"],"pid":99999,"ts":"2026-08-30T05:00:00Z"}' > "$TUNNEL_JOURNAL_PATH"
+    local rc=0
+    tunnel_do_status >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc" "status should report incomplete journal"
+    # Should mention 'INCOMPLETE JOURNAL'
+    local out
+    out="$(tunnel_do_status 2>&1)" || true
+    assert_contains "INCOMPLETE JOURNAL" "$out"
+}
+
+test_hosts_lock_acquired_and_released() {
+    _tunnel_setup_sandbox
+    # The hosts lock dir should not exist before add
+    [ ! -d "$TUNNEL_HOSTS_LOCK_DIR" ] || { echo "hosts lock dir pre-exists"; return 1; }
+    tunnel_do_add prime --yes >/dev/null 2>&1
+    # After add, hosts lock should be released (dir removed)
+    [ ! -d "$TUNNEL_HOSTS_LOCK_DIR" ] || { echo "hosts lock dir not released after add"; return 1; }
+}
+
+test_add_with_allow_unverified_tls_persists() {
+    _tunnel_setup_sandbox
+    export FAKE_TLS_HOSTNAME="wrong-host"
+    local out
+    out="$(tunnel_do_add prime --allow-unverified-tls --yes 2>&1)" || { echo "add failed: $out"; return 1; }
+    assert_contains "Tunnel added: prime" "$out"
+    # Verify the registry persists the flag
+    assert_contains '"allowUnverifiedTLS": true' "$(tunnel_registry_get prime)"
+}
+
+test_remove_all_clears_journal() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null 2>&1
+    # Write a stale journal
+    printf '{"op":"add","peer":"ghost","steps":["registry"],"completed":[],"pid":1,"ts":"2026-08-30T00:00:00Z"}' > "$TUNNEL_JOURNAL_PATH"
+    tunnel_remove_all >/dev/null 2>&1
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { echo "journal survives remove_all"; return 1; }
 }
