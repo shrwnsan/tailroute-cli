@@ -1178,6 +1178,40 @@ tailroute_proxy_config_ssh_generate() {
     fi
 }
 
+# T-413: best-effort autodetect of the peer's tailscale serve LISTEN ports
+# (never backend ports — forwards must hit Serve so the browser gets valid
+# TLS). Prints space-separated ports; prints nothing when the peer is
+# locked down or serves nothing, which callers treat as silent fallback.
+tunnel_detect_serve_ports() { # <alias>
+    local out
+    out="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$1" \
+        "tailscale serve status" 2>/dev/null </dev/null)" || return 0
+    [ -n "$out" ] || return 0
+    printf '%s' "$out" | "$PYTHON3_CMD" -c '
+import json, re, sys
+raw = sys.stdin.read()
+ports = []
+def add(p):
+    if p and p not in ports:
+        ports.append(p)
+try:
+    d = json.loads(raw)
+except Exception:
+    d = None
+if isinstance(d, dict):
+    for u in d.get("Web", {}).keys():
+        m = re.search(r":(\d+)", str(u))
+        if m:
+            add(m.group(1))
+    for k in d.get("TCP", {}).keys():
+        add(str(k))
+else:
+    for m in re.finditer(r"https?://[^\s\"]+:(\d+)", raw):
+        add(m.group(1))
+print(" ".join(ports))
+'
+}
+
 # T-436: append one or more forwards to an existing peer's job, replacing the
 # launchd job transactionally (restore the previous healthy job on failure).
 # Per-user lock must already be held. Local ports come from tunnel_pick_port,
@@ -1451,7 +1485,10 @@ tunnel_do_add() {
             echo "ERROR: port $port is in use" >&2; tunnel_lock_release; return 1
         fi
         if [ -z "$(printf '%s' "$raw_remote" | tr -d ' ')" ]; then
-            raw_remote=" 443"
+            raw_remote="$(tunnel_detect_serve_ports "${ssh_alias:-$peer}")"
+            if [ -z "$raw_remote" ]; then
+                raw_remote=" 443"
+            fi
         fi
         lport="$port"; idx=0
         for rport in $raw_remote; do

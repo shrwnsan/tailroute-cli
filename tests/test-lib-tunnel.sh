@@ -79,6 +79,13 @@ MOCK
     cat > "$TUNNEL_SANDBOX/bin/ssh" <<'MOCK'
 #!/bin/sh
 [ "${FAIL_SSH:-0}" = "1" ] && exit 255
+# T-413: serve-status probe. Unset FAKE_SERVE_STATUS = locked-down peer
+# (remote command fails) — silent fallback.
+case "$*" in
+    *"tailscale serve status"*)
+        [ -n "${FAKE_SERVE_STATUS:-}" ] && { printf '%s\n' "$FAKE_SERVE_STATUS"; exit 0; }
+        exit 1 ;;
+esac
 exit 0
 MOCK
     cat > "$TUNNEL_SANDBOX/bin/tailscale" <<'MOCK'
@@ -1070,4 +1077,41 @@ test_t436_update_blocked_by_incomplete_journal() {
     assert_eq 1 "$rc" "update should refuse while an update journal is incomplete"
     assert_contains "incomplete journal" "$out"
     assert_contains '"forwards": [{"localPort": 8443, "remotePort": 443}]' "$(tunnel_registry_get "$FX_PEER")"
+}
+
+# =============================================================================
+# Serve port autodetect (T-413)
+# =============================================================================
+
+test_t413_add_autodetects_serve_ports() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:8443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+    export FAKE_SERVE_STATUS
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:8443" "$fwd" "autodetected serve listen port should be the forward target"
+}
+
+test_t413_add_falls_back_silently_without_serve() {
+    _tunnel_setup_sandbox
+    # FAKE_SERVE_STATUS unset — locked-down peer; fall back to 443 without noise
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)"
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:443" "$fwd" "locked-down peer falls back to 443"
+    if printf '%s' "$out" | grep -qi "serve"; then
+        _assert_fail "fallback should be silent, got: $out"
+    fi
+}
+
+test_t413_add_autodetects_multiple_serve_ports() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:8443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}},"http://prime.tailnet.ts.net:3000":{"Handlers":{"/":{"Backend":"http://127.0.0.1:5000"}}}}}'
+    export FAKE_SERVE_STATUS
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:8443 8444:3000" "$fwd" "each serve listen port becomes a forward"
 }
