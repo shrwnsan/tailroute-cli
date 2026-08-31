@@ -41,7 +41,7 @@ TUNNEL_LOG_DIR="${TUNNEL_LOG_DIR:-$HOME/Library/Logs/Tailroute}"
 TUNNEL_SSH_CONFIG="${TUNNEL_SSH_CONFIG:-$HOME/.ssh/config}"
 TUNNEL_SSH_WRAPPER="${TUNNEL_SSH_WRAPPER:-$HOME/.ssh/tailroute-proxy.sh}"
 
-TUNNEL_REGISTRY_VERSION=1
+TUNNEL_REGISTRY_VERSION=2
 TUNNEL_PORT_START="${TUNNEL_PORT_START:-8443}"
 OPENSSL_CMD="${OPENSSL_CMD:-/usr/bin/openssl}"
 TUNNEL_TLS_VERIFY_TIMEOUT="${TUNNEL_TLS_VERIFY_TIMEOUT:-5}"
@@ -218,6 +218,142 @@ tunnel_lock_release() {
 }
 
 # -----------------------------------------------------------------------------
+# Write-ahead journal (T-431) — durable crash recovery
+# -----------------------------------------------------------------------------
+# The journal records the intended operation and each completed step.
+# On crash, status/add/remove detect an incomplete journal and can
+# resume or roll back.  The journal file lives next to the registry
+# and uses the same atomic-write pattern (same-dir tmp + fsync + rename).
+#
+# Journal format (JSON lines, one per step):
+#   {"op":"add|remove","peer":"...","steps":["registry","hosts","plist","bootstrap"],
+#    "completed":["registry"],"pid":12345,"ts":"..."}
+#
+# Overridable for tests: TUNNEL_JOURNAL_PATH
+
+TUNNEL_JOURNAL_PATH="${TUNNEL_JOURNAL_PATH:-$TUNNEL_CONFIG_DIR/tunnels.journal}"
+
+# _tun_journal_write <op> <peer> <steps-json> <completed-json>
+# Writes or updates the journal entry atomically.
+_tun_journal_write() {
+    local op="$1" peer="$2" steps="$3" completed="$4"
+    local journal_dir journal_tmp
+    journal_dir="$(dirname "$TUNNEL_JOURNAL_PATH")"
+    mkdir -p "$journal_dir" 2>/dev/null || true
+    chmod 0700 "$journal_dir" 2>/dev/null || true
+    journal_tmp="$("$MKTEMP_CMD" "${TUNNEL_JOURNAL_PATH}.XXXXXX")" || return 1
+    printf '{"op":"%s","peer":"%s","steps":%s,"completed":%s,"pid":%s,"ts":"%s"}\n' \
+        "$op" "$peer" "$steps" "$completed" "$$" \
+        "$(TZ=UTC date '+%Y-%m-%dT%H:%M:%SZ')" > "$journal_tmp"
+    chmod 0600 "$journal_tmp"
+    # Atomic rename (no fsync needed for journal — it's recovered, not trusted)
+    mv -f "$journal_tmp" "$TUNNEL_JOURNAL_PATH"
+}
+
+# _tun_journal_read — prints the journal JSON on stdout, empty string if absent
+_tun_journal_read() {
+    if [ -f "$TUNNEL_JOURNAL_PATH" ]; then
+        cat "$TUNNEL_JOURNAL_PATH"
+    fi
+}
+
+# _tun_journal_clear — removes the journal file
+_tun_journal_clear() {
+    rm -f "$TUNNEL_JOURNAL_PATH" 2>/dev/null || true
+}
+
+# _tun_journal_has_incomplete — returns 0 if there's an incomplete journal entry
+_tun_journal_has_incomplete() {
+    local journal
+    journal="$(_tun_journal_read)"
+    [ -z "$journal" ] && return 1
+    # Check if completed != steps using python3 (bash 3.2 has no deep compare)
+    printf '%s' "$journal" | "$PYTHON3_CMD" -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    if d.get("completed", []) != d.get("steps", []):
+        sys.exit(0)  # incomplete
+    sys.exit(1)  # complete or empty
+except Exception:
+    sys.exit(1)
+'
+}
+
+# _tun_journal_peer — prints the peer name from the journal, empty if absent
+_tun_journal_peer() {
+    local journal
+    journal="$(_tun_journal_read)"
+    [ -z "$journal" ] && return 0
+    printf '%s' "$journal" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("peer",""))' 2>/dev/null || true
+}
+
+# _tun_journal_op — prints the operation type (add/remove), empty if absent
+_tun_journal_op() {
+    local journal
+    journal="$(_tun_journal_read)"
+    [ -z "$journal" ] && return 0
+    printf '%s' "$journal" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("op",""))' 2>/dev/null || true
+}
+
+# -----------------------------------------------------------------------------
+# Machine-wide hosts lock (T-431) — serializes /etc/hosts across users
+# -----------------------------------------------------------------------------
+# This is a root-owned mkdir-based lock at a system path.  It serializes
+# /etc/hosts edits from different users on the same Mac.  The per-user lock
+# (above) serializes registry + port allocation within one user.
+#
+# Lock ordering: acquire per-user FIRST, then machine-wide.
+# Release in REVERSE: machine-wide first, then per-user.
+#
+# Overridable for tests: TUNNEL_HOSTS_LOCK_DIR
+
+TUNNEL_HOSTS_LOCK_DIR="${TUNNEL_HOSTS_LOCK_DIR:-/var/db/tailroute/hosts.lock}"
+
+tunnel_hosts_lock_acquire() {
+    local lock_dir="$1"
+    local waited=0 lock_pid
+    while true; do
+        if mkdir "$lock_dir" 2>/dev/null; then
+            printf '%s\n' "$$" > "$lock_dir/pid"
+            # In production, ensure root ownership
+            if [ -n "$TUNNEL_SUDO_CMD" ]; then
+                "$TUNNEL_SUDO_CMD" chown root:wheel "$lock_dir" 2>/dev/null || true
+                "$TUNNEL_SUDO_CMD" chmod 0700 "$lock_dir" 2>/dev/null || true
+            else
+                chmod 0700 "$lock_dir" 2>/dev/null || true
+            fi
+            return 0
+        fi
+        lock_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+        if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            # Stale lock — but only root (or test mode) can remove it
+            if [ -n "$TUNNEL_SUDO_CMD" ]; then
+                "$TUNNEL_SUDO_CMD" rm -rf "$lock_dir" 2>/dev/null || true
+            else
+                rm -rf "$lock_dir" 2>/dev/null || true
+            fi
+            continue
+        fi
+        waited=$((waited + 1))
+        if [ "$waited" -ge 10 ]; then
+            echo "ERROR: another tailroute operation is modifying $TUNNEL_HOSTS_FILE ($lock_dir)" >&2
+            return 1
+        fi
+        sleep 1
+    done
+}
+
+tunnel_hosts_lock_release() {
+    local lock_dir="$1"
+    if [ -n "$TUNNEL_SUDO_CMD" ]; then
+        "$TUNNEL_SUDO_CMD" rm -rf "$lock_dir" 2>/dev/null || true
+    else
+        rm -rf "$lock_dir" 2>/dev/null || true
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Registry (versioned JSON, atomic write, 0600, .bak retained)
 # -----------------------------------------------------------------------------
 tunnel_registry_check_env() {
@@ -244,7 +380,7 @@ tunnel_registry_op() {
     TUNNEL_REG_PEER="${2:-}" \
     TUNNEL_REG_ENTRY="${3:-}" \
     "$PYTHON3_CMD" <<'PY'
-import json, os, re, sys, tempfile
+import json, os, re, sys, tempfile, uuid
 
 path = os.environ["TUNNEL_REGISTRY_PATH"]
 expected_version = int(os.environ["TUNNEL_REG_VERSION"])
@@ -259,6 +395,19 @@ def die(code, msg):
 LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 CGNAT_RE = re.compile(r"^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.([0-9]{1,3})\.([0-9]{1,3})$")
 
+def migrate_v1_to_v2(data):
+    for t in data["tunnels"]:
+        if "peerID" not in t:
+            t["peerID"] = t["peer"] + "." + uuid.uuid4().hex[:8]
+        if "jobID" not in t:
+            t["jobID"] = t.get("plistPath", "").split("/")[-1].replace(".plist", "") or ("job-" + uuid.uuid4().hex[:8])
+        if "allowUnverifiedTLS" not in t:
+            t["allowUnverifiedTLS"] = False
+        if "transactions" not in t:
+            t["transactions"] = []
+    data["version"] = expected_version
+    return data
+
 def load():
     if not os.path.exists(path):
         return {"version": expected_version, "tunnels": []}
@@ -269,7 +418,10 @@ def load():
         die(6, "ERROR: registry corrupt (%s): %s\nRestore %s.bak or remove and re-add tunnels." % (path, e, path))
     if not isinstance(data, dict) or data.get("version") != expected_version:
         got = data.get("version") if isinstance(data, dict) else "?"
-        die(6, "ERROR: registry version unsupported (%s); expected %s" % (got, expected_version))
+        if got == 1:
+            data = migrate_v1_to_v2(data)
+        elif got != expected_version:
+            die(6, "ERROR: registry version unsupported (%s); expected %s" % (got, expected_version))
     if not isinstance(data.get("tunnels"), list):
         die(6, "ERROR: registry corrupt: 'tunnels' is not a list")
     return data
@@ -746,36 +898,92 @@ PY
 }
 
 # -----------------------------------------------------------------------------
-# Adaptive SSH wrapper (T-410)
 # -----------------------------------------------------------------------------
-# Legacy wrapper fingerprint — used for migration detection (T-433)
+
+# Adaptive SSH wrapper (T-410 / T-433)
+
+# -----------------------------------------------------------------------------
+
+# Legacy wrapper fingerprint - used for migration detection (T-433)
+
 TUNNEL_LEGACY_WRAPPER_FINGERPRINT='nc -z 127.0.0.1 1055'
+
+
 
 tunnel_ssh_wrapper_content() {
     cat <<'EOF'
 #!/bin/sh
-# tailroute adaptive proxy wrapper — generated by `tailroute proxy-config ssh`
-# Probes the SOCKS5 proxy with a handshake to the actual target before use.
-# Falls back to direct connection if the proxy is down or cannot reach the target.
-PROXY="127.0.0.1:1055"
+# tailroute adaptive proxy wrapper -- generated by `tailroute proxy-config ssh`
+# Probes the SOCKS5 proxy with a real handshake to the actual target before use.
+# Falls back to direct connection if the proxy is down, not SOCKS5, or cannot
+# reach the target.  Timeout: 3 seconds (T-433).
+PROXY_ADDR="127.0.0.1"
+PROXY_PORT=1055
+TIMEOUT=3
 HOST="$1"
 PORT="$2"
-# SOCKS5 no-auth greeting (\x05\x01\x00) + CONNECT request to the actual target.
-# Read 2 bytes of reply: version + status. Status 0x00 = success.
-RESP=$(printf '\x05\x01\x00\x05\x01\x00\x03'"$(printf '%s' "$HOST" | wc -c | tr -d ' ')""$HOST"'\x00'"$(printf '%02x' "$((PORT / 256))")""$(printf '%02x' "$((PORT % 256))")" | \
-    /usr/bin/nc -w 3 -q 1 127.0.0.1 1055 2>/dev/null | dd bs=2 count=1 2>/dev/null | od -A n -t x1 | tr -d ' \n')
+
+# --- SOCKS5 target-aware probe ---
+# Send greeting + CONNECT in one shot.  Read 4 bytes of reply:
+#   bytes 1-2 = greeting reply (VER + chosen method)
+#   bytes 3-4 = CONNECT reply (VER + reply status)
+# CONNECT success = status 0x00, so we expect 05000500.
+# Uses shell-builtin printf for \x escapes (macOS /usr/bin/printf lacks them).
+dlen=$(printf '%s' "$HOST" | /usr/bin/wc -c | /usr/bin/tr -d ' ')
+hi=$(printf '%02x' "$((PORT / 256))")
+lo=$(printf '%02x' "$((PORT % 256))")
+dlen_byte=$(printf "\x$(printf '%02x' "$dlen")")
+RESP=$(printf '\x05\x01\x00\x05\x01\x00\x03%s%s%s' "$dlen_byte" "$HOST" "$hi$lo" | \\
+    /usr/bin/nc -w "$TIMEOUT" -q 1 "$PROXY_ADDR" "$PROXY_PORT" 2>/dev/null | \\
+    /usr/bin/dd bs=4 count=1 2>/dev/null | /usr/bin/od -A n -t x1 | /usr/bin/tr -d ' \n')
 case "$RESP" in
-    0500) exec /usr/bin/nc -X 5 -x "$PROXY" "$@" ;;
+    05000500) exec /usr/bin/nc -X 5 -x "${PROXY_ADDR}:${PROXY_PORT}" "$@" ;;
 esac
 exec /usr/bin/nc "$@"
 EOF
 }
 
-# tunnel_ssh_wrapper_is_legacy — returns 0 if the wrapper uses the old
+
+# tunnel_ssh_wrapper_is_legacy - returns 0 if the wrapper uses the old
+
 # port-open probe (nc -z) instead of the SOCKS5 handshake.
+
 tunnel_ssh_wrapper_is_legacy() {
+
     [ -f "$TUNNEL_SSH_WRAPPER" ] || return 1
+
     grep -qF "$TUNNEL_LEGACY_WRAPPER_FINGERPRINT" "$TUNNEL_SSH_WRAPPER" 2>/dev/null
+
+}
+
+
+
+# tunnel_migrate_legacy_wrapper - if the installed wrapper uses the old
+
+# port-open probe (nc -z), regenerate it with the target-aware SOCKS5
+
+# handshake.  Logs the migration.  Returns 0 (success or nothing to do).
+
+tunnel_migrate_legacy_wrapper() {
+
+    if ! tunnel_ssh_wrapper_is_legacy; then
+
+        return 0
+
+    fi
+
+    echo "Migrating legacy proxy wrapper: $TUNNEL_SSH_WRAPPER" >&2
+
+    tunnel_install_ssh_wrapper yes || {
+
+        echo "WARNING: legacy wrapper migration failed" >&2
+
+        return 1
+
+    }
+
+    echo "Legacy wrapper migrated to target-aware SOCKS5 probe" >&2
+
 }
 
 # Install the wrapper; an existing file with different content is never
@@ -923,27 +1131,35 @@ tunnel_tls_verify_or_skip() { # <hostname> <port> <allow_unverified>
 # -----------------------------------------------------------------------------
 # Transactional add / remove (T-405.1 / T-405.2)
 # -----------------------------------------------------------------------------
-tunnel_build_entry_json() { # peer ip hostname suffix forwards("l:r l:r")
+tunnel_build_entry_json() { # peer ip hostname suffix forwards("l:r l:r") [allow_unverified_tls]
+    local allow_tls="${7:-no}"
     TUNNEL_E_PEER="$1" TUNNEL_E_IP="$2" TUNNEL_E_HOST="$3" \
     TUNNEL_E_SUFFIX="$4" TUNNEL_E_PLIST="$(tunnel_plist_path_for_peer "$1")" \
-    TUNNEL_E_ALIAS="${6:-$1}" \
+    TUNNEL_E_ALIAS="${6:-$1}" TUNNEL_E_TLS="$allow_tls" \
     TUNNEL_E_FORWARDS="$5" "$PYTHON3_CMD" <<'PY'
-import datetime, json, os
+import datetime, json, os, uuid
 
 fwd = []
 for pair in os.environ["TUNNEL_E_FORWARDS"].split():
     l, r = pair.split(":", 1)
     fwd.append({"localPort": int(l), "remotePort": int(r)})
+peer = os.environ["TUNNEL_E_PEER"]
+peer_id = peer + "." + uuid.uuid4().hex[:8]
+job_id = os.environ["TUNNEL_E_PLIST"].split("/")[-1].replace(".plist", "") or ("job-" + uuid.uuid4().hex[:8])
 print(json.dumps({
-    "peer": os.environ["TUNNEL_E_PEER"],
+    "peer": peer,
+    "peerID": peer_id,
+    "jobID": job_id,
     "tailscaleIP": os.environ["TUNNEL_E_IP"],
     "hostname": os.environ["TUNNEL_E_HOST"],
     "magicDNSSuffix": os.environ["TUNNEL_E_SUFFIX"],
     "sshAlias": os.environ["TUNNEL_E_ALIAS"],
     "forwards": fwd,
     "plistPath": os.environ["TUNNEL_E_PLIST"],
+    "allowUnverifiedTLS": os.environ["TUNNEL_E_TLS"] == "yes",
+    "transactions": [],
     "createdAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-}))
+}, sort_keys=True))
 PY
 }
 
@@ -1128,20 +1344,53 @@ tunnel_do_add() {
         echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2
     echo "NOTE: the /etc/hosts mapping is system-wide — it affects every user of this Mac." >&2
 
-    # --- Transaction: registry → hosts → plist (+lint) → bootstrap → verify ---
+    # --- Transaction: registry → hosts → plist (+lint) → bootstrap → TLS verify ---
+    # Lock ordering: per-user (already held) → machine-wide hosts lock
+    # Release in reverse: hosts lock → per-user
+
+    # Check for incomplete journal from a previous crash
+    if _tun_journal_has_incomplete; then
+        local jpeer jop
+        jpeer="$(_tun_journal_peer)"
+        jop="$(_tun_journal_op)"
+        if [ "$jpeer" = "$peer" ] && [ "$jop" = "add" ]; then
+            echo "NOTE: recovering incomplete add for '$peer' from previous run" >&2
+        else
+            echo "ERROR: incomplete journal for '$jpeer' ($jop) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+            tunnel_lock_release; return 1
+        fi
+    fi
+
+    local add_steps='["registry","hosts","plist","bootstrap","tls"]'
     local entry rolled_back=""
-    entry="$(tunnel_build_entry_json "$peer" "$ip" "$full_hostname" "$suffix" "$forwards" "${ssh_alias:-$peer}")" || {
+    entry="$(tunnel_build_entry_json "$peer" "$ip" "$full_hostname" "$suffix" "$forwards" "${ssh_alias:-$peer}" "$allow_unverified_tls")" || {
         tunnel_lock_release; return 1; }
 
+    # Step 1: registry
+    _tun_journal_write add "$peer" "$add_steps" '[]' || true
     if ! tunnel_registry_add "$peer" "$entry"; then
+        _tun_journal_clear
         tunnel_lock_release; return 1
     fi
+    _tun_journal_write add "$peer" "$add_steps" '["registry"]' || true
+
+    # Step 2: hosts (under machine-wide lock)
+    tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" || {
+        echo "ROLLED BACK: registry entry (hosts lock busy)" >&2
+        tunnel_registry_remove "$peer" >/dev/null 2>&1
+        _tun_journal_clear
+        tunnel_lock_release; return 1
+    }
     if ! tunnel_hosts_apply add "$full_hostname"; then
         echo "ROLLED BACK: registry entry" >&2
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
         tunnel_registry_remove "$peer" >/dev/null 2>&1
+        _tun_journal_clear
         tunnel_lock_release; return 1
     fi
+    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts"]' || true
 
+    # Step 3: plist
     mkdir -p "$TUNNEL_LOG_DIR"; chmod 0700 "$TUNNEL_LOG_DIR" 2>/dev/null || true
     local log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
     # shellcheck disable=SC2086  # $forwards intentionally word-splits into l:r pair args
@@ -1149,32 +1398,49 @@ tunnel_do_add() {
         echo "ROLLED BACK: hosts entry, registry entry" >&2
         rm -f "$plist"
         tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || rolled_back="hosts"
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
         tunnel_registry_remove "$peer" >/dev/null 2>&1
         [ -n "$rolled_back" ] && echo "  MANUAL REVERT NEEDED: remove '$full_hostname' from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        _tun_journal_clear
         tunnel_lock_release; return 1
     fi
     chmod 0644 "$plist"
+    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist"]' || true
+
+    # Step 4: bootstrap
     if ! tunnel_job_bootstrap "$plist"; then
         echo "ROLLED BACK: plist, hosts entry, registry entry" >&2
         rm -f "$plist"
         tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || rolled_back="hosts"
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
         tunnel_registry_remove "$peer" >/dev/null 2>&1
         [ -n "$rolled_back" ] && echo "  MANUAL REVERT NEEDED: remove '$full_hostname' from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        _tun_journal_clear
         tunnel_lock_release; return 1
     fi
+    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist","bootstrap"]' || true
+
+    # Release hosts lock — no more /etc/hosts mutations in add
+    tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+
     if ! tunnel_wait_for_port "$lport"; then
         echo "WARN: job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path" >&2
     fi
 
-    # --- TLS identity verification (T-430) ---
+    # Step 5: TLS identity verification (T-430)
     if ! tunnel_tls_verify_or_skip "$full_hostname" "$lport" "$allow_unverified_tls"; then
         echo "ROLLED BACK: TLS identity verification failed — certificate does not match '$full_hostname'" >&2
         tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
         rm -f "$plist"
         tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || true
         tunnel_registry_remove "$peer" >/dev/null 2>&1
+        _tun_journal_clear
         tunnel_lock_release; return 1
     fi
+
+    # Transaction complete — clear journal
+    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist","bootstrap","tls"]' || true
+    _tun_journal_clear
 
     tunnel_lock_release
     echo ""
@@ -1192,6 +1458,19 @@ tunnel_do_remove() {
     peer="$(tunnel_normalize_lower "$peer")"
     tunnel_lock_acquire || return 1
 
+    # Check for incomplete journal from a previous crash
+    if _tun_journal_has_incomplete; then
+        local jpeer jop
+        jpeer="$(_tun_journal_peer)"
+        jop="$(_tun_journal_op)"
+        if [ "$jpeer" = "$peer" ] && [ "$jop" = "remove" ]; then
+            echo "NOTE: recovering incomplete remove for '$peer' from previous run" >&2
+        else
+            echo "ERROR: incomplete journal for '$jpeer' ($jop) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+            tunnel_lock_release; return 1
+        fi
+    fi
+
     local entry
     entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
         echo "ERROR: tunnel for '$peer' not found" >&2
@@ -1206,15 +1485,39 @@ tunnel_do_remove() {
         "$TUNNEL_SUDO_CMD" -v >/dev/null 2>&1 || true
     fi
 
+    local remove_steps='["bootout","plist","hosts","registry"]'
+
+    # Step 1: bootout
+    _tun_journal_write remove "$peer" "$remove_steps" '[]' || true
     if tunnel_job_is_loaded "$label"; then
         tunnel_job_bootout "$label" || true
     fi
+    _tun_journal_write remove "$peer" "$remove_steps" '["bootout"]' || true
+
+    # Step 2: plist
     [ -f "$plist" ] && rm -f "$plist"
-    if ! tunnel_hosts_apply remove "$hostname"; then
-        echo "ERROR: could not remove hosts entry — manual revert: remove '$hostname' inside $TUNNEL_HOSTS_FILE markers (sudo)" >&2
+    _tun_journal_write remove "$peer" "$remove_steps" '["bootout","plist"]' || true
+
+    # Step 3: hosts (under machine-wide lock)
+    tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" || {
+        echo "WARN: hosts lock busy — skipping hosts removal; remove '$hostname' manually from $TUNNEL_HOSTS_FILE (sudo)" >&2
         failed="hosts"
+    }
+    if [ -z "$failed" ]; then
+        if ! tunnel_hosts_apply remove "$hostname"; then
+            echo "ERROR: could not remove hosts entry — manual revert: remove '$hostname' inside $TUNNEL_HOSTS_FILE markers (sudo)" >&2
+            failed="hosts"
+        fi
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
     fi
+    _tun_journal_write remove "$peer" "$remove_steps" '["bootout","plist","hosts"]' || true
+
+    # Step 4: registry + log cleanup
     tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
+    local log_file="$TUNNEL_LOG_DIR/tunnel-$peer.log"
+    [ -f "$log_file" ] && rm -f "$log_file"
+
+    _tun_journal_clear
     tunnel_lock_release
     if [ -n "$failed" ]; then
         return 1
@@ -1324,6 +1627,26 @@ tunnel_do_status() {
         esac
     done
 
+    # Crash recovery: detect incomplete journal
+    if _tun_journal_has_incomplete; then
+        local jpeer jop journal_txt
+        jpeer="$(_tun_journal_peer)"
+        jop="$(_tun_journal_op)"
+        journal_txt="$(_tun_journal_read)"
+        if [ "$json_mode" = "yes" ]; then
+            local raw_escaped
+            raw_escaped="$(printf '%s' "$journal_txt" | "$PYTHON3_CMD" -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))')"
+            printf '{"journal":{"peer":"%s","op":"%s","incomplete":true,"raw":%s}}\n' \
+                "$jpeer" "$jop" "$raw_escaped"
+        else
+            echo "INCOMPLETE JOURNAL: $jop for '$jpeer' — a previous operation did not finish."
+            echo "  Journal: $TUNNEL_JOURNAL_PATH"
+            echo "  To recover: re-run the same command, or inspect the journal."
+            echo "  To discard: rm $TUNNEL_JOURNAL_PATH"
+        fi
+        return 1
+    fi
+
     local rows
     rows="$(tunnel_status_rows "$skip_remote")" || {
         echo '{"error":"registry corrupt or unreadable"}'
@@ -1338,7 +1661,7 @@ tunnel_do_status() {
     fi
     if ! printf '%s\n' "$rows" | grep -q '^.'; then
         if [ "$json_mode" = "yes" ]; then
-            echo '{"version":1,"tunnels":[]}'
+            echo '{"version":2,"tunnels":[]}'
         else
             echo "No tunnels configured."
             echo "Add one: tailroute tunnel add <peer>"
@@ -1358,7 +1681,7 @@ for line in sys.stdin:
     out.append({"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
                 "job": job, "port": port_state, "hosts": hosts_state,
                 "healthy": healthy, "notes": notes})
-print(json.dumps({"version": 1, "tunnels": out}))
+print(json.dumps({"version": 2, "tunnels": out}))
 '
     else
         local worst=0 p hostname lport job port_state hosts_state rport notes
@@ -1394,6 +1717,8 @@ tunnel_do_list() {
 
 # Remove every tunnel (used by `tailroute uninstall`); runs per-user
 tunnel_remove_all() {
+    # Clear any stale journal before bulk remove
+    _tun_journal_clear
     local entry p failed=0
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
@@ -1403,5 +1728,7 @@ tunnel_remove_all() {
 $(tunnel_registry_entries 2>/dev/null || true)
 EOF
     rm -f "$TUNNEL_REGISTRY" "$TUNNEL_REGISTRY.bak" 2>/dev/null || true
+    [ -d "$TUNNEL_LOG_DIR" ] && rm -f "$TUNNEL_LOG_DIR"/tunnel-*.log 2>/dev/null || true
+    _tun_journal_clear
     return "$failed"
 }
