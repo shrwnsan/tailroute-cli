@@ -685,7 +685,9 @@ test_status_not_found_and_empty() {
     local out
     out="$(tunnel_do_status)"
     assert_contains "No tunnels configured" "$out"
-    assert_contains '"tunnels":[]' "$(tunnel_do_status --json)"
+    # T-435: empty JSON also carries adaptivePath and orphans
+    assert_contains '"tunnels": []' "$(tunnel_do_status --json)"
+    assert_contains '"adaptivePath"' "$(tunnel_do_status --json)"
 }
 
 test_remove_cleans_all_state() {
