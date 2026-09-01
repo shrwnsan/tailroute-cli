@@ -88,6 +88,11 @@ case "$*" in
         [ -n "${FAKE_SERVE_STATUS:-}" ] && { printf '%s\n' "$FAKE_SERVE_STATUS"; exit 0; }
         exit 1 ;;
 esac
+# v0.7.4: pre-flight hint testing - emit canned stderr and refuse
+case "$*" in
+    *" true")
+        [ -n "${FAKE_SSH_STDERR:-}" ] && { printf '%s\n' "$FAKE_SSH_STDERR" >&2; exit 255; } ;;
+esac
 exit 0
 MOCK
     cat > "$TUNNEL_SANDBOX/bin/tailscale" <<'MOCK'
@@ -651,7 +656,7 @@ test_add_adopts_prototype_job() {
 test_add_with_explicit_ssh_alias() {
     _tunnel_setup_sandbox
     # peer HostName is "prime" but the ssh entry uses an unrelated alias
-    printf 'Host proxy-shorty\n    HostName 100.97.245.83\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %h %p\n' >> "$TUNNEL_SSH_CONFIG"
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" >> "$TUNNEL_SSH_CONFIG"
     local out
     out="$(tunnel_do_add prime --ssh-alias shorty --yes)" || { echo "add with alias failed: $out"; return 1; }
     assert_contains '"sshAlias": "shorty"' "$(tunnel_registry_get prime)"
@@ -1088,6 +1093,86 @@ test_t436_update_blocked_by_incomplete_journal() {
     assert_eq 1 "$rc" "update should refuse while an update journal is incomplete"
     assert_contains "incomplete journal" "$out"
     assert_contains '"forwards": [{"localPort": 8443, "remotePort": 443}]' "$(tunnel_registry_get "$FX_PEER")"
+}
+
+# =============================================================================
+# Production-asymmetry hardening (v0.7.4)
+# =============================================================================
+
+test_hosts_edits_use_writable_mktemp() {
+    _tunnel_setup_sandbox
+    export MKTEMP_LOG="$TUNNEL_SANDBOX/mktemp.log"; : > "$MKTEMP_LOG"
+    MKTEMP_CMD="$TUNNEL_SANDBOX/bin/mktemp-logger"
+    cat > "$MKTEMP_CMD" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "$@" >> "$MKTEMP_LOG"
+exec /usr/bin/mktemp "$@"
+MOCK
+    chmod +x "$MKTEMP_CMD"; export MKTEMP_CMD
+    # unmanaged line (pre-marker era): adopt must migrate it into the block
+    printf '127.0.0.1\t%s\n' "$FX_HOSTNAME" >> "$TUNNEL_HOSTS_FILE"
+    tunnel_hosts_adopt_mapping "$FX_HOSTNAME"
+    local n; n="$(grep -c "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE")"
+    assert_eq 1 "$n" "adopt should leave exactly one managed line"
+    tunnel_hosts_apply add "$FX_HOSTNAME"
+    n="$(grep -c "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE")"
+    assert_eq 1 "$n" "apply must stay idempotent"
+    if grep -q "tailroute.XXXXXX" "$MKTEMP_LOG"; then
+        _assert_fail "mktemp was handed a hosts-dir template - temp must live in user-writable TMPDIR"
+    fi
+}
+
+test_hosts_lock_acquires_via_sudo_fallback() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_SANDBOX/locked-parent"
+    chmod 555 "$TUNNEL_SANDBOX/locked-parent"          # production: /var/db/tailroute is root-owned
+    TUNNEL_HOSTS_LOCK_DIR="$TUNNEL_SANDBOX/locked-parent/hosts.lock"
+    export TUNNEL_HOSTS_LOCK_TRIES=2                   # fast busy path; no contention elsewhere
+    export TUNNEL_SUDO_LOG="$TUNNEL_SANDBOX/sudo.log"; : > "$TUNNEL_SUDO_LOG"; export TUNNEL_SUDO_LOG
+    # Passthrough sudo: same-uid, so it cannot truly elevate — assert the
+    # INVOCATIONS (shape + count), not elevation outcomes.
+    cat > "$TUNNEL_SANDBOX/bin/sudo" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "$*" >> "$TUNNEL_SUDO_LOG"
+if [ "$1" = "/bin/sh" ] && [ "$2" = "-c" ]; then
+    exec /bin/sh -c "$3"        # tunnel_privileged_run shape
+fi
+exec "$@"                       # direct calls (release/stale-removal: rm -rf)
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/sudo"
+    export TUNNEL_SUDO_CMD="$TUNNEL_SANDBOX/bin/sudo"
+    local rc=0
+    tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" 2>/dev/null || rc=$?
+    assert_eq 1 "$rc" "unwritable parent without working elevation must degrade gracefully (busy)"
+    if [ -e "$TUNNEL_HOSTS_LOCK_DIR" ]; then
+        _assert_fail "busy acquire must not leave a lock dir behind"
+    fi
+    local n
+    n="$(grep -c "mkdir -p" "$TUNNEL_SUDO_LOG" || true)"
+    assert_eq 1 "$n" "sudo fallback must be attempted exactly once per acquire call"
+    grep -q "chown" "$TUNNEL_SUDO_LOG" || { _assert_fail "fallback must hand the lock dir to the user"; }
+    # Simulate the fallback having succeeded: parent now writable.
+    chmod 755 "$TUNNEL_SANDBOX/locked-parent"
+    assert_ok tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR"
+    [ -f "$TUNNEL_HOSTS_LOCK_DIR/pid" ] || { _assert_fail "pid file missing after acquire"; }
+    n="$(grep -c "mkdir -p" "$TUNNEL_SUDO_LOG" || true)"
+    assert_eq 1 "$n" "writable parent must take the plain mkdir path (no sudo)"
+    assert_ok tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+    [ ! -d "$TUNNEL_HOSTS_LOCK_DIR" ] || { _assert_fail "lock dir not released"; }
+}
+
+test_preflight_surfaces_policy_denial_and_full_rerun() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" >> "$TUNNEL_SSH_CONFIG"
+    lookup="$(tunnel_lookup_peer "$FX_PEER")"
+    FAKE_SSH_STDERR="tailscale: tailnet policy does not permit you to SSH to this node"
+    export FAKE_SSH_STDERR
+    local out rc=0
+    out="$(tunnel_preflight "$FX_PEER" "$lookup" shorty 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "preflight should fail on policy denial"
+    assert_contains "ssh said: $FAKE_SSH_STDERR" "$out"
+    assert_contains "Tailscale SSH enabled" "$out"
+    assert_contains "tailroute tunnel add $FX_PEER --ssh-alias shorty" "$out"
 }
 
 # =============================================================================

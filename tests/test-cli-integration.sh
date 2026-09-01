@@ -270,3 +270,13 @@ test_cli_survives_missing_home_env() {
     assert_eq 0 "$rc" "invocation with HOME unset should not crash"
     assert_match 'tailroute 0\.' "$out"
 }
+
+test_help_documents_open_and_allow_unverified_tls() {
+    local top tunnel
+    top="$("$BIN_DIR/tailroute.sh" --help 2>/dev/null)"
+    assert_contains "open <peer>   Open a tunnel's URL" "$top"
+    tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
+    assert_contains "--allow-unverified-tls" "$tunnel"
+    assert_contains "open <peer>" "$tunnel"
+    assert_contains "adaptive path" "$tunnel"
+}
