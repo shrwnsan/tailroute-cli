@@ -1080,6 +1080,19 @@ EOF
         return 1
     fi
 
+    # v0.7.5: launchd jobs run without SSH_AUTH_SOCK. Auth that only works
+    # through the agent (passphrase-protected key, no keychain entry) passes
+    # here but kills the tunnel job later - warn with the fix up front.
+    if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+        if ! env -u SSH_AUTH_SOCK "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
+            echo "WARN: auth for proxy-$ssh_alias depends on the ssh-agent (SSH_AUTH_SOCK)," >&2
+            echo "      but the launchd tunnel job runs without it and will fail to connect." >&2
+            echo "      Fix: run 'ssh-add --apple-use-keychain' and add 'UseKeychain yes'" >&2
+            echo "           to the Host proxy-$ssh_alias block in ~/.ssh/config," >&2
+            echo "      or use a passphrase-less key." >&2
+        fi
+    fi
+
     if ! tunnel_port_in_use 1055; then
         echo "WARN: SOCKS5 proxy not running — tunnel will use the direct branch (fine when VPN is off or router-side)" >&2
     fi
@@ -1105,14 +1118,24 @@ tunnel_check_remote_backend() {
 _tun_tls_verify() { # <hostname> <port>
     local hostname="$1" port="$2"
     local cert_out
+    # v0.7.5: LibreSSL's s_client (macOS /usr/bin/openssl) exits non-zero after
+    # a SUCCESSFUL verified handshake — it reports the server's post-handshake
+    # close as failure — so gate on the verification output, not the exit
+    # status. Found by the first real brew-install tunnel add.
     cert_out="$("$OPENSSL_CMD" s_client -connect "127.0.0.1:$port" \
         -servername "$hostname" \
         -showcerts \
         -verify_return_error \
-        2>/dev/null </dev/null)" || {
+        2>/dev/null </dev/null)" || true
+
+    if ! printf '%s' "$cert_out" | grep -q '^-----BEGIN CERTIFICATE-----$'; then
         echo "WARN: TLS handshake failed on 127.0.0.1:$port for $hostname" >&2
         return 1
-    }
+    fi
+    if ! printf '%s' "$cert_out" | grep -q 'Verify return code: 0 (ok)'; then
+        echo "WARN: TLS verification failed on 127.0.0.1:$port for $hostname (untrusted or expired certificate)" >&2
+        return 1
+    fi
 
     # Extract the CN and SAN from the certificate
     local subject san
