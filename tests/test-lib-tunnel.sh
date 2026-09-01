@@ -1027,6 +1027,23 @@ test_t436_update_rejects_invalid_port_in_comma_list() {
     assert_eq 1 "$fwd" "registry must be untouched when the list is invalid"
 }
 
+test_t436_update_adopts_stored_ssh_alias_without_flag() {
+    _tunnel_setup_sandbox
+    # tunnel registered with --ssh-alias shorty; config has proxy-shorty but
+    # NO proxy-prime - an incremental add without --ssh-alias must adopt the
+    # stored alias instead of demanding a new 'proxy-<peer>' entry
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || { echo "incremental add without alias flag failed: $out"; return 1; }
+    if printf '%s' "$out" | grep -q "PREFLIGHT_NEED_SSH_CONFIG"; then
+        _assert_fail "stored ssh alias was not adopted: $out"
+    fi
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:443 8444:8080" "$fwd"
+}
+
 test_t436_update_rejects_duplicate_remote_port() {
     _tunnel_setup_sandbox
     tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1

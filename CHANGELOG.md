@@ -2,6 +2,11 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.7] - 2026-09-02
+
+### Fixed
+- **Incremental adds no longer demand a new ssh config entry** — `tunnel add <peer> --remote-port …` on an already-registered tunnel ran the ssh preflight with a default `proxy-<peer>` alias and prompted to generate a config entry, even though the tunnel's registry entry stores the alias it was created with (`--ssh-alias`). The stored alias is now adopted when no `--ssh-alias` is given; an explicit flag still wins. First-time adds are unchanged.
+
 ## [0.7.6] - 2026-09-02
 
 ### Features
