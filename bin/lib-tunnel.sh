@@ -1422,6 +1422,16 @@ tunnel_do_add() {
     tunnel_registry_check_env || return 1
     tunnel_lock_acquire || return 1
 
+    # v0.7.7: a registered peer's ssh alias is already stored in its registry
+    # entry — an incremental add without --ssh-alias must adopt it instead of
+    # demanding a new 'proxy-<peer>' config entry. An explicit --ssh-alias
+    # still wins.
+    if [ -z "$ssh_alias" ] && tunnel_registry_get "$peer" >/dev/null 2>&1; then
+        local stored_alias
+        stored_alias="$(tunnel_registry_get "$peer" 2>/dev/null | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("sshAlias", ""))' 2>/dev/null || true)"
+        [ -n "$stored_alias" ] && ssh_alias="$stored_alias"
+    fi
+
     local lookup rc=0
     lookup="$(tunnel_lookup_peer "$peer")" || { tunnel_lock_release; return 1; }
     tunnel_preflight "$peer" "$lookup" "$ssh_alias" || rc=$?
