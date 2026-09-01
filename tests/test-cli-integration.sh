@@ -241,3 +241,23 @@ test_all_system_commands_have_absolute_paths() {
     assert_ok grep -q 'STAT_CMD="/' "$dns_lib" "STAT_CMD not absolute path"
     assert_ok grep -q 'SUDO_CMD="/' "$dns_lib" "SUDO_CMD not absolute path"
 }
+
+# =============================================================================
+# Homebrew layout (formula installs script to bin/, libraries to ../lib)
+# =============================================================================
+
+test_cli_brew_layout_resolves_libraries() {
+    # Mock a Homebrew-style prefix whose lib dir passes the location check
+    local fake_prefix="$TEST_TMPDIR/mock/tailroute"
+    rm -rf "$fake_prefix"
+    mkdir -p "$fake_prefix/bin" "$fake_prefix/lib"
+    cp "$BIN_DIR/tailroute.sh" "$fake_prefix/bin/tailroute"
+    cp "$BIN_DIR"/lib-*.sh "$fake_prefix/lib/"
+    local out rc=0
+    out="$(bash "$fake_prefix/bin/tailroute" --version 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "brew-layout invocation should succeed"
+    assert_match '^tailroute 0\.' "$out"
+    if printf '%s' "$out" | grep -q "WARNING"; then
+        _assert_fail "brew layout should not emit location warnings: $out"
+    fi
+}
