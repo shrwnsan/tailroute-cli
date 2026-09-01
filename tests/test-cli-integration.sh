@@ -261,3 +261,12 @@ test_cli_brew_layout_resolves_libraries() {
         _assert_fail "brew layout should not emit location warnings: $out"
     fi
 }
+
+test_cli_survives_missing_home_env() {
+    # launchd system services run without HOME; the entry point must not die
+    # on unbound-variable expansion inside library defaults (root daemon).
+    local out rc=0
+    out="$(env -u HOME "$BIN_DIR/tailroute.sh" --version 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "invocation with HOME unset should not crash"
+    assert_match 'tailroute 0\.' "$out"
+}

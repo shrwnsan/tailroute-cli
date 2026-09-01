@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.3] - 2026-09-01
+
+Hotfix: the daemon crashed at startup when run as a root launchd service.
+
+### Fixes
+- **Missing HOME under launchd** — system services run without `$HOME`, and the library path defaults expanded it under `set -u`, killing `tailroute daemon` instantly (services showed `error`, exit 78). The entry point now defaults `HOME` to `/var/root` when unset. Found by the first real `brew services start`.
+- New integration test invoking the CLI with `HOME` unset.
+
 ## [0.7.2] - 2026-09-01
 
 Completes the 0.7.1 hotfix: the library-location whitelist fix and its regression test were omitted from the 0.7.1 tag.
