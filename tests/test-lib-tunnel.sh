@@ -993,6 +993,40 @@ test_t436_update_remote_port_appends_forward() {
     assert_contains "8444:8080" "$fwd"
 }
 
+test_t436_update_accepts_comma_separated_remote_ports() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8000,8765,10254,10255 --yes 2>&1)" || { echo "comma-list incremental add failed: $out"; return 1; }
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    # all four land in ONE transactional update, in order
+    assert_eq "8443:443 8444:8000 8445:8765 8446:10254 8447:10255" "$fwd"
+}
+
+test_t436_update_mixed_comma_and_repeated_remote_ports() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8000 --remote-port 8765,10254 --yes 2>&1)" || { echo "mixed-form incremental add failed: $out"; return 1; }
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:443 8444:8000 8445:8765 8446:10254" "$fwd"
+}
+
+test_t436_update_rejects_invalid_port_in_comma_list() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out rc=0
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8000,abc --yes 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "invalid token in comma list must be rejected before any state changes"
+    assert_contains "invalid remote port" "$out"
+    # pre-transaction validation: registry untouched
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$fwd" "registry must be untouched when the list is invalid"
+}
+
 test_t436_update_rejects_duplicate_remote_port() {
     _tunnel_setup_sandbox
     tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
