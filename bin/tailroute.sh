@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.7.2
+# tailroute v0.7.3
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -15,8 +15,13 @@
 
 set -euo pipefail
 
+# launchd system services (brew services start with root) run without HOME;
+# default it to root's home so library path defaults can expand it safely.
+: "${HOME:=/var/root}"
+export HOME
+
 # Version
-readonly VERSION="0.7.2"
+readonly VERSION="0.7.3"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
