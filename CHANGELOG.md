@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.2] - 2026-09-01
+
+Completes the 0.7.1 hotfix: the library-location whitelist fix and its regression test were omitted from the 0.7.1 tag.
+
+### Fixes
+- **Location warning under Homebrew** — the sanity check in `lib-dns.sh` only accepted `bin/` directories; Homebrew installs load libraries from `lib/` and warned on every invocation. (The layout-resolution fix itself shipped in 0.7.1.)
+- The Homebrew-layout integration test claimed in the 0.7.1 notes is actually in this release.
+
 ## [0.7.1] - 2026-09-01
 
 Hotfix: the Homebrew formula was broken on first run.

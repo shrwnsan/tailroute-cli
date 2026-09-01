@@ -10,7 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Validate SCRIPT_DIR is in expected location (security hardening)
-if [[ ! "$SCRIPT_DIR" =~ ^(/usr/local/bin|/opt/.*/bin|.*tailroute/bin)$ ]]; then
+# Libs live in a bin/ dir (source checkout) or a lib/ dir (Homebrew)
+if [[ ! "$SCRIPT_DIR" =~ ^(/usr/local/(bin|lib)|/opt/.*/(bin|lib)|.*tailroute/(bin|lib))$ ]]; then
     echo "WARNING: Script loaded from unexpected location: $SCRIPT_DIR" >&2
 fi
 
