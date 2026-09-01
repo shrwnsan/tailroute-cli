@@ -2,6 +2,21 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.4] - 2026-09-02
+
+Hotfix batch for the production-asymmetry bugs found by the first real tunnel adds: code paths that only run as a non-root user against root-owned system paths — invisible to the test sandbox until now.
+
+### Fixes
+- **`/etc/hosts` temp files now land in a writable directory** — `hosts apply`/`adopt` asked `mktemp` to create their temp file *inside the hosts directory*, which only root can write; every non-root `tunnel add` failed before touching a single byte. The temp file is now created in the caller's `TMPDIR` and the privileged step installs it.
+- **Hosts lock creation falls back to cached sudo** — the machine-wide lock lives under root-owned `/var/db/tailroute`, so a user-run CLI could never create it and reported the lock as busy forever. `acquire` now uses the cached sudo credential once per call to create the directory, hand it to the invoking user, and set it group/other-readable (0755, so stale-lock detection stays possible).
+- **The sudo fallback actually fires** — the once-per-call guard referenced an uninitialised variable; under the CLI's `set -u` the first attempt at a root-owned lock parent aborted instead of falling back. Found by its own new regression test.
+- **SSH preflight failures now say why** — the preflight check swallowed ssh's stderr; a `tunnel add` stopped on "ssh proxy-A failed" with no clue. It now surfaces what ssh said, with targeted hints (tailnet SSH policy denial, key auth failure, untrusted host key) and the exact re-run command including `--ssh-alias`.
+- **`sudo -v` runs before prototype adoption** — the credential cache is now warmed before the hosts work that needs it, so a mid-transaction expiry can't strand a rollback.
+
+### Added
+- Top-level help documents `tunnel open`; `tunnel add` help documents serve-port autodetect, incremental `--remote-port`, and `--allow-unverified-tls`; `tunnel status` help matches what it actually reports.
+- Tests: hosts edits via writable mktemp, lock acquisition via the sudo fallback, preflight policy-denial hints, help surface coverage.
+
 ## [0.7.3] - 2026-09-01
 
 Hotfix: the daemon crashed at startup when run as a root launchd service.
