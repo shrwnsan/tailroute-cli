@@ -816,8 +816,10 @@ tunnel_port_in_use() {
     "$NC_CMD" -z 127.0.0.1 "$1" >/dev/null 2>&1
 }
 
-# First free port in [start,end] not already used by a registered tunnel
-tunnel_pick_port() {
+# First free port in [start,end] not already used by a registered tunnel.
+# Ports to also treat as used (e.g. allocated earlier in the same
+# transaction, before the registry reflects them) may be passed as args.
+tunnel_pick_port() { # [excluded-port...]
     local port used
     used="$(tunnel_registry_all 2>/dev/null | "$PYTHON3_CMD" -c '
 import json, sys
@@ -826,7 +828,7 @@ try:
 except Exception:
     sys.exit(0)
 print(" ".join(str(f["localPort"]) for t in data["tunnels"] for f in t.get("forwards", [])))
-' 2>/dev/null || true)"
+' 2>/dev/null || true) $*"
     for port in $(seq "$TUNNEL_PORT_START" "$TUNNEL_PORT_END"); do
         case " $used " in
             *" $port "*) continue ;;
@@ -1264,8 +1266,8 @@ print(" ".join(ports))
 # T-436: append one or more forwards to an existing peer's job, replacing the
 # launchd job transactionally (restore the previous healthy job on failure).
 # Per-user lock must already be held. Local ports come from tunnel_pick_port,
-# which skips every registered local port, so (peer, localPort, remotePort)
-# identities stay unique.
+# which skips every registered local port and every port allocated earlier in
+# this call, so (peer, localPort, remotePort) identities stay unique.
 tunnel_update_add_forward() { # <peer> <remote-port>...
     local peer="$1"; shift
     local entry new_fwd lport rport
@@ -1292,7 +1294,8 @@ sys.exit(1 if any(f["remotePort"] == int(sys.argv[1]) for f in e["forwards"]) el
             echo "ERROR: remote port $rport is already forwarded for '$peer'" >&2
             return 1
         fi
-        lport="$(tunnel_pick_port)" || return 1
+        # shellcheck disable=SC2086  # $added_lports intentionally word-splits
+        lport="$(tunnel_pick_port $added_lports)" || return 1
         new_fwd="$(printf '%s' "$new_fwd" | "$PYTHON3_CMD" -c '
 import json, sys
 e = json.load(sys.stdin)
@@ -1389,7 +1392,10 @@ tunnel_do_add() {
                 port="$2"; shift 2 ;;
             --remote-port)
                 [ -n "${2:-}" ] || { echo "ERROR: --remote-port requires a value" >&2; return 2; }
-                raw_remote="$raw_remote $2"; shift 2 ;;
+                # Commas are list separators: --remote-port 8000,8765,10254 is
+                # shorthand for repeating the flag; all forwards still land in
+                # ONE incremental transaction (single job restart).
+                raw_remote="$raw_remote ${2//,/ }"; shift 2 ;;
             --adopt) adopt="yes"; shift ;;
             --allow-unverified-tls) allow_unverified_tls="yes"; shift ;;
             --yes|-y) assume_yes="yes"; shift ;;

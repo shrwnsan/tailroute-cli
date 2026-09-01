@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.6] - 2026-09-02
+
+### Features
+- **Comma-separated `--remote-port` lists** — `tunnel add <peer> --remote-port 8000,8765,10254,10255` replaces four invocations with one. Mixing forms works (`--remote-port 8000 --remote-port 8765,10254`); all new forwards still land in ONE incremental transaction: one journal, one job regeneration, one restart, all-or-nothing rollback.
+
+### Fixed
+- **Local-port collision when appending multiple forwards at once** — the first multi-forward incremental update handed every new forward the same local port: `tunnel_pick_port` consulted only the registry, which doesn't yet reflect ports allocated earlier in the same transaction. Allocation now excludes ports picked earlier in the call. Latent since the incremental-forward work (existing tests only ever appended one forward at a time); found by the new comma-list test.
+
 ## [0.7.5] - 2026-09-02
 
 Hotfix: two launchd-vs-shell asymmetry bugs found by the first real tunnel add on a Homebrew install — both passed every sandboxed test and failed only in production.
