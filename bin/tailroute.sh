@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.7.5
+# tailroute v0.7.6
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -21,7 +21,7 @@ set -euo pipefail
 export HOME
 
 # Version
-readonly VERSION="0.7.5"
+readonly VERSION="0.7.6"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -1261,14 +1261,15 @@ do_tunnel() {
 Usage: tailroute tunnel <command> [args]
 
 Commands:
-  add <peer> [--port N] [--remote-port N]... [--adopt] [--ssh-alias A]
-            [--allow-unverified-tls] [--yes]
+  add <peer> [--port N] [--remote-port N[,N...]]... [--adopt]
+            [--ssh-alias A] [--allow-unverified-tls] [--yes]
         Register a browser tunnel for a peer: launchd SSH forward +
         managed /etc/hosts override (sudo needed for hosts only).
         Without --remote-port, add probes the peer's serve config and
         forwards to its real ports (fallback 443).
-        --remote-port on a registered peer appends a forward to the
-        running job transactionally.
+        --remote-port accepts comma lists and may be repeated; on a
+        registered peer all new forwards land in ONE transactional
+        update (single job restart).
         --adopt takes over an existing prototype job for the peer.
         --ssh-alias A uses the existing 'proxy-A' ssh entry when the
         alias differs from the peer's Tailscale hostname.
