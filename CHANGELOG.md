@@ -2,6 +2,15 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.1] - 2026-09-01
+
+Hotfix: the Homebrew formula was broken on first run.
+
+### Fixes
+- **Homebrew layout** — the entry script looked for its libraries beside itself, but the formula installs them to `../lib`; it now resolves both layouts (source checkout and Homebrew) and exits with a clear error if neither is found. First reported by the first-ever `brew install` of 0.7.0.
+- **Location warning under Homebrew** — the library-path sanity check only accepted `bin/` directories, so Homebrew installs (`lib/`) emitted a warning on every invocation.
+- New integration test simulating the Homebrew prefix layout (script in `bin/`, libraries in `../lib`), asserting clean and warning-free invocation.
+
 ## [0.7.0] - 2026-09-01
 
 Hardening release for browser tunnels (PRD-004): valid TLS is mandatory at `add`, tunnels survive crashes mid-setup, and `status` reports the full truthful state. Plus incremental forwards, serve port autodetect, and `tunnel open`.

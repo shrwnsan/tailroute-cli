@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.7.0
+# tailroute v0.7.1
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -16,10 +16,19 @@
 set -euo pipefail
 
 # Version
-readonly VERSION="0.7.0"
+readonly VERSION="0.7.1"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Libraries sit beside this script (source checkout) or in ../lib (Homebrew)
+if [ -f "$SCRIPT_DIR/lib-log.sh" ]; then
+    LIB_DIR="$SCRIPT_DIR"
+elif [ -f "$SCRIPT_DIR/../lib/lib-log.sh" ]; then
+    LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+else
+    echo "ERROR: cannot locate tailroute libraries (tried $SCRIPT_DIR and $SCRIPT_DIR/../lib)" >&2
+    exit 1
+fi
 
 # Install-time integrity manifest (see SECURITY.md — Installed File Integrity)
 readonly INTEGRITY_MANIFEST="/var/db/tailroute/installed.checksums"
@@ -93,11 +102,11 @@ fi
 
 # Source all required libraries
 # shellcheck source=lib-log.sh
-source "$SCRIPT_DIR/lib-log.sh"
+source "$LIB_DIR/lib-log.sh"
 # shellcheck source=lib-event-loop.sh
-source "$SCRIPT_DIR/lib-event-loop.sh"
+source "$LIB_DIR/lib-event-loop.sh"
 # shellcheck source=lib-tunnel.sh
-source "$SCRIPT_DIR/lib-tunnel.sh"
+source "$LIB_DIR/lib-tunnel.sh"
 
 # =============================================================================
 # show_help — Print usage information
