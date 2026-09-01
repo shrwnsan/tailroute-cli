@@ -2,6 +2,17 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.5] - 2026-09-02
+
+Hotfix: two launchd-vs-shell asymmetry bugs found by the first real tunnel add on a Homebrew install — both passed every sandboxed test and failed only in production.
+
+### Fixes
+- **TLS verification no longer misreads LibreSSL success as failure** — `/usr/bin/openssl` (LibreSSL) exits non-zero after a *successful* verified handshake, reporting the server's post-handshake close as an error. The verifier treated that as "TLS handshake failed" and rolled back every real `tunnel add` on macOS. Verification now judges the output (certificate present, `Verify return code: 0 (ok)`) instead of the exit status, and distinguishes untrusted/expired certificates from failed handshakes. The tests' fabricated openssl fixtures (exit 0, no certificate text) never exercised the real binary; the mock now mirrors captured LibreSSL behavior.
+- **Preflight warns when tunnel auth can't survive launchd** — launchd jobs run without `SSH_AUTH_SOCK`, so a passphrase-protected key reachable only through the ssh-agent authenticates the interactive preflight but kills the tunnel job afterward. Preflight now re-tests auth without the agent socket and prints the fix (`ssh-add --apple-use-keychain` plus `UseKeychain yes` in the Host block) before any state is created.
+
+### Added
+- Tests: LibreSSL exit-status regression, untrusted-chain rejection, agent-dependent-auth warning.
+
 ## [0.7.4] - 2026-09-02
 
 Hotfix batch for the production-asymmetry bugs found by the first real tunnel adds: code paths that only run as a non-root user against root-owned system paths — invisible to the test sandbox until now.
