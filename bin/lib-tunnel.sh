@@ -313,20 +313,29 @@ _tun_journal_op() {
 # Overridable for tests: TUNNEL_HOSTS_LOCK_DIR
 
 TUNNEL_HOSTS_LOCK_DIR="${TUNNEL_HOSTS_LOCK_DIR:-/var/db/tailroute/hosts.lock}"
+# Contention retries before declaring the hosts lock busy (overridable for tests)
+TUNNEL_HOSTS_LOCK_TRIES="${TUNNEL_HOSTS_LOCK_TRIES:-10}"
 
 tunnel_hosts_lock_acquire() {
     local lock_dir="$1"
     local waited=0 lock_pid
+    local acquired fallback_tried=0
     while true; do
+        acquired=0
         if mkdir "$lock_dir" 2>/dev/null; then
-            printf '%s\n' "$$" > "$lock_dir/pid"
-            # In production, ensure root ownership
-            if [ -n "$TUNNEL_SUDO_CMD" ]; then
-                "$TUNNEL_SUDO_CMD" chown root:wheel "$lock_dir" 2>/dev/null || true
-                "$TUNNEL_SUDO_CMD" chmod 0700 "$lock_dir" 2>/dev/null || true
-            else
-                chmod 0700 "$lock_dir" 2>/dev/null || true
+            acquired=1
+        elif [ "$fallback_tried" -eq 0 ]; then
+            # v0.7.4: the lock may live under a root-owned parent (e.g. /var/db/tailroute);
+            # use the cached sudo (do_add runs `sudo -v` up front) to create it and hand it
+            # to the acquiring user - once per acquire call.
+            fallback_tried=1
+            if tunnel_privileged_run "mkdir -p '$lock_dir' && chown '$(id -un)' '$lock_dir' && chmod 0755 '$lock_dir'" 2>/dev/null; then
+                acquired=1
             fi
+        fi
+        if [ "$acquired" -eq 1 ]; then
+            printf '%s\n' "$$" > "$lock_dir/pid"
+            chmod 0755 "$lock_dir" 2>/dev/null || true
             return 0
         fi
         lock_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
@@ -340,7 +349,7 @@ tunnel_hosts_lock_acquire() {
             continue
         fi
         waited=$((waited + 1))
-        if [ "$waited" -ge 10 ]; then
+        if [ "$waited" -ge "$TUNNEL_HOSTS_LOCK_TRIES" ]; then
             echo "ERROR: another tailroute operation is modifying $TUNNEL_HOSTS_FILE ($lock_dir)" >&2
             return 1
         fi
@@ -647,7 +656,7 @@ tunnel_hosts_apply() {
     local hosts="$TUNNEL_HOSTS_FILE"
     local new_content tmp
     new_content="$(tunnel_hosts_transform "$hosts" "$action" "$hostname")" || return 1
-    tmp="$("$MKTEMP_CMD" "${hosts}.tailroute.XXXXXX")"
+    tmp="$("$MKTEMP_CMD")"
     printf '%s\n' "$new_content" > "$tmp"
 
     # shellcheck disable=SC2016  # script runs privileged; vars passed as $1/$2
@@ -699,7 +708,7 @@ tunnel_hosts_adopt_mapping() {
         return 0   # already inside the managed block
     fi
     local tmp
-    tmp="$("$MKTEMP_CMD" "${hosts}.tailroute.XXXXXX")"
+    tmp="$("$MKTEMP_CMD")"
     grep -Ev "^[[:space:]]*127\.0\.0\.1[[:space:]]+${hostname}([[:space:]]|\$)" "$hosts" > "$tmp" || true
     # shellcheck disable=SC2016
     if ! tunnel_privileged_run '
@@ -1048,10 +1057,26 @@ EOF
         echo "WARN: ssh config does not use the adaptive wrapper — run 'tailroute proxy-config ssh'" >&2
     fi
 
+    local pf_err
+    pf_err="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true 2>&1 >/dev/null)"
     if ! "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
         echo "ERROR: ssh proxy-$ssh_alias failed (auth or host-key not trusted)." >&2
+        [ -n "$pf_err" ] && echo "  ssh said: $pf_err" >&2
+        case "$pf_err" in
+            *"tailnet policy"*)
+                echo "  Hint: the peer has Tailscale SSH enabled; tailnet policy denies this node." >&2
+                echo "        Fix on the peer (sudo tailscale set --ssh=false) or grant an ssh rule in the tailnet ACL." >&2 ;;
+            *"Permission denied"*)
+                echo "  Hint: key authentication failed - is the key loaded (ssh-add) and authorized on the peer?" >&2 ;;
+            *"Host key verification"*)
+                echo "  Hint: host key not trusted yet - run: ssh proxy-$ssh_alias true" >&2 ;;
+        esac
         echo "  Establish trust first:  ssh proxy-$ssh_alias true" >&2
-        echo "  Then re-run:         tailroute tunnel add $ssh_alias" >&2
+        if [ -n "$ssh_alias" ] && [ "$ssh_alias" != "$peer" ]; then
+            echo "  Then re-run:         tailroute tunnel add $peer --ssh-alias $ssh_alias" >&2
+        else
+            echo "  Then re-run:         tailroute tunnel add $peer" >&2
+        fi
         return 1
     fi
 
@@ -1416,6 +1441,13 @@ tunnel_do_add() {
         tunnel_lock_release; return 1
     fi
 
+    # sudo up front so a mid-transaction expiry can't strand a rollback -
+    # and before any hosts work (v0.7.4: hosts-adopt precedes the transaction
+    # and needs cached sudo for its privileged steps).
+    if [ -n "$TUNNEL_SUDO_CMD" ]; then
+        "$TUNNEL_SUDO_CMD" -v || { echo "ERROR: sudo unavailable for /etc/hosts edit" >&2; tunnel_lock_release; return 1; }
+    fi
+
     # --- Prototype adoption (T-404.4) ---
     local label plist existing_forwards="" forced_forwards=""
     label="$(tunnel_label_for_peer "$peer")"
@@ -1505,11 +1537,6 @@ tunnel_do_add() {
     pair="${forwards%% *}"
     lport="${pair%%:*}"
     rport="${pair##*:}"
-
-    # sudo up front so a mid-transaction expiry can't strand a rollback
-    if [ -n "$TUNNEL_SUDO_CMD" ]; then
-        "$TUNNEL_SUDO_CMD" -v || { echo "ERROR: sudo unavailable for /etc/hosts edit" >&2; tunnel_lock_release; return 1; }
-    fi
 
     tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" || \
         echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2

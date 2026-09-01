@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.7.3
+# tailroute v0.7.4
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -21,7 +21,7 @@ set -euo pipefail
 export HOME
 
 # Version
-readonly VERSION="0.7.3"
+readonly VERSION="0.7.4"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -135,6 +135,7 @@ Usage:
                                   add <peer>    Register a tunnel (launchd + hosts)
                                   remove <peer> Tear down and clean up
                                   status        Health of all tunnels
+                                  open <peer>   Open a tunnel's URL in the browser
                                   list          Registered tunnels (JSON)
                                   restart       Restart tunnel jobs
   tailroute --version           Show version
@@ -1260,17 +1261,25 @@ do_tunnel() {
 Usage: tailroute tunnel <command> [args]
 
 Commands:
-  add <peer> [--port N] [--remote-port N]... [--adopt] [--ssh-alias A] [--yes]
+  add <peer> [--port N] [--remote-port N]... [--adopt] [--ssh-alias A]
+            [--allow-unverified-tls] [--yes]
         Register a browser tunnel for a peer: launchd SSH forward +
         managed /etc/hosts override (sudo needed for hosts only).
+        Without --remote-port, add probes the peer's serve config and
+        forwards to its real ports (fallback 443).
+        --remote-port on a registered peer appends a forward to the
+        running job transactionally.
         --adopt takes over an existing prototype job for the peer.
         --ssh-alias A uses the existing 'proxy-A' ssh entry when the
         alias differs from the peer's Tailscale hostname.
+        --allow-unverified-tls skips TLS identity verification
+        (recorded in the registry).
   remove <peer>
         Tear down the tunnel and clean up hosts, plist, and registry.
   status [<peer>] [--json] [--skip-remote-check]
-        Health: job, local port, hosts mapping, IP/suffix drift, backend.
-        Exit codes: 0 healthy, 1 degraded, 2 error, 3 not found.
+        Health: job, hosts, plist, per-forward listener/backend/TLS,
+        adaptive path (socks5/direct), and orphan state with repair
+        commands. Exit codes: 0 healthy, 1 degraded, 2 error, 3 not found.
   list
         Registered tunnels as JSON, one per line.
   restart [<peer>]
