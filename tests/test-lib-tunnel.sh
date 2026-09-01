@@ -91,7 +91,9 @@ esac
 # v0.7.4: pre-flight hint testing - emit canned stderr and refuse
 case "$*" in
     *" true")
-        [ -n "${FAKE_SSH_STDERR:-}" ] && { printf '%s\n' "$FAKE_SSH_STDERR" >&2; exit 255; } ;;
+        [ -n "${FAKE_SSH_STDERR:-}" ] && { printf '%s\n' "$FAKE_SSH_STDERR" >&2; exit 255; }
+        # v0.7.5: simulate a key that is only reachable through the agent
+        [ "${FAKE_SSH_NEEDS_AGENT:-0}" = "1" ] && [ -z "${SSH_AUTH_SOCK:-}" ] && exit 255 ;;
 esac
 exit 0
 MOCK
@@ -146,13 +148,19 @@ case "$1" in
             no-cert)
                 echo "depth=0 CN = $hostname" ;;
             wrong-host)
-                echo "subject= /CN=evil.example.com" ;;
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\nsubject= /CN=evil.example.com\n    Verify return code: 0 (ok)\n' ;;
             expired)
-                echo "subject= /O=Expired/CN=$hostname" ;;
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\nsubject= /O=Expired/CN=%s\n    Verify return code: 10 (certificate has expired)\n' "$hostname" ;;
+            unverified)
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\nsubject= /CN=%s\n    Verify return code: 19 (self-signed certificate in certificate chain)\n' "$hostname" ;;
+            libressl-ok)
+                # v0.7.5: real LibreSSL s_client exits 1 even on a verified session
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\nsubject=/CN=prime.tailnet.ts.net\n    Verify return code: 0 (ok)\n'
+                exit 1 ;;
             wildcard)
-                printf ' \nDNS:*.tailnet.ts.net\n' ;;
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\n \nDNS:*.tailnet.ts.net\n    Verify return code: 0 (ok)\n' ;;
             *)
-                echo "subject= /CN=$hostname" ;;
+                printf -- '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\nsubject= /CN=%s\n    Verify return code: 0 (ok)\n' "$hostname" ;;
         esac
         exit 0 ;;
     *) exit 0 ;;
@@ -768,6 +776,35 @@ test_tls_verify_no_skip() {
     _tunnel_setup_sandbox
     export FAKE_TLS_HOSTNAME="wrong-host"
     assert_fail tunnel_tls_verify_or_skip prime.tailnet.ts.net 8443 no
+}
+
+test_tls_verify_accepts_libressl_exit_one() {
+    _tunnel_setup_sandbox
+    # v0.7.5: LibreSSL s_client exits non-zero after a verified handshake;
+    # verification must judge the OUTPUT, not the exit status.
+    export FAKE_TLS_HOSTNAME="libressl-ok"
+    assert_ok _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_tls_verify_rejects_unverified_chain() {
+    _tunnel_setup_sandbox
+    # cert is presented but the chain does not verify - must be refused even
+    # though the hostname matches
+    export FAKE_TLS_HOSTNAME="unverified"
+    assert_fail _tun_tls_verify prime.tailnet.ts.net 8443
+}
+
+test_preflight_warns_when_auth_depends_on_agent() {
+    _tunnel_setup_sandbox
+    # mock key only authenticates when SSH_AUTH_SOCK is present (launchd
+    # jobs run without it) - preflight must warn, not fail
+    FAKE_SSH_NEEDS_AGENT=1; export FAKE_SSH_NEEDS_AGENT
+    SSH_AUTH_SOCK="/fake/agent.sock"; export SSH_AUTH_SOCK
+    local out rc=0
+    out="$(tunnel_preflight "$FX_PEER" "$(tunnel_lookup_peer "$FX_PEER")" "$FX_PEER" 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "agent-dependent auth must not fail preflight itself"
+    assert_contains "launchd tunnel job runs without it" "$out"
+    assert_contains "UseKeychain yes" "$out"
 }
 
 test_add_rollback_on_tls_failure() {
