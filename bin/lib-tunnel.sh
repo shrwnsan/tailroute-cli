@@ -1309,7 +1309,7 @@ tailroute_proxy_config_ssh_generate() {
 tunnel_detect_serve_ports() { # <alias>
     local out
     out="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$1" \
-        "tailscale serve status" 2>/dev/null </dev/null)" || return 0
+        "tailscale serve status --json" 2>/dev/null </dev/null)" || return 0
     [ -n "$out" ] || return 0
     printf '%s' "$out" | "$PYTHON3_CMD" -c '
 import json, re, sys
@@ -1318,6 +1318,13 @@ ports = []
 def add(p):
     if p and p not in ports:
         ports.append(p)
+def port_of(url):
+    # An implicit-443 listen URL carries no port at all, so a bare https URL
+    # IS the 443 listener — the default matters more than the explicit case.
+    m = re.search(r":(\d+)", url)
+    if m:
+        return m.group(1)
+    return "443" if url.lower().startswith("https://") else "80"
 try:
     d = json.loads(raw)
 except Exception:
@@ -1330,8 +1337,14 @@ if isinstance(d, dict):
     for k in d.get("TCP", {}).keys():
         add(str(k))
 else:
-    for m in re.finditer(r"https?://[^\s\"]+:(\d+)", raw):
-        add(m.group(1))
+    # Ancient builds print human status even when asked for --json: each
+    # listen URL sits at column 0 with its backend on an indented "|-" line
+    # under it. Only column-0 URLs are listens, so an indented backend is
+    # never a source of ports.
+    for line in raw.splitlines():
+        m = re.match(r"(https?://\S+)", line)
+        if m:
+            add(port_of(m.group(1)))
 print(" ".join(ports))
 '
 }

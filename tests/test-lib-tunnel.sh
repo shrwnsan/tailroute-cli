@@ -1697,6 +1697,86 @@ test_t413_add_autodetects_multiple_serve_ports() {
     assert_eq "8443:8443 8444:3000" "$fwd" "each serve listen port becomes a forward"
 }
 
+# -----------------------------------------------------------------------------
+# v0.8.5: autodetect must read the LISTEN port, never the backend. The serve
+# fixtures below are real captured peer output, not invented shapes.
+# -----------------------------------------------------------------------------
+
+test_t413_detect_requests_json_serve_status() {
+    _tunnel_setup_sandbox
+    export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
+    : > "$SSH_CALL_LOG"
+    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(tunnel_detect_serve_ports "$FX_PEER")"
+    assert_eq "443" "$out"
+    assert_contains "tailscale serve status --json" "$(cat "$SSH_CALL_LOG")" \
+        "autodetect must ask for machine-readable status: $(cat "$SSH_CALL_LOG")"
+}
+
+test_t413_detect_json_listen_port_not_backend_port() {
+    _tunnel_setup_sandbox
+    # Real production shape (oci-micro): the Web key carries the LISTEN port
+    # 443 while the handler's backend is 3001 — forwards must target 443.
+    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    export FAKE_SERVE_STATUS
+    assert_eq "443" "$(tunnel_detect_serve_ports "$FX_PEER")" \
+        "the backend port must not be detected as the serve port"
+}
+
+test_t413_detect_text_status_implicit_443_listen_beats_backend() {
+    _tunnel_setup_sandbox
+    # Verbatim `tailscale serve status` text from a production peer whose
+    # listen URL carries no port (implicit 443). The indented proxy line is
+    # the BACKEND (3001) and must never be read as the listen port.
+    FAKE_SERVE_STATUS='https://oci-micro.tailea9a52.ts.net (tailnet only)
+|-- / proxy http://127.0.0.1:3001'
+    export FAKE_SERVE_STATUS
+    assert_eq "443" "$(tunnel_detect_serve_ports "$FX_PEER")" \
+        "implicit-443 listen must win over the backend port"
+}
+
+test_t413_detect_text_status_multiple_listen_ports_in_order() {
+    _tunnel_setup_sandbox
+    # Verbatim shape from a production peer serving two ports; backends mirror
+    # the listen ports there, so order and dedupe are what this pins.
+    FAKE_SERVE_STATUS='https://oci-prime.tailea9a52.ts.net:10254 (tailnet only)
+|-- / proxy http://127.0.0.1:10254
+
+https://oci-prime.tailea9a52.ts.net:10255 (tailnet only)
+|-- / proxy http://127.0.0.1:10255'
+    export FAKE_SERVE_STATUS
+    assert_eq "10254 10255" "$(tunnel_detect_serve_ports "$FX_PEER")" \
+        "every listen port is detected, in status order"
+}
+
+test_t413_detect_empty_serve_reports_no_ports() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS_EMPTY=1
+    export FAKE_SERVE_STATUS_EMPTY
+    assert_eq "" "$(tunnel_detect_serve_ports "$FX_PEER")" \
+        "a reachable peer with no serve config is silent"
+
+    FAKE_SERVE_STATUS='No serve config.'
+    export FAKE_SERVE_STATUS
+    assert_eq "" "$(tunnel_detect_serve_ports "$FX_PEER")" \
+        "tailscale's own no-config wording is silent too"
+}
+
+test_t413_add_targets_listen_port_for_real_serve_config() {
+    _tunnel_setup_sandbox
+    # The reported incident: a peer whose serve config is the implicit-443
+    # form. `tunnel add` without --remote-port must target 443, where Serve
+    # listens — not the backend's 3001, which has no Serve listener.
+    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    export FAKE_SERVE_STATUS
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:443" "$fwd" "add must target the serve LISTEN port, not the backend"
+}
+
 # =============================================================================
 # Tunnel open (T-420)
 # =============================================================================
