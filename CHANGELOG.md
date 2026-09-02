@@ -2,6 +2,12 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.7] - 2026-09-03
+
+### Fixed
+- **`tunnel status` shows every tunnel, not just the first** — the per-forward backend probe's ssh call ran inside the rows loop and consumed its stdin, swallowing every registry entry after the first; multi-tunnel users saw exactly one peer in status while `list` and `peers` showed them all. The probe and the tailscale lookup now close stdin.
+- Tests: two-peer registry renders both peers. 311 → 312.
+
 ## [0.8.6] - 2026-09-03
 
 ### Changed
