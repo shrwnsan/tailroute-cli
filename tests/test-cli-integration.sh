@@ -308,21 +308,30 @@ test_journal_clear_refuses_add_through_cli() {
 
 # T-439: `tunnel drift` is a standalone, read-only advisor — it must be
 # dispatched, documented, and must accept no flags (no apply path exists).
+# T-439b: with no peer it covers every registered tunnel.
 test_help_documents_drift() {
     local top tunnel
     top="$("$BIN_DIR/tailroute.sh" --help 2>/dev/null)"
     assert_contains "drift <peer>" "$top"
+    assert_contains "no peer = all" "$top"
     tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
-    assert_contains "drift <peer>" "$tunnel"
+    assert_contains "drift [<peer>]" "$tunnel"
     assert_contains "read-only" "$tunnel"
-    assert_contains "Exit codes: 0 verdict" "$tunnel"
+    assert_contains "every registered tunnel" "$tunnel"
+    assert_contains "Exit codes: 0 every peer" "$tunnel"
 }
 
-test_tunnel_drift_dispatches_and_requires_peer() {
+test_tunnel_drift_dispatches_and_refuses_flags() {
     local out rc=0
-    out="$("$BIN_DIR/tailroute.sh" tunnel drift 2>&1)" || rc=$?
-    assert_eq 2 "$rc" "drift without a peer must be a usage error"
-    assert_contains "requires <peer>" "$out"
+    # no peer, no registry: a friendly no-op, not a usage error (and it must
+    # not fall back to the operator's real registry)
+    out="$(TUNNEL_REGISTRY="$TEST_TMPDIR/drift-all/none.json" "$BIN_DIR/tailroute.sh" tunnel drift 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "an empty registry is a clean exit"
+    assert_contains "No registered tunnels" "$out"
+    rc=0
+    out="$("$BIN_DIR/tailroute.sh" tunnel drift --apply 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "drift must refuse flags outright (no apply path)"
+    assert_contains "takes no flags" "$out"
     rc=0
     out="$("$BIN_DIR/tailroute.sh" tunnel drift prime --apply 2>&1)" || rc=$?
     assert_eq 2 "$rc" "drift must refuse flags outright (no apply path)"

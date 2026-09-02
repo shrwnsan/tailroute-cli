@@ -1478,6 +1478,41 @@ print(" ".join(ports))
 PY
 }
 
+# Read-only peer enumeration for the advisor's no-peer form. Same guards as
+# tunnel_drift_registry_state: no mkdir, no lock, no journal — a machine that
+# never created a registry has no peers, and finding that out must not create
+# anything. Prints one peer label per line, in registry order.
+# rc: 0 ok (possibly no peers) · 6 registry unreadable (corrupt or unsupported version)
+tunnel_drift_registry_peers() {
+    if [[ -L "$TUNNEL_REGISTRY" ]]; then
+        echo "ERROR: $TUNNEL_REGISTRY is a symlink — refusing to read" >&2
+        return 6
+    fi
+    if [ ! -f "$TUNNEL_REGISTRY" ]; then
+        return 0
+    fi
+    TUNNEL_DRIFT_REGISTRY="$TUNNEL_REGISTRY" TUNNEL_DRIFT_VERSION="$TUNNEL_REGISTRY_VERSION" \
+    "$PYTHON3_CMD" <<'PY'
+import json, os, sys
+
+try:
+    # Opened by path, not stdin: the heredoc below owns this process's stdin.
+    with open(os.environ["TUNNEL_DRIFT_REGISTRY"], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    sys.stderr.write("ERROR: cannot read the tunnel registry\n")
+    sys.exit(6)
+if (not isinstance(data, dict)
+        or data.get("version") != int(os.environ["TUNNEL_DRIFT_VERSION"])
+        or not isinstance(data.get("tunnels"), list)):
+    sys.stderr.write("ERROR: tunnel registry version unsupported or corrupt\n")
+    sys.exit(6)
+for t in data["tunnels"]:
+    if isinstance(t, dict) and isinstance(t.get("peer"), str) and t["peer"]:
+        print(t["peer"])
+PY
+}
+
 # Render the report. Peer-derived strings are semi-untrusted: they are printed,
 # never executed, and backends are reduced to inert characters before printing.
 tunnel_drift_render() { # <peer> <entry-json-or-""> <claims-tsv> <cap>
@@ -1571,14 +1606,27 @@ print("  launchd jobs, or the peer's serve config. Every command above is yours 
 PY
 }
 
-# `tunnel drift <peer>` (T-439) — read-only serve-config advisor.
-# Exit: 0 a verdict was produced (including "the peer serves nothing")
-#       1 no verdict (probe failed, output unparseable, registry unreadable)
-#       2 usage error (missing/invalid peer, or any flag — drift takes none)
+# `tunnel drift [<peer>]` (T-439) — read-only serve-config advisor.
+# With a peer, that peer is reported. With no peer, EVERY registered tunnel is,
+# one section per peer, in registry order, sequentially (T-439b).
+# Exit: 0 every peer produced a verdict (including "the peer serves nothing");
+#           an empty registry is a verdict-free 0
+#       1 some peer gave no verdict (probe failed, output unparseable,
+#           registry unreadable) — the other sections still print
+#       2 usage error (invalid peer, or any flag — drift takes none)
 tunnel_do_drift() {
-    [ $# -gt 0 ] || { echo "ERROR: tunnel drift requires <peer>" >&2; return 2; }
+    if [ $# -eq 0 ]; then
+        tunnel_do_drift_all
+        return
+    fi
     local peer="$1"
     shift
+    case "$peer" in
+        -*)
+            echo "ERROR: tunnel drift takes no flags — it is read-only advice (got '$peer')" >&2
+            return 2
+            ;;
+    esac
     [ $# -eq 0 ] || {
         echo "ERROR: tunnel drift takes no flags or extra arguments — it is read-only advice (got '$1')" >&2
         return 2
@@ -1628,6 +1676,37 @@ tunnel_do_drift() {
 
     tunnel_drift_render "$peer" "$entry" "$claims" "$cap"
     return 0
+}
+
+# The no-peer form (T-439b): walk the registry in order, report each tunnel.
+# Enumeration is the same read-only snapshot as the per-peer path, so the
+# inertness contract holds for the loop too — no mkdir, no lock, no journal.
+# Peers are reported one at a time (no parallel probes): each section is the
+# ordinary single-peer report, separated by a blank line.
+tunnel_do_drift_all() {
+    local listed peer
+    listed="$(tunnel_drift_registry_peers)" || {
+        echo "registry unreadable — no verdicts; inspect with: tailroute tunnel status"
+        return 1
+    }
+    if [ -z "$listed" ]; then
+        echo "No registered tunnels — nothing to compare. Add one with: tailroute tunnel add <peer>"
+        return 0
+    fi
+    local -a peers=()
+    while IFS= read -r peer; do
+        [ -n "$peer" ] || continue
+        peers+=("$peer")
+    done <<EOF
+$listed
+EOF
+    local rc=0 first=1
+    for peer in "${peers[@]}"; do
+        if [ "$first" -eq 0 ]; then echo; fi
+        first=0
+        tunnel_do_drift "$peer" || rc=1
+    done
+    return "$rc"
 }
 
 # T-436: append one or more forwards to an existing peer's job, replacing the
