@@ -66,9 +66,9 @@ _mock_reconcile_env() {
     disable_magicdns() { DISABLE_CALLED=$((DISABLE_CALLED + 1)); return 0; }
     ENABLE_CALLED=0
     DISABLE_CALLED=0
-    RECONCILE_REASSERT_TICKS=15
+    RECONCILE_REASSERT_SECONDS=60
     _RECONCILE_LAST_MODE=""
-    _RECONCILE_TICK_COUNT=0
+    _RECONCILE_LAST_APPLY=$SECONDS
 }
 
 test_reconcile_first_call_applies_and_unchanged_skips() {
@@ -79,12 +79,20 @@ test_reconcile_first_call_applies_and_unchanged_skips() {
     if (( ENABLE_CALLED == 1 )); then return 0; else return 1; fi
 }
 
-test_reconcile_reasserts_after_threshold_ticks() {
+test_reconcile_reasserts_after_interval() {
     _mock_reconcile_env
-    RECONCILE_REASSERT_TICKS=2
-    reconcile >/dev/null 2>&1   # applies
-    reconcile >/dev/null 2>&1   # skip 1
-    reconcile >/dev/null 2>&1   # skip 2 → threshold reached → re-assert
+    reconcile >/dev/null 2>&1                # applies (transition)
+    _RECONCILE_LAST_APPLY=$((SECONDS - 61))  # simulate 61s since last apply
+    reconcile >/dev/null 2>&1                # unchanged but interval elapsed → re-assert
+    if (( ENABLE_CALLED == 2 )); then return 0; else return 1; fi
+}
+
+test_reconcile_clock_step_back_reasserts() {
+    _mock_reconcile_env
+    SECONDS=120                              # baseline the clock (fresh subshells start at ~0)
+    reconcile >/dev/null 2>&1                # applies
+    _RECONCILE_LAST_APPLY=$((SECONDS + 30))  # stamp in the "future" (NTP step back)
+    reconcile >/dev/null 2>&1                # guard resets stamp → elapsed=120 ≥ 60 → re-assert
     if (( ENABLE_CALLED == 2 )); then return 0; else return 1; fi
 }
 
@@ -102,18 +110,18 @@ test_reconcile_vpn_transition_calls_disable() {
     if (( DISABLE_CALLED == 1 && ENABLE_CALLED == 0 )); then return 0; else return 1; fi
 }
 
-# A bad RECONCILE_REASSERT_TICKS must never reach arithmetic (fatal under
+# A bad RECONCILE_REASSERT_SECONDS must never reach arithmetic (fatal under
 # set -u) nor degrade to re-asserting on every tick.
-test_reconcile_sanitize_rejects_invalid_ticks() {
+test_reconcile_sanitize_rejects_invalid_seconds() {
     _mock_reconcile_env
-    RECONCILE_REASSERT_TICKS="abc"; _reconcile_sanitize_reassert_ticks
-    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
-    RECONCILE_REASSERT_TICKS="0";   _reconcile_sanitize_reassert_ticks
-    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
-    RECONCILE_REASSERT_TICKS="08";  _reconcile_sanitize_reassert_ticks
-    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
-    RECONCILE_REASSERT_TICKS="30";  _reconcile_sanitize_reassert_ticks
-    [[ "$RECONCILE_REASSERT_TICKS" == "30" ]] || return 1
+    RECONCILE_REASSERT_SECONDS="abc"; _reconcile_sanitize_reassert_seconds
+    [[ "$RECONCILE_REASSERT_SECONDS" == "60" ]] || return 1
+    RECONCILE_REASSERT_SECONDS="0";   _reconcile_sanitize_reassert_seconds
+    [[ "$RECONCILE_REASSERT_SECONDS" == "60" ]] || return 1
+    RECONCILE_REASSERT_SECONDS="08";  _reconcile_sanitize_reassert_seconds
+    [[ "$RECONCILE_REASSERT_SECONDS" == "60" ]] || return 1
+    RECONCILE_REASSERT_SECONDS="300"; _reconcile_sanitize_reassert_seconds
+    [[ "$RECONCILE_REASSERT_SECONDS" == "300" ]] || return 1
     return 0
 }
 

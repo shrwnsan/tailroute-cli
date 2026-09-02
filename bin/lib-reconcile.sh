@@ -24,28 +24,35 @@ source "$SCRIPT_DIR/lib-state.sh"
 # safety-net poll, and SIGHUP. Route events can fire every few seconds while
 # Tailscale is up, which historically re-ran the MagicDNS toggle and logged an
 # INFO line on every invocation (~21k identical lines/day, each a `tailscale`
-# CLI spawn). Track the last applied mode so unchanged ticks stay quiet
-# (debug-level) and only re-apply on a mode transition or every
-# RECONCILE_REASSERT_TICKS unchanged ticks — the re-assert preserves
-# self-healing against out-of-band MagicDNS changes. SIGHUP passes "force".
+# CLI spawn). Track the last applied mode and the time of the last apply so
+# unchanged ticks stay quiet (debug-level) and re-apply only on a mode
+# transition or once RECONCILE_REASSERT_SECONDS have elapsed since the last
+# apply — the re-assert preserves self-healing against out-of-band MagicDNS
+# changes, which correlate with route churn (a Tailscale re-auth or roam
+# churns routes while the mode samples unchanged). SIGHUP passes "force".
 #
-# All three variables are per-process: the safety-net poll runs in a forked
+# All variables are per-process: the safety-net poll runs in a forked
 # subshell (start_poll in lib-event-loop.sh) that inherits them at fork time
-# and keeps its own copies. Its first tick is a transition precisely because
-# no reconcile has run before the fork — an initial reconcile added before
-# start_poll would silently consume the subshell's first safety-net pass.
+# and keeps its own copies. run_event_loop applies policy once BEFORE
+# start_poll, so the fork inherits real state and the poll's first tick is a
+# legitimate time-gated re-assert, not a duplicate apply.
+#
+# _RECONCILE_LAST_APPLY uses bash's SECONDS builtin (wall-clock seconds since
+# shell start): no fork per check, it advances through `sleep` and counts
+# time the machine spent asleep (first tick after wake re-asserts
+# immediately), and a forked subshell continues the parent's baseline.
 # =============================================================================
-_reconcile_sanitize_reassert_ticks() {
+_reconcile_sanitize_reassert_seconds() {
     # Must be a positive base-10 integer: a non-numeric value is a fatal
     # "unbound variable" abort under set -u once used in arithmetic, and
-    # 0 / negatives / leading-zero octal tokens (08) silently re-assert
+    # 0 / negatives / leading-zero octal tokens (08) would re-assert on
     # every tick. Fall back to the default rather than trust a bad override.
-    [[ "${RECONCILE_REASSERT_TICKS:-}" =~ ^[1-9][0-9]*$ ]] || RECONCILE_REASSERT_TICKS=15
+    [[ "${RECONCILE_REASSERT_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] || RECONCILE_REASSERT_SECONDS=60
 }
 _RECONCILE_LAST_MODE=""
-_RECONCILE_TICK_COUNT=0
-RECONCILE_REASSERT_TICKS="${RECONCILE_REASSERT_TICKS:-15}"
-_reconcile_sanitize_reassert_ticks
+_RECONCILE_LAST_APPLY=0
+RECONCILE_REASSERT_SECONDS="${RECONCILE_REASSERT_SECONDS:-60}"
+_reconcile_sanitize_reassert_seconds
 
 # =============================================================================
 # reconcile — Main decision logic
@@ -104,14 +111,21 @@ reconcile() {
     # Unchanged mode: stay quiet and skip the toggle, but re-assert
     # periodically so out-of-band MagicDNS changes still self-heal.
     if [[ "$force" != "force" && "$mode" == "$_RECONCILE_LAST_MODE" ]]; then
-        _RECONCILE_TICK_COUNT=$((_RECONCILE_TICK_COUNT + 1))
-        if (( _RECONCILE_TICK_COUNT < RECONCILE_REASSERT_TICKS )); then
+        # Wall clock stepped backward (NTP correction): elapsed would go
+        # negative and stall the gate — treat as fully elapsed.
+        if (( SECONDS < _RECONCILE_LAST_APPLY )); then
+            _RECONCILE_LAST_APPLY=0
+        fi
+        if (( SECONDS - _RECONCILE_LAST_APPLY < RECONCILE_REASSERT_SECONDS )); then
             log_debug "reconcile: mode unchanged ($mode); skipping re-apply"
             return 0
         fi
-        log_debug "reconcile: re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_TICKS} ticks"
+        log_debug "reconcile: re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_SECONDS}s"
     fi
-    _RECONCILE_TICK_COUNT=0
+    # Stamp BEFORE the toggle: a wedged tailscale CLI must re-apply at the
+    # next gate expiry, not on every event tick. Do not move this below the
+    # enable/disable calls.
+    _RECONCILE_LAST_APPLY=$SECONDS
     _RECONCILE_LAST_MODE="$mode"
 
     case "$mode" in
@@ -121,7 +135,7 @@ reconcile() {
             ;;
         vpn)
             # VPN is active with Tailscale — disable MagicDNS
-            log_info "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); toggling MagicDNS"
+            log_info "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); disabling MagicDNS"
 
             if ! disable_magicdns; then
                 log_error "Failed to disable MagicDNS"
