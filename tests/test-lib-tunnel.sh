@@ -1354,6 +1354,31 @@ test_t436_status_lists_every_forward() {
     assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
 }
 
+test_status_shows_every_peer_not_just_the_first() {
+    _tunnel_setup_sandbox
+    # v0.8.7 regression: the rows builder's ssh probe consumed the loop's
+    # stdin, swallowing every registry entry after the first — status showed
+    # only the first tunnel for multi-tunnel users.
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    python3 - "$TUNNEL_REGISTRY" <<'PY'
+import json, sys
+path = sys.argv[1]
+d = json.load(open(path))
+second = json.loads(json.dumps(d["tunnels"][0]))
+second.update({"peer": "second", "hostname": "second.tailnet.ts.net",
+               "peerID": "second.12345678", "jobID": "com.tailroute.tunnel.second",
+               "plistPath": second["plistPath"].replace("prime", "second"),
+               "createdAt": "2026-09-02T00:00:00Z", "transactions": []})
+d["tunnels"].append(second)
+json.dump(d, open(path, "w"), indent=2, sort_keys=True)
+PY
+    local out
+    out="$(tunnel_do_status --skip-remote-check 2>&1)"
+    assert_contains "prime:" "$out"
+    assert_contains "second:" "$out"
+    assert_contains "https://second.tailnet.ts.net:8443" "$out"
+}
+
 test_t436_status_json_exposes_per_forward_state() {
     _tunnel_setup_sandbox
     tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1

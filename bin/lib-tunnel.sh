@@ -614,7 +614,7 @@ for t in json.load(sys.stdin)["tunnels"]:
 # Prints TSV: hostname<TAB>dnsname<TAB>ip<TAB>suffix<TAB>online
 tunnel_lookup_peer() {
     local peer="$1" status_json
-    status_json="$("$TAILSCALE_CMD" status --json 2>/dev/null)" || {
+    status_json="$("$TAILSCALE_CMD" status --json 2>/dev/null </dev/null)" || {
         echo "ERROR: tailscale status failed" >&2
         return 1
     }
@@ -1177,8 +1177,11 @@ EOF
 # interpolations cannot break out of the command string.
 tunnel_check_remote_backend() { # <peer> <port> <ssh-alias> <peer-ts-ip>
     local alias="${3:-$1}"
+    # v0.8.7: </dev/null — ssh consumes stdin, and this runs inside loops
+    # that read registry rows from stdin; without it the probe swallows
+    # every entry after the first and status shows only one tunnel.
     "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$alias" \
-        "if command -v nc >/dev/null 2>&1; then nc -z $4 $2; else bash -c 'exec 3<>/dev/tcp/$4/$2' 2>/dev/null; fi" >/dev/null 2>&1
+        "if command -v nc >/dev/null 2>&1; then nc -z $4 $2; else bash -c 'exec 3<>/dev/tcp/$4/$2' 2>/dev/null; fi" >/dev/null 2>&1 </dev/null
 }
 
 # TLS identity verification (T-430): after the SSH tunnel is up and /etc/hosts
