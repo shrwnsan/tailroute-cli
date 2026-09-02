@@ -789,6 +789,36 @@ test_list_json() {
     echo "$line" | "$PYTHON3_CMD" -c 'import json,sys; json.loads(sys.stdin.read())' || { echo "list is not JSON"; return 1; }
 }
 
+test_peers_lists_alias_count_and_primary_url() {
+    _tunnel_setup_sandbox
+    # registry-only, no probing: the remote-probe log must stay empty
+    export FAKE_PROBE_LOG="$TUNNEL_SANDBOX/probes.log"; : > "$FAKE_PROBE_LOG"
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null 2>&1
+    : > "$FAKE_PROBE_LOG"
+    local out rc=0
+    out="$(tunnel_do_peers 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "peers should succeed with a populated registry"
+    assert_contains "prime (alias: shorty)" "$out"
+    assert_contains "1 forward —" "$out"
+    assert_contains "https://prime.tailnet.ts.net:8443" "$out"
+    if [ -s "$FAKE_PROBE_LOG" ]; then
+        _assert_fail "peers must not probe the peer (registry-only command)"
+    fi
+    if printf '%s' "$out" | grep -q "Notes:"; then
+        _assert_fail "peers must be a compact index, not a health report"
+    fi
+}
+
+test_peers_empty_registry_hints_and_exits_zero() {
+    _tunnel_setup_sandbox
+    local out rc=0
+    out="$(tunnel_do_peers 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "empty registry is a fine answer, not an error"
+    assert_contains "No registered tunnels" "$out"
+    assert_contains "tailroute tunnel add" "$out"
+}
+
 # =============================================================================
 # TLS identity verification (T-430)
 # =============================================================================
