@@ -255,7 +255,7 @@ handle_sighup() {
     log_debug "SIGHUP received; forcing immediate reconcile"
     
     if acquire_lock 2>/dev/null; then
-        if ! reconcile 2>/dev/null; then
+        if ! reconcile force 2>/dev/null; then
             log_warn "Forced reconcile failed"
         fi
         release_lock 2>/dev/null || true

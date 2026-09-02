@@ -18,9 +18,42 @@ source "$SCRIPT_DIR/lib-dns.sh"
 source "$SCRIPT_DIR/lib-state.sh"
 
 # =============================================================================
+# Reconcile transition state
+# =============================================================================
+# reconcile() is invoked from three paths: debounced route events, the 60s
+# safety-net poll, and SIGHUP. Route events can fire every few seconds while
+# Tailscale is up, which historically re-ran the MagicDNS toggle and logged an
+# INFO line on every invocation (~21k identical lines/day, each a `tailscale`
+# CLI spawn). Track the last applied mode so unchanged ticks stay quiet
+# (debug-level) and only re-apply on a mode transition or every
+# RECONCILE_REASSERT_TICKS unchanged ticks — the re-assert preserves
+# self-healing against out-of-band MagicDNS changes. SIGHUP passes "force".
+#
+# All three variables are per-process: the safety-net poll runs in a forked
+# subshell (start_poll in lib-event-loop.sh) that inherits them at fork time
+# and keeps its own copies. Its first tick is a transition precisely because
+# no reconcile has run before the fork — an initial reconcile added before
+# start_poll would silently consume the subshell's first safety-net pass.
+# =============================================================================
+_reconcile_sanitize_reassert_ticks() {
+    # Must be a positive base-10 integer: a non-numeric value is a fatal
+    # "unbound variable" abort under set -u once used in arithmetic, and
+    # 0 / negatives / leading-zero octal tokens (08) silently re-assert
+    # every tick. Fall back to the default rather than trust a bad override.
+    [[ "${RECONCILE_REASSERT_TICKS:-}" =~ ^[1-9][0-9]*$ ]] || RECONCILE_REASSERT_TICKS=15
+}
+_RECONCILE_LAST_MODE=""
+_RECONCILE_TICK_COUNT=0
+RECONCILE_REASSERT_TICKS="${RECONCILE_REASSERT_TICKS:-15}"
+_reconcile_sanitize_reassert_ticks
+
+# =============================================================================
 # reconcile — Main decision logic
 # =============================================================================
 # Detects current Tailscale and VPN state, then reconciles MagicDNS setting.
+#
+# Args:
+#   $1 - optional "force": skip the unchanged-mode short-circuit (SIGHUP)
 #
 # Decision matrix:
 #   TS + VPN active → disable MagicDNS (VPN needs internet access)
@@ -29,55 +62,84 @@ source "$SCRIPT_DIR/lib-state.sh"
 #   Multiple VPNs → log warning, do nothing (ambiguous state)
 #
 # Returns:
-#   0 - Reconciliation completed successfully
+#   0 - Reconciliation completed successfully (including unchanged-mode skip)
 #   1 - Failed to perform reconciliation
 #
 # Side effects:
-#   - Calls `log_info()` to record reconciliation outcome
+#   - Calls `log_info()` on mode transitions and periodic re-asserts;
+#     unchanged ticks log at debug level only
 #   - May call `disable_magicdns()` or `enable_magicdns()`
 #   - Updates state manifest via those functions
 # =============================================================================
 reconcile() {
-    # Detect current interfaces
+    local force="${1:-}"
     local ts_interface
     local vpn_interface
-    
+    local ts_ip
+    local mode
+
+    # Detect current interfaces
     ts_interface=$(find_tailscale_interface 2>/dev/null) || ts_interface=""
-    
+
     if [[ -z "$ts_interface" ]]; then
         # No Tailscale running — no action needed
         # (state is per-Tailscale-session, will reset on reconnect)
-        log_info "No Tailscale interface detected; idle"
-        return 0
-    fi
-    
-    # Extract Tailscale IP (informational)
-    local ts_ip
-    ts_ip=$(get_tailscale_ip "$ts_interface" 2>/dev/null) || ts_ip=""
-    
-    # Detect VPN (exclude Tailscale interface)
-    vpn_interface=$(find_vpn_default_route "$ts_interface" 2>/dev/null) || vpn_interface=""
-    
-    # Decision matrix
-    if [[ -n "$vpn_interface" ]]; then
-        # VPN is active with Tailscale — disable MagicDNS
-        log_info "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); toggling MagicDNS"
-        
-        if ! disable_magicdns; then
-            log_error "Failed to disable MagicDNS"
-            return 1
-        fi
-        return 0
+        mode="idle"
+        ts_ip=""
+        vpn_interface=""
     else
-        # Tailscale active, no VPN — enable MagicDNS
-        log_info "Tailscale detected ($ts_ip on $ts_interface), no VPN; ensuring MagicDNS is enabled"
-        
-        if ! enable_magicdns; then
-            log_error "Failed to enable MagicDNS"
-            return 1
+        # Extract Tailscale IP (informational)
+        ts_ip=$(get_tailscale_ip "$ts_interface" 2>/dev/null) || ts_ip=""
+
+        # Detect VPN (exclude Tailscale interface)
+        vpn_interface=$(find_vpn_default_route "$ts_interface" 2>/dev/null) || vpn_interface=""
+
+        if [[ -n "$vpn_interface" ]]; then
+            mode="vpn"
+        else
+            mode="no-vpn"
         fi
-        return 0
     fi
+
+    # Unchanged mode: stay quiet and skip the toggle, but re-assert
+    # periodically so out-of-band MagicDNS changes still self-heal.
+    if [[ "$force" != "force" && "$mode" == "$_RECONCILE_LAST_MODE" ]]; then
+        _RECONCILE_TICK_COUNT=$((_RECONCILE_TICK_COUNT + 1))
+        if (( _RECONCILE_TICK_COUNT < RECONCILE_REASSERT_TICKS )); then
+            log_debug "reconcile: mode unchanged ($mode); skipping re-apply"
+            return 0
+        fi
+        log_debug "reconcile: re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_TICKS} ticks"
+    fi
+    _RECONCILE_TICK_COUNT=0
+    _RECONCILE_LAST_MODE="$mode"
+
+    case "$mode" in
+        idle)
+            log_info "No Tailscale interface detected; idle"
+            return 0
+            ;;
+        vpn)
+            # VPN is active with Tailscale — disable MagicDNS
+            log_info "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); toggling MagicDNS"
+
+            if ! disable_magicdns; then
+                log_error "Failed to disable MagicDNS"
+                return 1
+            fi
+            return 0
+            ;;
+        no-vpn)
+            # Tailscale active, no VPN — enable MagicDNS
+            log_info "Tailscale detected ($ts_ip on $ts_interface), no VPN; ensuring MagicDNS is enabled"
+
+            if ! enable_magicdns; then
+                log_error "Failed to enable MagicDNS"
+                return 1
+            fi
+            return 0
+            ;;
+    esac
 }
 
 # =============================================================================
