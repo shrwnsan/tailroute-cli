@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.9] - 2026-09-03
+
+### Fixed
+- **Time-based re-assert with a uniform self-heal SLA** — the re-assert interval is now wall-clock (`RECONCILE_REASSERT_SECONDS`, default 60, replaces `RECONCILE_REASSERT_TICKS`): out-of-band MagicDNS changes self-heal within ~60s on both the event and safety-net paths, instead of ~15 minutes on a quiet routing table. Implemented with bash's `SECONDS` (no fork per check); system sleep counts as elapsed, so the daemon re-asserts on the first tick after wake, and a backward wall-clock step (NTP) costs at most one interval before a re-assert.
+- **The poll subshell no longer outlives the daemon** — a daemon exit without a signal (route-monitor stream death, a `set -e` failure) orphaned the poll: it kept reconciling every 60s forever, reparented to launchd and invisible to `launchctl`, adding a duplicate apply per minute per orphan. The daemon now kills the poll via an EXIT trap, and a dead monitor stream logs a WARN and exits non-zero so launchd restarts a clean daemon.
+- **Policy applies at daemon startup** — a freshly started daemon reconciles once instead of waiting up to 60s for the first route event or poll tick; startup failure is non-fatal (the event loop retries) so launchd KeepAlive cannot crash-loop. With applied state inherited at fork, the poll's first tick is a genuine time-gated re-assert rather than a duplicate apply.
+- Tests: re-assert interval, clock-step-back guard, invalid-value sanitization, startup reconcile (applies / failure-tolerant / lock-held), monitor-EOF restart with poll cleanup. 318 → 324.
+
 ## [0.8.8] - 2026-09-03
 
 ### Fixed
