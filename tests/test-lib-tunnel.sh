@@ -44,6 +44,7 @@ _tunnel_setup_sandbox() {
     export FAKE_PROBE_LOG="$TUNNEL_SANDBOX/probes.log"
     : > "$FAKE_PROBE_LOG"
     export FAKE_REMOTE_NC_REFUSE=""
+    export FAKE_REMOTE_NO_NC=0
     : > "$LAUNCHCTL_STATE"
     printf '127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n' > "$TUNNEL_HOSTS_FILE"
 
@@ -102,14 +103,26 @@ esac
 # tests can pin the target, and model a Serve listener that answers its
 # tailscale IP but refuses loopback via FAKE_REMOTE_NC_REFUSE ("<ip>:<port>"
 # pairs).
+# v0.8.2: the probe command carries an nc branch and a bash /dev/tcp fallback;
+# FAKE_REMOTE_NO_NC=1 models a peer with no nc binary at all (production
+# Ubuntu): the legacy '/usr/bin/nc' executor dies 127 there and only the
+# fallback runs, which answers like any connector — same listener model as the
+# nc branch (FAKE_REMOTE_NC_REFUSE). FAKE_NC_OPEN stays a LOCAL-port model.
 for _mock_last; do :; done
 case "${_mock_last:-}" in
     *"nc -z "*)
         [ -n "${FAKE_PROBE_LOG:-}" ] && printf '%s\n' "$_mock_last" >> "$FAKE_PROBE_LOG"
-        _mock_probe="${_mock_last##*nc -z }"
+        # target sits directly after 'nc -z ' in both command shapes
+        _mock_probe="$(printf '%s' "$_mock_last" | sed -n 's/.*nc -z \([0-9.]* [0-9][0-9]*\).*/\1/p')"
+        [ -n "$_mock_probe" ] || _mock_probe="${_mock_last##*nc -z }"
         case " $FAKE_REMOTE_NC_REFUSE " in
             *" ${_mock_probe%% *}:${_mock_probe##* } "*) exit 1 ;;
         esac
+        if [ "${FAKE_REMOTE_NO_NC:-0}" = "1" ]; then
+            case "$_mock_last" in
+                *"/usr/bin/nc -z "*) exit 127 ;;
+            esac
+        fi
         exit 0 ;;
 esac
 # v0.7.4: pre-flight hint testing - emit canned stderr and refuse
@@ -1380,7 +1393,7 @@ test_probe_backend_targets_peer_ts_ip() {
     if printf '%s' "$out" | grep -q "not accepting on $FX_PEER"; then
         _assert_fail "healthy serve target reported as not accepting: $out"
     fi
-    assert_contains "/usr/bin/nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
+    assert_contains "nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
 }
 
 test_probe_backend_warns_when_target_refuses() {
@@ -1401,7 +1414,7 @@ test_status_backend_probe_targets_peer_ts_ip() {
     local out
     out="$(tunnel_do_status "$FX_PEER" 2>&1 || true)"
     assert_contains "backend accepting" "$out"
-    assert_contains "/usr/bin/nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
+    assert_contains "nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
 }
 
 test_incremental_add_prints_forward_added_once_after_urls() {
@@ -1416,6 +1429,105 @@ test_incremental_add_prints_forward_added_once_after_urls() {
     [ -n "$url_line" ] || { echo "no URL line for the new forward: $out"; return 1; }
     [ -n "$added_line" ] || { echo "no 'Forward added' line: $out"; return 1; }
     [ "$url_line" -lt "$added_line" ] || _assert_fail "URL list must precede 'Forward added': $out"
+}
+
+# =============================================================================
+# Peer without an nc binary + status ssh-alias line (v0.8.2)
+# =============================================================================
+# A minimal peer image (the production Ubuntu box) ships no nc binary at all,
+# so the v0.7.8 probe exited 127 there and every healthy forward read as
+# "backend not accepting". The probe now prefers nc and falls back to bash's
+# /dev/tcp; FAKE_REMOTE_NO_NC=1 makes the ssh mock run that peer.
+
+test_probe_without_nc_falls_back_to_dev_tcp() {
+    _tunnel_setup_sandbox
+    FAKE_REMOTE_NO_NC=1; export FAKE_REMOTE_NO_NC
+    # loopback refuses, tailscale IP answers — the fallback must hit the ts IP
+    FAKE_REMOTE_NC_REFUSE="127.0.0.1:443"; export FAKE_REMOTE_NC_REFUSE
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || { echo "add failed: $out"; return 1; }
+    if printf '%s' "$out" | grep -q "not accepting on $FX_PEER"; then
+        _assert_fail "peer without nc reported a healthy serve target as down: $out"
+    fi
+    local log
+    log="$(cat "$FAKE_PROBE_LOG")"
+    assert_contains "nc -z $FX_IP 443" "$log"
+    assert_contains "dev/tcp/$FX_IP/443" "$log" "fallback branch must carry the peer ts IP"
+}
+
+test_status_without_nc_falls_back_to_dev_tcp() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    FAKE_REMOTE_NO_NC=1; export FAKE_REMOTE_NO_NC
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN   # local listener, not the peer
+    : > "$FAKE_PROBE_LOG"
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1)"
+    assert_contains "backend accepting" "$out"
+    assert_contains "dev/tcp/$FX_IP/443" "$(cat "$FAKE_PROBE_LOG")"
+}
+
+test_probe_fallback_honors_refusing_target() {
+    # the mock must judge the fallback branch, not blanket-accept it: a Serve
+    # listener that refuses the target address reads as down without nc too
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    FAKE_REMOTE_NO_NC=1; export FAKE_REMOTE_NO_NC
+    FAKE_REMOTE_NC_REFUSE="$FX_IP:443"; export FAKE_REMOTE_NC_REFUSE
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1 || true)"
+    assert_contains "backend not accepting" "$out"
+}
+
+test_status_shows_alias_line_when_alias_differs() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "shorty")" >/dev/null
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1)"
+    assert_contains "  Alias:    shorty" "$out"
+}
+
+test_status_hides_alias_line_when_alias_matches_peer() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "$FX_PEER")" >/dev/null
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1)"
+    if printf '%s\n' "$out" | grep -q "Alias:"; then
+        _assert_fail "default setup must not print an alias line: $out"
+    fi
+}
+
+test_status_hides_alias_line_when_entry_has_no_ssh_alias() {
+    # pre-v0.7.8 entries carry no sshAlias key at all
+    _tunnel_setup_sandbox
+    local legacy
+    legacy="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" \
+        | "$PYTHON3_CMD" -c 'import json,sys; e=json.load(sys.stdin); e.pop("sshAlias", None); print(json.dumps(e))')"
+    tunnel_registry_add "$FX_PEER" "$legacy" >/dev/null
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1)"
+    if printf '%s\n' "$out" | grep -q "Alias:"; then
+        _assert_fail "entry without sshAlias must not print an alias line: $out"
+    fi
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    assert_contains '"sshAlias": ""' "$json"
+}
+
+test_status_json_reports_ssh_alias() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "shorty")" >/dev/null
+    local json
+    json="$(tunnel_do_status --json --skip-remote-check)"
+    printf '%s' "$json" | "$PYTHON3_CMD" -c '
+import json, sys
+t = json.load(sys.stdin)["tunnels"][0]
+assert t["sshAlias"] == "shorty", t
+print("ok")
+' || { echo "status json sshAlias assertions failed: $json"; return 1; }
 }
 
 # =============================================================================
