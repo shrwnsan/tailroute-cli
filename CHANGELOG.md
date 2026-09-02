@@ -2,6 +2,15 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.8] - 2026-09-02
+
+### Fixed
+- **Backend health checks probe the peer's Tailscale IP, not its loopback** — the `tunnel add` remote-port soft check and `tunnel status`'s per-forward backend check ran `nc` against the peer's loopback address, where Tailscale Serve listeners never bind; every healthy serve target warned "remote port N not accepting" and status showed "backend not accepting" for working forwards. Both now probe the same IP:port the launchd forward actually dials.
+- **`Forward added` printed twice** on incremental adds — once before the URL list and once after; now printed exactly once, after the URLs.
+
+### Added
+- Tests: probe targets the peer ts IP on both the add and status paths, the WARN still fires when the target refuses, and the single "Forward added" placement. 247 → 251.
+
 ## [0.7.7] - 2026-09-02
 
 ### Fixed
