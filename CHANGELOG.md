@@ -2,6 +2,13 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.0] - 2026-09-02
+
+### Features
+- **`tunnel drift <peer>`** — a read-only advisor that compares what the peer's `tailscale serve` config claims (queried over ssh) against your local registry: forwards the registry is missing (with the exact `tunnel add` command to run), full forward sets with URLs, serve entries for peers you haven't registered, and "serves nothing" verdicts. The probe has three outcomes (claims / probe failed / unrecognizable reply); the command takes no flags by design — drift applies nothing, ever: it cannot change the registry, hosts, launchd jobs, or the peer's serve config, and prints copy-pasteable commands for you to run instead.
+- Safety is tested, not promised: every outcome asserts a byte-identical snapshot of the config dir, hosts file, and LaunchAgents (listings and bytes), and that the only remote command ever executed is `tailscale serve status`.
+- Tests: 24 new (probe outcomes, exit-code discipline, unregistered peers, inertness). 262 → 290.
+
 ## [0.7.9] - 2026-09-02
 
 Hardening for the incremental-update transaction (T-437/T-438, spec from the adversarial review).
