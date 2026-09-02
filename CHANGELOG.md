@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.4] - 2026-09-02
+
+### Features
+- **`tunnel peers`** — registered tunnels at a glance: one line per tunnel with the peer, its ssh alias when it differs from the label, forward count, and the primary URL. Registry-only — no probing, instant, unlike `status`'s per-forward ssh checks; `tunnel list`'s JSON contract is unchanged. Empty registry prints the add hint and exits 0.
+
+### Tests
+- Peers index (alias, count, primary URL, zero remote probes) and empty-registry hint. 303 → 305.
+
 ## [0.8.3] - 2026-09-02
 
 ### Fixed
