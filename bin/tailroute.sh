@@ -138,6 +138,7 @@ Usage:
                                   open <peer>   Open a tunnel's URL in the browser
                                   list          Registered tunnels (JSON)
                                   restart       Restart tunnel jobs
+                                  drift <peer>  Report serve-config drift (read-only)
   tailroute --version           Show version
   tailroute --dry-run           Preview actions without modifying DNS
   tailroute install             Install daemon (requires sudo)
@@ -1291,6 +1292,13 @@ Commands:
         is refused without --force: it may hold a live /etc/hosts mapping.
   open <peer>
         Open the tunnel's bookmarkable URL in the default browser.
+  drift <peer>
+        Compare the peer's live serve config (queried read-only over ssh)
+        with the local registry and report the difference. Read-only
+        advisor: it applies nothing and never writes peer state, and
+        every suggested command is yours to run. Takes no flags.
+        Exit codes: 0 verdict (including "serves nothing"), 1 no verdict
+        (probe failed or output unparseable), 2 usage.
 
 Browser URL after add: https://<peer>.<tailnet>.ts.net:<local-port>
 Works with VPN active (via SOCKS5) or inactive (direct) — adaptive.
@@ -1328,6 +1336,10 @@ EOF
         open)
             shift
             tunnel_do_open "$@"
+            ;;
+        drift)
+            shift
+            tunnel_do_drift "$@"
             ;;
         remove-all)
             # Used by `tailroute uninstall` (per-user cleanup); not interactive
