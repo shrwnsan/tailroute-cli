@@ -1610,6 +1610,26 @@ _t439_drift_inert() { # <peer> <expected-rc>
     printf '%s\n' "$out"
 }
 
+# Second fixture peer, so the no-peer invocation has more than one section to
+# report. Hostname must derive from $FX_SUFFIX (never a pasted-in real one).
+_t439_register_second() { # [forwards-pairs]
+    local entry
+    entry="$(tunnel_build_entry_json "second" "$FX_IP" "second.$FX_SUFFIX" "$FX_SUFFIX" "${1:-8444:8080}")"
+    tunnel_registry_add second "$entry" >/dev/null
+}
+
+# Same contract as _t439_drift_inert, for the no-peer invocation (every
+# registered tunnel): expected exit code, byte-identical state afterwards.
+_t439_drift_all_inert() { # <expected-rc>
+    local expected_rc="$1" rc=0 out before after
+    before="$(_t439_state_snapshot)"
+    out="$(tunnel_do_drift 2>&1)" || rc=$?
+    after="$(_t439_state_snapshot)"
+    assert_eq "$expected_rc" "$rc" "drift-all exit code (output was: $out)"
+    assert_eq "$before" "$after" "drift-all must not write any state (output was: $out)"
+    printf '%s\n' "$out"
+}
+
 _t439_claims_fixture() { # two Serve endpoints: 443 (backend 3000) + 8444 (backend 3001)
     printf '%s' '{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"8444":{"Listen":"100.97.245.83:8444","Backend":"http://127.0.0.1:3001"}}}'
 }
@@ -1884,9 +1904,11 @@ test_t439_forward_cap_is_stated_when_exceeded() {
 test_t439_usage_errors_take_no_flags() {
     _tunnel_setup_sandbox
     local rc=0 out
-    out="$(tunnel_do_drift 2>&1)" || rc=$?
-    assert_eq 2 "$rc" "missing peer is a usage error"
-    assert_contains "requires <peer>" "$out"
+    # no peer now means "every registered tunnel" (see the drift-all tests
+    # below); a flag stays a usage error in both forms
+    out="$(tunnel_do_drift --json 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "drift takes no flags — advisory output only"
+    assert_contains "takes no flags" "$out"
     rc=0
     out="$(tunnel_do_drift "Bad Peer" 2>&1)" || rc=$?
     assert_eq 2 "$rc" "invalid peer label is a usage error"
@@ -1906,4 +1928,95 @@ test_t439_drift_normalizes_peer_label_case() {
     local out
     out="$(_t439_drift_inert "PRIME" 0)"
     assert_contains "no drift" "$out"
+}
+
+# --- no peer: every registered tunnel ---------------------------------------
+
+test_t439_drift_all_peers_reports_every_registered_tunnel() {
+    _tunnel_setup_sandbox
+    export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
+    : > "$SSH_CALL_LOG"
+    _t439_register_prime "8443:443"
+    _t439_register_second "8444:8080"
+    # both peers answer but serve nothing: every registered forward is stale,
+    # so each peer gets its own drift section
+    FAKE_SERVE_STATUS_EMPTY=1
+    export FAKE_SERVE_STATUS_EMPTY
+    local out p_line s_line
+    out="$(_t439_drift_all_inert 0)"
+    assert_contains "prime: drift between the registry and the peer's serve config" "$out"
+    assert_contains "second: drift between the registry and the peer's serve config" "$out"
+    assert_contains "remote 443" "$out" "prime's stale forward must be named"
+    assert_contains "remote 8080" "$out" "second's stale forward must be named"
+    p_line="$(printf '%s\n' "$out" | grep -n 'prime: drift between' | cut -d: -f1)"
+    s_line="$(printf '%s\n' "$out" | grep -n 'second: drift between' | cut -d: -f1)"
+    if [ -z "$p_line" ] || [ -z "$s_line" ] || [ "$p_line" -ge "$s_line" ]; then
+        _assert_fail "sections must follow registry order (prime before second): $out"
+    fi
+    assert_eq 2 "$(grep -c 'tailscale serve status' "$SSH_CALL_LOG" || true)" \
+        "each registered peer is probed exactly once"
+    assert_contains "proxy-prime" "$(cat "$SSH_CALL_LOG")"
+    assert_contains "proxy-second" "$(cat "$SSH_CALL_LOG")"
+    assert_eq 0 "$(grep -cv 'tailscale serve status' "$SSH_CALL_LOG" || true)" \
+        "the loop must run nothing but the read-only probe: $(cat "$SSH_CALL_LOG")"
+}
+
+test_t439_drift_all_peers_mixed_verdicts_degrade_exit_code() {
+    _tunnel_setup_sandbox
+    # per-peer outcomes: prime answers, second is locked down (probe fails)
+    cat > "$TUNNEL_SANDBOX/ssh/selective" <<'MOCK'
+#!/bin/sh
+[ -n "${SSH_CALL_LOG:-}" ] && printf '%s\n' "$*" >> "$SSH_CALL_LOG"
+for _arg in "$@"; do
+    case "$_arg" in proxy-*) _target="$_arg" ;; esac
+done
+case "${_target:-}" in
+    proxy-prime)
+        printf '%s\n' '{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+        exit 0 ;;
+    *) exit 1 ;;
+esac
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/ssh/selective"
+    SSH_CMD="$TUNNEL_SANDBOX/ssh/selective"
+    export SSH_CMD
+    _t439_register_prime "8443:443"
+    _t439_register_second "8444:8080"
+    local out
+    out="$(_t439_drift_all_inert 1)"
+    assert_contains "prime: no drift" "$out" "the reachable peer still gets its verdict"
+    assert_contains "second: probe FAILED — no verdict" "$out" "an unreachable peer must not vanish from the report"
+}
+
+test_t439_drift_all_empty_registry_is_a_friendly_noop() {
+    _tunnel_setup_sandbox
+    # no registry file: nothing to compare, and that is not a failure
+    local out
+    out="$(_t439_drift_all_inert 0)"
+    assert_contains "No registered tunnels" "$out"
+    assert_contains "tailroute tunnel add <peer>" "$out" "the way out must be named"
+}
+
+test_t439_drift_all_unreadable_registry_degrades_to_1() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    echo "{ not json" > "$TUNNEL_REGISTRY"
+    local out
+    out="$(_t439_drift_all_inert 1)"
+    assert_contains "no verdicts" "$out"
+    assert_contains "tailroute tunnel status" "$out" "guidance must point at the recovery surface"
+}
+
+test_t439_drift_all_without_a_config_dir_writes_nothing() {
+    _tunnel_setup_sandbox
+    # a machine that never ran tailroute: the read-only invariant covers the
+    # enumeration too — no config dir may be created on the way to the message
+    rmdir "$TUNNEL_CONFIG_DIR"
+    local out rc=0 before after
+    before="$(_t439_state_snapshot)"
+    out="$(tunnel_do_drift 2>&1)" || rc=$?
+    after="$(_t439_state_snapshot)"
+    assert_eq 0 "$rc" "an empty registry is a clean exit (output was: $out)"
+    assert_eq "$before" "$after" "drift-all must not create the config dir"
+    assert_contains "No registered tunnels" "$out"
 }
