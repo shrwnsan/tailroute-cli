@@ -1101,11 +1101,14 @@ EOF
     return 0
 }
 
-# Remote backend soft check — transport can be up while Serve is down (502)
-tunnel_check_remote_backend() {
+# Remote backend soft check — transport can be up while Serve is down (502).
+# Probe from the peer against its tailscale IP, not its loopback: Serve
+# listeners bind the tailscale interface only, and the launchd forward targets
+# <peer-ip>:<port>, so a loopback probe reads every healthy target as down.
+tunnel_check_remote_backend() { # <peer> <port> <ssh-alias> <peer-ts-ip>
     local alias="${3:-$1}"
     "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$alias" \
-        "/usr/bin/nc -z 127.0.0.1 $2" >/dev/null 2>&1
+        "/usr/bin/nc -z $4 $2" >/dev/null 2>&1
 }
 
 # TLS identity verification (T-430): after the SSH tunnel is up and /etc/hosts
@@ -1577,7 +1580,7 @@ tunnel_do_add() {
     lport="${pair%%:*}"
     rport="${pair##*:}"
 
-    tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" || \
+    tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip" || \
         echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2
     echo "NOTE: the /etc/hosts mapping is system-wide — it affects every user of this Mac." >&2
 
@@ -1850,7 +1853,7 @@ tunnel_status_rows() {
             if tunnel_port_in_use "$lport"; then listener="listening"; else listener="closed"; fi
             if [ "$skip_remote" = "yes" ]; then
                 backend="n/a"
-            elif tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}"; then
+            elif tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}" "$ip"; then
                 backend="accepting"
             else
                 backend="not accepting"
