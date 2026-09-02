@@ -1169,10 +1169,14 @@ EOF
 # Probe from the peer against its tailscale IP, not its loopback: Serve
 # listeners bind the tailscale interface only, and the launchd forward targets
 # <peer-ip>:<port>, so a loopback probe reads every healthy target as down.
+# Minimal peer images ship no nc at all (production Ubuntu), which used to exit
+# 127 and read every healthy target as down — so fall back to bash's /dev/tcp
+# when nc is absent. ip/port are pre-validated (CGNAT ip, numeric port), so the
+# interpolations cannot break out of the command string.
 tunnel_check_remote_backend() { # <peer> <port> <ssh-alias> <peer-ts-ip>
     local alias="${3:-$1}"
     "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$alias" \
-        "/usr/bin/nc -z $4 $2" >/dev/null 2>&1
+        "if command -v nc >/dev/null 2>&1; then nc -z $4 $2; else bash -c 'exec 3<>/dev/tcp/$4/$2' 2>/dev/null; fi" >/dev/null 2>&1
 }
 
 # TLS identity verification (T-430): after the SSH tunnel is up and /etc/hosts
@@ -2330,7 +2334,8 @@ EOF
 # -----------------------------------------------------------------------------
 # Status / list (T-405.3 / T-405.4)
 # -----------------------------------------------------------------------------
-# TSV per tunnel: peer, hostname, localPort, job, port, hosts, remotePort, notes
+# TSV per forward: peer, hostname, localPort, remotePort, listener, backend,
+# tls, job, hosts, notes, plist, sshAlias (v0.8.2)
 tunnel_status_rows() {
     local skip_remote="${1:-no}"
     local entry p hostname ip suffix label ssh_alias
@@ -2391,8 +2396,8 @@ tunnel_status_rows() {
             else
                 backend="not accepting"
             fi
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state" "$ssh_alias"
         done
     done <<EOF
 $(tunnel_registry_entries)
@@ -2492,9 +2497,11 @@ for line in sys.stdin:
     parts = line.rstrip("\n").split("\t")
     if len(parts) < 11: continue
     p, hostname, lport, rport, listener, backend, tls, job, hosts, notes, plist = parts[:11]
+    ssh_alias = parts[11] if len(parts) > 11 else ""
     if p not in tunnels:
         order.append(p)
         tunnels[p] = {"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
+                      "sshAlias": ssh_alias,
                       "job": job, "hosts": hosts, "plist": plist, "notes": notes, "forwards": []}
     fwd = {"localPort": int(lport), "remotePort": int(rport), "listener": listener,
            "backend": backend, "tls": tls}
@@ -2532,14 +2539,19 @@ sys.exit(1 if degraded else 0)
 
     echo "Adaptive path: $adaptive"
     echo ""
-    local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state prev_peer=""
+    local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias prev_peer=""
     if printf '%s\n' "$rows" | grep -q '^.'; then
-        while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes plist_state; do
+        while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias; do
             [ -n "$p" ] || continue
             if [ "$p" != "$prev_peer" ]; then
                 [ -n "$prev_peer" ] && echo ""
                 echo "$p:"
                 echo "  URL:      https://$hostname:$lport"
+                # v0.8.2: only setups that ssh through a differently named host
+                # carry an alias — the default (alias == peer) stays uncluttered
+                if [ -n "$ssh_alias" ] && [ "$ssh_alias" != "$p" ]; then
+                    echo "  Alias:    $ssh_alias"
+                fi
                 echo "  Job:      $job"
                 echo "  Hosts:    $hosts_state"
                 echo "  Forwards:"
