@@ -41,6 +41,9 @@ _tunnel_setup_sandbox() {
     export TUNNEL_WAIT_TRIES=1
     export FAKE_OPEN_LOG="$TUNNEL_SANDBOX/opened.log"
     : > "$FAKE_OPEN_LOG"
+    export FAKE_PROBE_LOG="$TUNNEL_SANDBOX/probes.log"
+    : > "$FAKE_PROBE_LOG"
+    export FAKE_REMOTE_NC_REFUSE=""
     : > "$LAUNCHCTL_STATE"
     printf '127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n' > "$TUNNEL_HOSTS_FILE"
 
@@ -87,6 +90,21 @@ case "$*" in
     *"tailscale serve status"*)
         [ -n "${FAKE_SERVE_STATUS:-}" ] && { printf '%s\n' "$FAKE_SERVE_STATUS"; exit 0; }
         exit 1 ;;
+esac
+# Remote backend probe (v0.7.8): the CLI asks the peer to run
+# '/usr/bin/nc -z <target> <port>'. Record the probe line in FAKE_PROBE_LOG so
+# tests can pin the target, and model a Serve listener that answers its
+# tailscale IP but refuses loopback via FAKE_REMOTE_NC_REFUSE ("<ip>:<port>"
+# pairs).
+for _mock_last; do :; done
+case "${_mock_last:-}" in
+    *"nc -z "*)
+        [ -n "${FAKE_PROBE_LOG:-}" ] && printf '%s\n' "$_mock_last" >> "$FAKE_PROBE_LOG"
+        _mock_probe="${_mock_last##*nc -z }"
+        case " $FAKE_REMOTE_NC_REFUSE " in
+            *" ${_mock_probe%% *}:${_mock_probe##* } "*) exit 1 ;;
+        esac
+        exit 0 ;;
 esac
 # v0.7.4: pre-flight hint testing - emit canned stderr and refuse
 case "$*" in
@@ -1181,6 +1199,62 @@ test_t436_update_blocked_by_incomplete_journal() {
     assert_eq 1 "$rc" "update should refuse while an update journal is incomplete"
     assert_contains "incomplete journal" "$out"
     assert_contains '"forwards": [{"localPort": 8443, "remotePort": 443}]' "$(tunnel_registry_get "$FX_PEER")"
+}
+
+# =============================================================================
+# Remote backend probe target + incremental add output (v0.7.8)
+# =============================================================================
+# Tailscale Serve listeners bind the peer's tailscale interface, not its
+# loopback, and the launchd forward targets <peer-ip>:<rport> — so the
+# backend check must ask the PEER about its tailscale IP. Probing the peer's
+# 127.0.0.1 reports every healthy serve target as down.
+
+test_probe_backend_targets_peer_ts_ip() {
+    _tunnel_setup_sandbox
+    # Real-world shape: loopback refuses, tailscale IP answers
+    FAKE_REMOTE_NC_REFUSE="127.0.0.1:443"
+    export FAKE_REMOTE_NC_REFUSE
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || { echo "add failed: $out"; return 1; }
+    if printf '%s' "$out" | grep -q "not accepting on $FX_PEER"; then
+        _assert_fail "healthy serve target reported as not accepting: $out"
+    fi
+    assert_contains "/usr/bin/nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
+}
+
+test_probe_backend_warns_when_target_refuses() {
+    _tunnel_setup_sandbox
+    FAKE_REMOTE_NC_REFUSE="$FX_IP:443"
+    export FAKE_REMOTE_NC_REFUSE
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || { echo "add failed: $out"; return 1; }
+    assert_contains "WARN: remote port 443 not accepting on $FX_PEER" "$out"
+}
+
+test_status_backend_probe_targets_peer_ts_ip() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    FAKE_REMOTE_NC_REFUSE="127.0.0.1:443"
+    export FAKE_REMOTE_NC_REFUSE
+    : > "$FAKE_PROBE_LOG"
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1 || true)"
+    assert_contains "backend accepting" "$out"
+    assert_contains "/usr/bin/nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
+}
+
+test_incremental_add_prints_forward_added_once_after_urls() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || { echo "incremental add failed: $out"; return 1; }
+    assert_eq 1 "$(printf '%s\n' "$out" | grep -c '^Forward added:')" "exactly one 'Forward added' line expected"
+    local url_line added_line
+    url_line="$(printf '%s\n' "$out" | grep -n 'URL:.*8444' | head -1 | cut -d: -f1)"
+    added_line="$(printf '%s\n' "$out" | grep -n '^Forward added:' | head -1 | cut -d: -f1)"
+    [ -n "$url_line" ] || { echo "no URL line for the new forward: $out"; return 1; }
+    [ -n "$added_line" ] || { echo "no 'Forward added' line: $out"; return 1; }
+    [ "$url_line" -lt "$added_line" ] || _assert_fail "URL list must precede 'Forward added': $out"
 }
 
 # =============================================================================
