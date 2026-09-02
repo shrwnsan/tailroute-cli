@@ -18,6 +18,10 @@ When you have both Tailscale and a VPN (NordVPN, ProtonVPN, etc.) connected:
 - **DNS fix**: MagicDNS breaks your internet → tailroute toggles it automatically
 - **Mesh access**: VPN blocks Tailscale IPs → use the built-in SOCKS5 proxy to reach peers
 
+## Tuning
+
+The daemon re-asserts its MagicDNS decision every 15 reconcile ticks (`RECONCILE_REASSERT_TICKS`, default 15), so out-of-band DNS changes self-heal without per-event log noise. Override the variable in the daemon's launchd `EnvironmentVariables` to change the cadence.
+
 ## Usage
 
 ```bash
