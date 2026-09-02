@@ -2,6 +2,15 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.2] - 2026-09-02
+
+### Fixed
+- **Backend probes work on peers without `nc`** — the probe ran `/usr/bin/nc` on the peer; Ubuntu peers without netcat installed made every probe exit 127, so `tunnel status` reported "backend not accepting" even for healthy forwards (found live: the production peer has no `nc` at all — which also masked the v0.7.8 probe-target fix). The probe now uses `nc` from the peer's PATH when present and falls back to bash's built-in `/dev/tcp` when it isn't. Verified against a live listener with `nc` hidden from PATH.
+
+### Added
+- **`tunnel status` shows the ssh alias** — an `Alias: <name>` line when a tunnel's stored `--ssh-alias` differs from its peer label (default setups stay uncluttered), and `sshAlias` in `status --json` for parity with `tunnel list`.
+- Tests: probe fallback on nc-less peers, refusing-target fidelity, alias-line presence/absence (including legacy entries without the key), JSON parity. 295 → 302.
+
 ## [0.8.1] - 2026-09-02
 
 ### Features
