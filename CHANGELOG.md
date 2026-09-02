@@ -2,6 +2,19 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.7.9] - 2026-09-02
+
+Hardening for the incremental-update transaction (T-437/T-438, spec from the adversarial review).
+
+### Fixed
+- **Update transactions journal before they mutate anything** — the registry was rewritten *before* the journal write, so a crash in that window left a journal that couldn't vouch for the state it found (and a failed journal write is now fatal to the operation instead of ignored). The update path also replaces its registry entry via a single atomic operation instead of remove-then-add, closing a two-save window where a crash could lose the entry outright.
+- **Snapshot failures abort loudly** — a missing job plist or a failed `plist.prev` copy used to be silently ignored, leaving rollback with nothing to restore; the update now refuses to start unless the snapshot exists.
+- **`tunnel journal clear [--force]`** — incomplete journals can be cleared by rule instead of `rm`: `add` refuses without `--force` (live hosts mapping), `update` clears with the remove+add remedy printed, `remove` clears freely, completed entries always clear. Status hints now point at the command.
+
+### Added
+- **Registry `transactions[]` history** — every add/update/remove records `{op, ts, forwards before/after, source}`, capped at the last 20; evidence of the final transaction survives in the `.bak` even for removed entries.
+- Tests: 15 new (journal-before-mutation, fatal boundaries, per-op clear rules, transaction recording/capping, CLI wiring). 251 → 262.
+
 ## [0.7.8] - 2026-09-02
 
 ### Fixed
