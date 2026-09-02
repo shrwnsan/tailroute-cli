@@ -2,6 +2,13 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.3] - 2026-09-02
+
+### Fixed
+- **`tunnel status` parses rows without collapsing empty fields** — bash `read` collapses consecutive whitespace-IFS delimiters, so the *empty* notes field of every healthy tunnel (tab-tab in the row) shifted all later fields one slot left: the v0.8.2 `Alias:` line never rendered in production, and the plist state leaked into a ghost `Notes: present` line that real status output has shown all along. The rows themselves were always correct (the JSON view proved it) — only the renderer's parse was broken. Tabs are now translated to the unit separator before the read, so empty fields survive; the preflight lookup parse (where an empty DNS field would shift IP/suffix/online) got the same hardening.
+- Found live on 0.8.2: production status showed no `Alias:` line while the JSON view did.
+- Tests: regression case with the healthy empty-notes row. 302 → 303.
+
 ## [0.8.2] - 2026-09-02
 
 ### Fixed
