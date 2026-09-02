@@ -709,6 +709,26 @@ test_add_with_explicit_ssh_alias() {
         echo "plist does not use the alias"; return 1; }
 }
 
+test_status_shows_alias_and_survives_empty_notes() {
+    _tunnel_setup_sandbox
+    # v0.8.3 regression: rows with an EMPTY notes field collapsed under the
+    # renderer's whitespace-IFS read — the alias vanished and the plist state
+    # leaked into a ghost "Notes: present" line (the most common real case,
+    # since notes is empty for healthy tunnels).
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null 2>&1
+    FAKE_NC_OPEN="8443"
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1)" || true
+    assert_contains "Alias:    shorty" "$out"
+    if printf '%s' "$out" | grep -q "Notes:    present"; then
+        _assert_fail "plist state leaked into a ghost Notes line (tab-collapse parse)"
+    fi
+    if printf '%s' "$out" | grep -q "Notes:    shorty"; then
+        _assert_fail "alias leaked into the notes line (tab-collapse parse)"
+    fi
+}
+
 test_status_healthy_and_degraded() {
     _tunnel_setup_sandbox
     tunnel_do_add prime --yes >/dev/null

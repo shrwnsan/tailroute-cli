@@ -1101,8 +1101,10 @@ tunnel_install_ssh_wrapper() {
 tunnel_preflight() {
     local peer="$1" lookup="$2" ssh_alias="${3:-$1}"
     local hostname dns ip suffix online
-    IFS="$(printf '\t')" read -r hostname dns ip suffix online <<EOF
-$lookup
+    # \037 transform: an empty dns field must not collapse the read (same
+    # whitespace-IFS hazard as the status renderer, fixed in v0.8.3)
+    IFS=$'\037' read -r hostname dns ip suffix online <<EOF
+$(printf '%s' "$lookup" | tr '\t' '\037')
 EOF
 
     tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 1; }
@@ -2541,7 +2543,12 @@ sys.exit(1 if degraded else 0)
     echo ""
     local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias prev_peer=""
     if printf '%s\n' "$rows" | grep -q '^.'; then
-        while IFS="$(printf '\t')" read -r p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias; do
+        # v0.8.3: read collapses CONSECUTIVE whitespace-IFS delimiters, so an
+        # empty notes field (tab-tab in the row) shifted every later field one
+        # left — the alias vanished and the plist state leaked into a ghost
+        # "Notes: present" line. Translate tabs to \037 (unit separator, not
+        # IFS whitespace) so empty fields survive the read.
+        while IFS=$'\037' read -r p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias; do
             [ -n "$p" ] || continue
             if [ "$p" != "$prev_peer" ]; then
                 [ -n "$prev_peer" ] && echo ""
@@ -2563,7 +2570,7 @@ sys.exit(1 if degraded else 0)
                 worst=1
             fi
         done <<EOF
-$rows
+$(printf '%s' "$rows" | tr '\t' '\037')
 EOF
     else
         echo "No tunnels configured."
