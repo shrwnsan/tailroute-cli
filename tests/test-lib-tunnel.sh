@@ -14,7 +14,7 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # tailnet, not real user data. Inputs (build/parse calls, fixture heredocs)
 # reference these; assertions pin the literal expected output instead.
 FX_PEER="prime"
-FX_IP="100.97.245.83"
+FX_IP="100.100.100.100"
 FX_HOSTNAME="prime.tailnet.ts.net"
 FX_SUFFIX="tailnet.ts.net"
 FX_FWD1="8443:443"
@@ -258,7 +258,7 @@ test_validate_hostname_must_match_suffix() {
 
 test_validate_cgnat_ip() {
     _tunnel_setup_sandbox
-    assert_ok tunnel_validate_cgnat_ip 100.97.245.83
+    assert_ok tunnel_validate_cgnat_ip 100.100.100.100
     assert_ok tunnel_validate_cgnat_ip 100.64.0.1
     assert_ok tunnel_validate_cgnat_ip 100.127.255.255
     assert_fail tunnel_validate_cgnat_ip 100.63.0.1
@@ -430,7 +430,7 @@ test_plist_lints_and_contains_hardening() {
     local content
     content="$(cat "$plist")"
     assert_contains "com.tailroute.tunnel.prime" "$content"
-    assert_contains "127.0.0.1:8443:100.97.245.83:443" "$content"
+    assert_contains "127.0.0.1:8443:100.100.100.100:443" "$content"
     assert_contains "ExitOnForwardFailure" "$content"
     assert_contains "ControlMaster" "$content"
     assert_contains "ControlPath" "$content"
@@ -443,8 +443,8 @@ test_plist_two_forwards() {
     local plist="$TUNNEL_SANDBOX/t.plist"
     tunnel_generate_plist "$FX_PEER" "$FX_IP" "$TUNNEL_SANDBOX/t.log" "$FX_PEER" "$FX_FWD1" 9000:9000 > "$plist"
     assert_ok tunnel_plist_lint "$plist"
-    grep -q "127.0.0.1:8443:100.97.245.83:443" "$plist" || { echo "first forward missing"; return 1; }
-    grep -q "127.0.0.1:9000:100.97.245.83:9000" "$plist" || { echo "second forward missing"; return 1; }
+    grep -q "127.0.0.1:8443:100.100.100.100:443" "$plist" || { echo "first forward missing"; return 1; }
+    grep -q "127.0.0.1:9000:100.100.100.100:9000" "$plist" || { echo "second forward missing"; return 1; }
 }
 
 # =============================================================================
@@ -470,9 +470,9 @@ _adopt_fixture() {
         <string>-o</string>
         <string>ServerAliveCountMax=3</string>
         <string>-L</string>
-        <string>8443:100.97.245.83:443</string>
+        <string>8443:100.100.100.100:443</string>
         <string>-L</string>
-        <string>10254:100.97.245.83:10254</string>
+        <string>10254:100.100.100.100:10254</string>
         <string>proxy-prime</string>
     </array>
     <key>RunAtLoad</key>
@@ -511,7 +511,7 @@ test_adoption_parse_rejects_unsafe_option() {
 test_adoption_parse_rejects_public_bind() {
     _tunnel_setup_sandbox
     _adopt_fixture
-    /usr/bin/sed -i '' 's|<string>8443:100.97.245.83:443</string>|<string>0.0.0.0:8443:100.97.245.83:443</string>|' "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
+    /usr/bin/sed -i '' 's|<string>8443:100.100.100.100:443</string>|<string>0.0.0.0:8443:100.100.100.100:443</string>|' "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
     assert_fail tunnel_parse_existing_plist "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
 }
 
@@ -662,7 +662,7 @@ test_add_rejects_hostile_peer_via_lookup() {
     "node1": {
       "HostName": "prime",
       "DNSName": "prime.tailnet.ts.net.\n127.0.0.1 bank.com",
-      "TailscaleIPs": ["100.97.245.83"],
+      "TailscaleIPs": ["100.100.100.100"],
       "Online": true
     }
   }
@@ -681,7 +681,7 @@ test_add_adopts_prototype_job() {
     # peer hostname is "prime" here; use a DIFFERENT alias to prove alias plumbing
     _adopt_fixture
     /usr/bin/sed -i '' 's|<string>proxy-prime</string>|<string>proxy-aliasname</string>|' "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
-    printf 'Host proxy-aliasname\n    HostName 100.97.245.83\n' >> "$TUNNEL_SSH_CONFIG"
+    printf 'Host proxy-aliasname\n    HostName 100.100.100.100\n' >> "$TUNNEL_SSH_CONFIG"
     echo "com.tailroute.tunnel.prime" >> "$LAUNCHCTL_STATE"
     printf '127.0.0.1\tprime.tailnet.ts.net\n' >> "$TUNNEL_HOSTS_FILE"
     local out
@@ -690,8 +690,8 @@ test_add_adopts_prototype_job() {
     # Adopted forwards preserved verbatim (non-sequential locals included)
     assert_contains '"localPort": 8443' "$(tunnel_registry_get prime)"
     assert_contains '"localPort": 10254' "$(tunnel_registry_get prime)"
-    grep -q "127.0.0.1:8443:100.97.245.83:443" "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
-    grep -q "127.0.0.1:10254:100.97.245.83:10254" "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
+    grep -q "127.0.0.1:8443:100.100.100.100:443" "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
+    grep -q "127.0.0.1:10254:100.100.100.100:10254" "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
     # Hosts line migrated into managed block exactly once
     local count
     count="$(grep -c "prime.tailnet.ts.net" "$TUNNEL_HOSTS_FILE" || true)"
@@ -1706,7 +1706,7 @@ test_t413_detect_requests_json_serve_status() {
     _tunnel_setup_sandbox
     export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
     : > "$SSH_CALL_LOG"
-    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    FAKE_SERVE_STATUS='{"Web":{"micro.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
     export FAKE_SERVE_STATUS
     local out
     out="$(tunnel_detect_serve_ports "$FX_PEER")"
@@ -1717,9 +1717,9 @@ test_t413_detect_requests_json_serve_status() {
 
 test_t413_detect_json_listen_port_not_backend_port() {
     _tunnel_setup_sandbox
-    # Real production shape (oci-micro): the Web key carries the LISTEN port
+    # Production shape: implicit-443 listen key, backend on a different port: the Web key carries the LISTEN port
     # 443 while the handler's backend is 3001 — forwards must target 443.
-    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    FAKE_SERVE_STATUS='{"Web":{"micro.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
     export FAKE_SERVE_STATUS
     assert_eq "443" "$(tunnel_detect_serve_ports "$FX_PEER")" \
         "the backend port must not be detected as the serve port"
@@ -1730,7 +1730,7 @@ test_t413_detect_text_status_implicit_443_listen_beats_backend() {
     # Verbatim `tailscale serve status` text from a production peer whose
     # listen URL carries no port (implicit 443). The indented proxy line is
     # the BACKEND (3001) and must never be read as the listen port.
-    FAKE_SERVE_STATUS='https://oci-micro.tailea9a52.ts.net (tailnet only)
+    FAKE_SERVE_STATUS='https://micro.tailnet.ts.net (tailnet only)
 |-- / proxy http://127.0.0.1:3001'
     export FAKE_SERVE_STATUS
     assert_eq "443" "$(tunnel_detect_serve_ports "$FX_PEER")" \
@@ -1741,10 +1741,10 @@ test_t413_detect_text_status_multiple_listen_ports_in_order() {
     _tunnel_setup_sandbox
     # Verbatim shape from a production peer serving two ports; backends mirror
     # the listen ports there, so order and dedupe are what this pins.
-    FAKE_SERVE_STATUS='https://oci-prime.tailea9a52.ts.net:10254 (tailnet only)
+    FAKE_SERVE_STATUS='https://prime.tailnet.ts.net:10254 (tailnet only)
 |-- / proxy http://127.0.0.1:10254
 
-https://oci-prime.tailea9a52.ts.net:10255 (tailnet only)
+https://prime.tailnet.ts.net:10255 (tailnet only)
 |-- / proxy http://127.0.0.1:10255'
     export FAKE_SERVE_STATUS
     assert_eq "10254 10255" "$(tunnel_detect_serve_ports "$FX_PEER")" \
@@ -1769,7 +1769,7 @@ test_t413_add_targets_listen_port_for_real_serve_config() {
     # The reported incident: a peer whose serve config is the implicit-443
     # form. `tunnel add` without --remote-port must target 443, where Serve
     # listens — not the backend's 3001, which has no Serve listener.
-    FAKE_SERVE_STATUS='{"Web":{"oci-micro.tailea9a52.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
+    FAKE_SERVE_STATUS='{"Web":{"micro.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3001"}}}}}'
     export FAKE_SERVE_STATUS
     tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
     local fwd
@@ -1873,7 +1873,7 @@ _t439_drift_all_inert() { # <expected-rc>
 }
 
 _t439_claims_fixture() { # two Serve endpoints: 443 (backend 3000) + 8444 (backend 3001)
-    printf '%s' '{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"8444":{"Listen":"100.97.245.83:8444","Backend":"http://127.0.0.1:3001"}}}'
+    printf '%s' '{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"8444":{"Listen":"100.100.100.100:8444","Backend":"http://127.0.0.1:3001"}}}'
 }
 
 # --- probe wrapper: rc discipline and claims -------------------------------

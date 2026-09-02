@@ -15,7 +15,7 @@
 
 set -u
 
-HOSTNAME_ARG="${1:-oci-prime.tailea9a52.ts.net}"
+HOSTNAME_ARG="${1:-prime.tailnet.ts.net}"
 PORT="${2:-8443}"
 
 pass=0
