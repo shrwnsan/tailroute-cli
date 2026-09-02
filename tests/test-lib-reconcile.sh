@@ -101,3 +101,31 @@ test_reconcile_vpn_transition_calls_disable() {
     reconcile >/dev/null 2>&1
     if (( DISABLE_CALLED == 1 && ENABLE_CALLED == 0 )); then return 0; else return 1; fi
 }
+
+# A bad RECONCILE_REASSERT_TICKS must never reach arithmetic (fatal under
+# set -u) nor degrade to re-asserting on every tick.
+test_reconcile_sanitize_rejects_invalid_ticks() {
+    _mock_reconcile_env
+    RECONCILE_REASSERT_TICKS="abc"; _reconcile_sanitize_reassert_ticks
+    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
+    RECONCILE_REASSERT_TICKS="0";   _reconcile_sanitize_reassert_ticks
+    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
+    RECONCILE_REASSERT_TICKS="08";  _reconcile_sanitize_reassert_ticks
+    [[ "$RECONCILE_REASSERT_TICKS" == "15" ]] || return 1
+    RECONCILE_REASSERT_TICKS="30";  _reconcile_sanitize_reassert_ticks
+    [[ "$RECONCILE_REASSERT_TICKS" == "30" ]] || return 1
+    return 0
+}
+
+# The reported symptom was log spam: an unchanged tick must emit no INFO
+# line (debug only), while a forced tick still applies loudly.
+test_reconcile_unchanged_tick_emits_no_info() {
+    _mock_reconcile_env
+    reconcile >/dev/null 2>&1          # transition → applies (INFO expected)
+    local out
+    out=$(reconcile)                   # unchanged → debug only
+    [[ "$out" != *"[INFO]"* ]] || return 1
+    out=$(reconcile force)             # forced → applies (INFO expected)
+    [[ "$out" == *"[INFO]"* ]] || return 1
+    return 0
+}

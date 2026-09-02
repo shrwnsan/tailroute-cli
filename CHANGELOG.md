@@ -4,9 +4,9 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [0.8.8] - 2026-09-03
 
-### Changed
-- **Reconcile logs and toggles on mode transitions, not every invocation** — route events can fire every few seconds while Tailscale is up, and `reconcile()` re-ran `enable/disable_magicdns` and logged an INFO line on every call (~21k identical lines/day under launchd, each a `tailscale` CLI spawn). Unchanged modes now short-circuit at debug level; MagicDNS is re-asserted every `RECONCILE_REASSERT_TICKS` (default 15) unchanged ticks so out-of-band changes still self-heal. `reconcile force` (used by the SIGHUP handler) bypasses the short-circuit.
-- Tests: unchanged-skip, re-assert threshold, force bypass, vpn-transition.
+### Fixed
+- **Reconcile logs and toggles on mode transitions, not every invocation** — route events can fire every few seconds while Tailscale is up, and `reconcile()` re-ran `enable/disable_magicdns` and logged an INFO line on every call (~21k identical lines/day under launchd, each a `tailscale` CLI spawn). Unchanged modes now short-circuit at debug level; MagicDNS is re-asserted every `RECONCILE_REASSERT_TICKS` (default 15) unchanged ticks so out-of-band changes still self-heal (~1 minute while route events flow, up to ~15 minutes on a quiet routing table). `reconcile force` (used by the SIGHUP handler) bypasses the short-circuit. Invalid `RECONCILE_REASSERT_TICKS` values fall back to the default instead of fatally aborting under `set -u`.
+- Tests: unchanged-skip, re-assert threshold, force bypass, vpn-transition, tick-input sanitization, log-level pin. 312 → 318.
 
 ## [0.8.7] - 2026-09-03
 

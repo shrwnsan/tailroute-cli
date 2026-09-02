@@ -28,10 +28,24 @@ source "$SCRIPT_DIR/lib-state.sh"
 # (debug-level) and only re-apply on a mode transition or every
 # RECONCILE_REASSERT_TICKS unchanged ticks — the re-assert preserves
 # self-healing against out-of-band MagicDNS changes. SIGHUP passes "force".
+#
+# All three variables are per-process: the safety-net poll runs in a forked
+# subshell (start_poll in lib-event-loop.sh) that inherits them at fork time
+# and keeps its own copies. Its first tick is a transition precisely because
+# no reconcile has run before the fork — an initial reconcile added before
+# start_poll would silently consume the subshell's first safety-net pass.
 # =============================================================================
+_reconcile_sanitize_reassert_ticks() {
+    # Must be a positive base-10 integer: a non-numeric value is a fatal
+    # "unbound variable" abort under set -u once used in arithmetic, and
+    # 0 / negatives / leading-zero octal tokens (08) silently re-assert
+    # every tick. Fall back to the default rather than trust a bad override.
+    [[ "${RECONCILE_REASSERT_TICKS:-}" =~ ^[1-9][0-9]*$ ]] || RECONCILE_REASSERT_TICKS=15
+}
 _RECONCILE_LAST_MODE=""
 _RECONCILE_TICK_COUNT=0
 RECONCILE_REASSERT_TICKS="${RECONCILE_REASSERT_TICKS:-15}"
+_reconcile_sanitize_reassert_ticks
 
 # =============================================================================
 # reconcile — Main decision logic
@@ -95,7 +109,7 @@ reconcile() {
             log_debug "reconcile: mode unchanged ($mode); skipping re-apply"
             return 0
         fi
-        log_info "Re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_TICKS} ticks"
+        log_debug "reconcile: re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_TICKS} ticks"
     fi
     _RECONCILE_TICK_COUNT=0
     _RECONCILE_LAST_MODE="$mode"
