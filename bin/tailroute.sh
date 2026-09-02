@@ -1285,6 +1285,10 @@ Commands:
         Registered tunnels as JSON, one per line.
   restart [<peer>]
         Restart one or all tunnel jobs.
+  journal clear [--force]
+        Clear a recovery journal left by an interrupted add, update, or
+        remove (print it, then state the stranded op). An interrupted add
+        is refused without --force: it may hold a live /etc/hosts mapping.
   open <peer>
         Open the tunnel's bookmarkable URL in the default browser.
 
@@ -1311,6 +1315,15 @@ EOF
         restart)
             shift
             tunnel_do_restart "$@"
+            ;;
+        journal)
+            shift
+            if [ "${1:-}" != "clear" ]; then
+                echo "ERROR: unknown tunnel journal command '${1:-}' — use 'tailroute tunnel journal clear'" >&2
+                exit 2
+            fi
+            shift
+            tunnel_do_journal_clear "$@"
             ;;
         open)
             shift

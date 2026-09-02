@@ -384,16 +384,18 @@ tunnel_registry_check_env() {
 }
 
 # tunnel_registry_op <mode> [peer] [entry-json-or-ip]
-# modes: all | get <peer> | add <peer> <entry> | remove <peer> | update-ip <peer> <ip>
+# modes: all | get <peer> | add <peer> <entry> | update <peer> <entry>
+#        | remove <peer> | update-ip <peer> <ip>
 # Exit: 0 ok · 2 invalid data · 4 already registered · 5 not found · 6 registry corrupt/version
 tunnel_registry_op() {
     TUNNEL_REGISTRY_PATH="$TUNNEL_REGISTRY" \
     TUNNEL_REG_VERSION="$TUNNEL_REGISTRY_VERSION" \
+    TUNNEL_REG_SOURCE="${TUNNEL_REG_SOURCE:-cli}" \
     TUNNEL_REG_MODE="$1" \
     TUNNEL_REG_PEER="${2:-}" \
     TUNNEL_REG_ENTRY="${3:-}" \
     "$PYTHON3_CMD" <<'PY'
-import json, os, re, sys, tempfile, uuid
+import datetime, json, os, re, sys, tempfile, uuid
 
 path = os.environ["TUNNEL_REGISTRY_PATH"]
 expected_version = int(os.environ["TUNNEL_REG_VERSION"])
@@ -407,6 +409,25 @@ def die(code, msg):
 
 LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 CGNAT_RE = re.compile(r"^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.([0-9]{1,3})\.([0-9]{1,3})$")
+
+# T-438: per-entry audit trail.  Appended only here — the single mutation
+# point — and capped at the last 20 records.  Never read for recovery; the
+# journal is the recovery mechanism.
+TUNNEL_REG_TX_CAP = 20
+TUNNEL_REG_SOURCE = os.environ.get("TUNNEL_REG_SOURCE") or "cli"
+
+def append_tx(entry, op, before, after):
+    txs = entry.get("transactions")
+    if not isinstance(txs, list):
+        txs = []
+    txs.append({
+        "op": op,
+        "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "forwards-before": before,
+        "forwards-after": after,
+        "source": TUNNEL_REG_SOURCE,
+    })
+    entry["transactions"] = txs[-TUNNEL_REG_TX_CAP:]
 
 def migrate_v1_to_v2(data):
     for t in data["tunnels"]:
@@ -498,15 +519,57 @@ elif mode == "add":
     for t in tunnels:
         if t["peer"] == peer:
             die(4, "ERROR: tunnel for '%s' already registered — remove it first" % peer)
+    append_tx(entry, "add", [], list(entry.get("forwards") or []))
     tunnels.append(entry)
     save(data)
-elif mode == "remove":
-    kept = [t for t in tunnels if t["peer"] != peer]
-    if len(kept) == len(tunnels):
+elif mode == "update":
+    # T-436/T-438: replace one peer's entry in a single atomic save (the
+    # update path used to be remove + add, a two-save window where a crash
+    # lost the entry outright) and record what changed.
+    try:
+        entry = json.loads(entry_raw)
+    except Exception:
+        die(2, "ERROR: invalid entry JSON")
+    validate_entry(entry)
+    stored = None
+    for t in tunnels:
+        if t["peer"] == peer:
+            stored = t
+            break
+    if stored is None:
         die(5, "ERROR: tunnel for '%s' not found" % peer)
-    data["tunnels"] = kept
+    # Identity and history are the registry's, not the caller's JSON — a
+    # caller holding a stale entry must not clobber records written since.
+    for k in ("peerID", "jobID", "createdAt"):
+        if k not in entry and k in stored:
+            entry[k] = stored[k]
+    entry["transactions"] = stored.get("transactions", [])
+    append_tx(entry, "update",
+              list(stored.get("forwards") or []),
+              list(entry.get("forwards") or []))
+    for i, t in enumerate(tunnels):
+        if t is stored:
+            tunnels[i] = entry
+            break
+    save(data)
+elif mode == "remove":
+    victim = None
+    for t in tunnels:
+        if t["peer"] == peer:
+            victim = t
+            break
+    if victim is None:
+        die(5, "ERROR: tunnel for '%s' not found" % peer)
+    append_tx(victim, "remove", list(victim.get("forwards") or []), [])
+    # Evidence write first: the tombstone record lands in the live registry,
+    # so the mutation write below displaces that state into .bak and the
+    # removed entry's final transaction stays auditable.
+    save(data)
+    data["tunnels"] = [t for t in tunnels if t["peer"] != peer]
     save(data)
 elif mode == "update-ip":
+    # Deliberately not recorded in transactions[]: IP refreshes would flood
+    # the 20-record cap and evict the add/update evidence it exists to keep.
     hit = False
     for t in tunnels:
         if t["peer"] == peer:
@@ -529,6 +592,7 @@ tunnel_registry_all() {
 
 tunnel_registry_get()   { tunnel_registry_op get "$1"; }
 tunnel_registry_add()   { tunnel_registry_op add "$1" "$2"; }
+tunnel_registry_update(){ tunnel_registry_op update "$1" "$2"; }
 tunnel_registry_remove(){ tunnel_registry_op remove "$1"; }
 
 # Python one-shots over registry JSON (kept trivial; validation lives in the registry op)
@@ -1311,18 +1375,37 @@ print(json.dumps(e, sort_keys=True))
     added_pairs="${added_pairs# }"
     pairs="${pairs# }"
 
-    tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
-    tunnel_registry_add "$peer" "$new_fwd" || return 1
-
     local label plist log_path
     label="$(tunnel_label_for_peer "$peer")"
     plist="$(tunnel_plist_path_for_peer "$peer")"
     log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
 
-    # Restore the previous healthy job: old plist bytes + old registry entry.
+    # T-437b: the snapshot IS the rollback (old plist bytes).  Take it before
+    # any mutation — a silent `cp || true` left every rollback branch below
+    # restoring nothing, so a failed copy now aborts a consistent update.
+    if [ ! -f "$plist" ]; then
+        echo "ERROR: cannot snapshot $plist (missing) — aborting update before any mutation; run 'tailroute tunnel status' to repair" >&2
+        return 1
+    fi
+    if ! cp "$plist" "$plist.prev"; then
+        rm -f "$plist.prev"
+        echo "ERROR: cannot snapshot $plist — aborting update before any mutation; run 'tailroute tunnel status' to repair" >&2
+        return 1
+    fi
+
+    # T-437a: write-ahead.  Journal the intended update BEFORE any registry
+    # mutation — the add path already does this.  A crash past this point
+    # leaves recoverable state; a failed journal write aborts instead of
+    # mutating a registry no journal could vouch for.
     local update_steps='["registry","plist","bootstrap","tls"]'
-    _tun_journal_write update "$peer" "$update_steps" '[]' || true
-    cp "$plist" "$plist.prev" 2>/dev/null || true
+    if ! _tun_journal_write update "$peer" "$update_steps" '[]'; then
+        rm -f "$plist.prev"
+        echo "ERROR: cannot write the recovery journal $TUNNEL_JOURNAL_PATH — aborting update before any mutation" >&2
+        return 1
+    fi
+
+    tunnel_registry_update "$peer" "$new_fwd" || {
+        rm -f "$plist.prev"; _tun_journal_clear; return 1; }
     tunnel_job_bootout "$label" >/dev/null 2>&1 || true
 
     # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pair args
@@ -1331,8 +1414,7 @@ print(json.dumps(e, sort_keys=True))
         echo "ROLLED BACK: could not regenerate job — previous job restored" >&2
         if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
         [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
-        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
-        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
         _tun_journal_clear
         return 1
     fi
@@ -1343,8 +1425,7 @@ print(json.dumps(e, sort_keys=True))
         echo "ROLLED BACK: job bootstrap failed — previous job restored" >&2
         if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
         [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
-        tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
-        tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+        tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
         _tun_journal_clear
         return 1
     fi
@@ -1360,8 +1441,7 @@ print(json.dumps(e, sort_keys=True))
             tunnel_job_bootout "$label" >/dev/null 2>&1 || true
             if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; fi
             [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
-            tunnel_registry_remove "$peer" >/dev/null 2>&1 || true
-            tunnel_registry_add "$peer" "$entry" >/dev/null 2>&1 || true
+            tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
             _tun_journal_clear
             return 1
         fi
@@ -1468,7 +1548,7 @@ tunnel_do_add() {
             # update is not idempotent (the crashed attempt may have already
             # appended the forward), so any incomplete journal gates it.
             if _tun_journal_has_incomplete; then
-                echo "ERROR: incomplete journal for '$(_tun_journal_peer)' ($(_tun_journal_op)) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+                echo "ERROR: incomplete journal for '$(_tun_journal_peer)' ($(_tun_journal_op)) — recover with 'tailroute tunnel journal clear' (state: 'tailroute tunnel status')" >&2
                 tunnel_lock_release; return 1
             fi
             tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
@@ -1593,7 +1673,7 @@ tunnel_do_add() {
         if [ "$jpeer" = "$peer" ] && [ "$jop" = "add" ]; then
             echo "NOTE: recovering incomplete add for '$peer' from previous run" >&2
         else
-            echo "ERROR: incomplete journal for '$jpeer' ($jop) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+            echo "ERROR: incomplete journal for '$jpeer' ($jop) — recover with 'tailroute tunnel journal clear' (state: 'tailroute tunnel status')" >&2
             tunnel_lock_release; return 1
         fi
     fi
@@ -1703,7 +1783,7 @@ tunnel_do_remove() {
         if [ "$jpeer" = "$peer" ] && [ "$jop" = "remove" ]; then
             echo "NOTE: recovering incomplete remove for '$peer' from previous run" >&2
         else
-            echo "ERROR: incomplete journal for '$jpeer' ($jop) — run 'tailroute tunnel status' to recover, or remove $TUNNEL_JOURNAL_PATH manually" >&2
+            echo "ERROR: incomplete journal for '$jpeer' ($jop) — recover with 'tailroute tunnel journal clear' (state: 'tailroute tunnel status')" >&2
             tunnel_lock_release; return 1
         fi
     fi
@@ -1760,6 +1840,79 @@ tunnel_do_remove() {
         return 1
     fi
     echo "Tunnel removed: $peer (hosts entry and launchd job cleaned up)"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# T-437: `tunnel journal clear` — first-class recovery for a stranded journal
+# -----------------------------------------------------------------------------
+# Recovery is a command, not magic.  Per-op rules for an INCOMPLETE entry:
+#   add    → refused without --force: an interrupted add may hold a live
+#            /etc/hosts mapping or a half-built job that clearing would orphan
+#   update → allowed: with write-ahead ordering, a re-run either appends
+#            cleanly or hits the shipped duplicate-refusal; remedy is printed
+#   remove → allowed (removal is idempotent)
+# A complete entry (completed == steps) holds no stranded state and always
+# clears.  Duplicate-refusal on re-run is unchanged — this command is the one
+# remedy for every half-state.
+tunnel_do_journal_clear() {
+    local force="no"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force|-f) force="yes" ;;
+            -*) echo "ERROR: unknown tunnel journal clear flag '$1'" >&2; return 2 ;;
+            *) echo "ERROR: unexpected argument '$1'" >&2; return 2 ;;
+        esac
+        shift
+    done
+
+    if [ ! -f "$TUNNEL_JOURNAL_PATH" ]; then
+        echo "No incomplete journal — nothing to clear."
+        return 0
+    fi
+
+    local jop jpeer
+    jop="$(_tun_journal_op)"
+    jpeer="$(_tun_journal_peer)"
+    echo "Journal at $TUNNEL_JOURNAL_PATH:"
+    cat "$TUNNEL_JOURNAL_PATH"
+
+    if ! _tun_journal_has_incomplete; then
+        echo "Journal entry is complete — no stranded state; clearing it."
+        _tun_journal_clear
+        return 0
+    fi
+
+    case "$jop" in
+        add)
+            if [ "$force" != "yes" ]; then
+                echo "ERROR: interrupted 'add' for '$jpeer' — it may hold a live /etc/hosts mapping or a half-built job" >&2
+                echo "Inspect first:   tailroute tunnel status" >&2
+                echo "Explicit clear:  tailroute tunnel journal clear --force" >&2
+                return 1
+            fi
+            echo "Cleared interrupted 'add' for '$jpeer' (--force) — leftovers, if any, are reported by:"
+            echo "  tailroute tunnel status"
+            ;;
+        update)
+            echo "Interrupted 'update' for '$jpeer'. Remedy:"
+            echo "  tailroute tunnel remove $jpeer && tailroute tunnel add $jpeer"
+            echo "Journal cleared."
+            ;;
+        remove)
+            echo "Interrupted 'remove' for '$jpeer' — removal is idempotent; re-run if anything remains:"
+            echo "  tailroute tunnel remove $jpeer"
+            echo "Journal cleared."
+            ;;
+        *)
+            if [ "$force" != "yes" ]; then
+                echo "ERROR: unrecognized stranded op '$jop' for '$jpeer' — refusing without --force" >&2
+                return 1
+            fi
+            echo "Cleared unrecognized journal op '$jop' for '$jpeer' (--force)."
+            ;;
+    esac
+    _tun_journal_clear
     return 0
 }
 
@@ -1923,7 +2076,7 @@ tunnel_do_status() {
             echo "INCOMPLETE JOURNAL: $jop for '$jpeer' — a previous operation did not finish."
             echo "  Journal: $TUNNEL_JOURNAL_PATH"
             echo "  To recover: re-run the same command, or inspect the journal."
-            echo "  To discard: rm $TUNNEL_JOURNAL_PATH"
+            echo "  To discard: tailroute tunnel journal clear [--force]"
         fi
         return 1
     fi

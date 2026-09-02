@@ -280,3 +280,28 @@ test_help_documents_open_and_allow_unverified_tls() {
     assert_contains "open <peer>" "$tunnel"
     assert_contains "adaptive path" "$tunnel"
 }
+
+# T-437: journal clear is a user-facing recovery command, not a lib-only helper
+test_help_documents_journal_clear() {
+    local tunnel
+    tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
+    assert_contains "journal clear [--force]" "$tunnel"
+}
+
+test_journal_clear_wired_through_cli() {
+    local journal="$TEST_TMPDIR/wired.journal"
+    local out rc=0
+    out="$(TUNNEL_JOURNAL_PATH="$journal" "$BIN_DIR/tailroute.sh" tunnel journal clear 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "'tunnel journal clear' must be wired through the CLI"
+    assert_contains "No incomplete journal" "$out"
+}
+
+test_journal_clear_refuses_add_through_cli() {
+    local journal="$TEST_TMPDIR/refuse.journal"
+    printf '{"op":"add","peer":"prime","steps":["registry","hosts","plist"],"completed":["registry"],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$journal"
+    local out rc=0
+    out="$(TUNNEL_JOURNAL_PATH="$journal" "$BIN_DIR/tailroute.sh" tunnel journal clear 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "interrupted add must be refused without --force through the CLI"
+    assert_contains "--force" "$out"
+    [ -f "$journal" ] || { echo "journal must survive a refused clear"; return 1; }
+}

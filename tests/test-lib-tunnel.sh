@@ -846,7 +846,9 @@ test_registry_v2_schema_has_new_fields() {
     assert_contains '"peerID"' "$got"
     assert_contains '"jobID"' "$got"
     assert_contains '"allowUnverifiedTLS": false' "$got"
-    assert_contains '"transactions": []' "$got"
+    # T-438: transactions[] now records the add that just happened
+    assert_contains '"transactions": [{' "$got"
+    assert_contains '"forwards-after": [{"localPort": 8443, "remotePort": 443}]' "$got"
     assert_contains '"magicDNSSuffix": "tailnet.ts.net"' "$got"
 }
 
@@ -1042,6 +1044,159 @@ test_t436_update_adopts_stored_ssh_alias_without_flag() {
     local fwd
     fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
     assert_eq "8443:443 8444:8080" "$fwd"
+}
+
+# =============================================================================
+# T-437: update-transaction hardening (write-ahead ordering, snapshot, clear)
+# =============================================================================
+
+# T-437a: the update journal must be written BEFORE any registry mutation.
+# Injecting a journal-write failure at that boundary must abort while the
+# registry still holds the previous forward set (recoverable, no lies).
+test_t437_update_journals_before_registry_mutation() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    # journal writes fail: the update must abort BEFORE touching the registry
+    cat > "$TUNNEL_SANDBOX/bin/mktemp-fail-journal" <<'MOCK'
+#!/bin/sh
+case "${1:-}" in
+    *tunnels.journal*) exit 1 ;;
+esac
+exec /usr/bin/mktemp "$@"
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/mktemp-fail-journal"
+    if MKTEMP_CMD="$TUNNEL_SANDBOX/bin/mktemp-fail-journal" tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1; then
+        _assert_fail "update must fail when the journal cannot be written"
+    fi
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "write-ahead: registry must be untouched when the journal write fails"
+}
+
+# T-437b: the plist.prev snapshot IS the rollback. A failed (or impossible)
+# snapshot must abort the update before any mutation — no journal, no
+# registry churn, no silent rollback-into-nothing later.
+test_t437_update_aborts_when_snapshot_fails() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    rm -f "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist"
+    local out rc=0
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "update must abort when the plist snapshot cannot be taken"
+    assert_contains "snapshot" "$out"
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
+    assert_eq 1 "$n" "registry untouched when the snapshot fails"
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "no journal may be written when the snapshot fails"; }
+    [ ! -f "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.$FX_PEER.plist.prev" ] || { _assert_fail "no partial snapshot may be left behind"; }
+}
+
+# T-437c: journal clear is a first-class command with per-op rules.
+test_t437_journal_clear_refuses_add_without_force() {
+    _tunnel_setup_sandbox
+    printf '{"op":"add","peer":"prime","steps":["registry","hosts","plist"],"completed":["registry"],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$TUNNEL_JOURNAL_PATH"
+    local out rc=0
+    out="$(tunnel_do_journal_clear 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "interrupted add must be refused without --force"
+    assert_contains "--force" "$out"
+    [ -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "journal must survive a refused clear"; }
+    out="$(tunnel_do_journal_clear --force 2>&1)" || { echo "forced clear failed: $out"; return 1; }
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "journal must be cleared with --force"; }
+}
+
+test_t437_journal_clear_update_prints_remedy() {
+    _tunnel_setup_sandbox
+    printf '{"op":"update","peer":"prime","steps":["registry","plist","bootstrap","tls"],"completed":["registry"],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$TUNNEL_JOURNAL_PATH"
+    local out
+    out="$(tunnel_do_journal_clear 2>&1)" || { echo "update-journal clear failed: $out"; return 1; }
+    assert_contains "tailroute tunnel remove prime && tailroute tunnel add prime" "$out"
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "update journal should be cleared"; }
+}
+
+test_t437_journal_clear_remove_allowed() {
+    _tunnel_setup_sandbox
+    printf '{"op":"remove","peer":"prime","steps":["bootout","plist","hosts","registry"],"completed":["bootout"],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$TUNNEL_JOURNAL_PATH"
+    local out
+    out="$(tunnel_do_journal_clear 2>&1)" || { echo "remove-journal clear failed: $out"; return 1; }
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "remove journal should be cleared"; }
+}
+
+test_t437_journal_clear_completed_entry_needs_no_force() {
+    _tunnel_setup_sandbox
+    # completed == steps: the op finished, so nothing is stranded
+    printf '{"op":"add","peer":"prime","steps":["registry","hosts"],"completed":["registry","hosts"],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$TUNNEL_JOURNAL_PATH"
+    local out rc=0
+    out="$(tunnel_do_journal_clear 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "a complete journal entry holds no stranded state"
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || { _assert_fail "complete journal entry should be cleared"; }
+}
+
+test_t437_journal_clear_noop_when_absent() {
+    _tunnel_setup_sandbox
+    local out rc=0
+    out="$(tunnel_do_journal_clear 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "clear with no journal is a clean no-op"
+    assert_contains "No incomplete journal" "$out"
+}
+
+test_t437_journal_clear_unknown_op_needs_force() {
+    _tunnel_setup_sandbox
+    printf '{"op":"frobnicate","peer":"prime","steps":["registry"],"completed":[],"pid":99999,"ts":"2026-09-02T00:00:00Z"}\n' > "$TUNNEL_JOURNAL_PATH"
+    local out rc=0
+    out="$(tunnel_do_journal_clear 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "an unrecognized stranded op must not be cleared casually"
+    assert_contains "--force" "$out"
+}
+
+# =============================================================================
+# T-438: transactions[] audit trail
+# =============================================================================
+
+test_t438_registry_transactions_recorded_on_add() {
+    _tunnel_setup_sandbox
+    export TUNNEL_REG_SOURCE=test
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local last
+    last="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["transactions"][-1]))')"
+    assert_contains '"op": "add"' "$last"
+    assert_contains '"source": "test"' "$last"
+    assert_contains '"forwards-before": []' "$last"
+}
+
+test_t438_registry_transactions_update_records_before_after() {
+    _tunnel_setup_sandbox
+    export TUNNEL_REG_SOURCE=test
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
+    local last
+    last="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["transactions"][-1]))')"
+    assert_contains '"op": "update"' "$last"
+    assert_contains '"forwards-before": [{"localPort": 8443, "remotePort": 443}]' "$last"
+    assert_contains '"remotePort": 8080' "$last"
+}
+
+test_t438_registry_transactions_capped_at_20() {
+    _tunnel_setup_sandbox
+    export TUNNEL_REG_SOURCE=test
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local entry i
+    entry="$(tunnel_registry_get "$FX_PEER")"
+    for i in $(seq 1 22); do
+        tunnel_registry_update "$FX_PEER" "$entry" >/dev/null || { echo "update $i failed"; return 1; }
+    done
+    local n
+    n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["transactions"]))')"
+    assert_eq 20 "$n" "transactions[] must cap at the last 20 records"
+}
+
+test_t438_remove_leaves_transaction_evidence_in_bak() {
+    _tunnel_setup_sandbox
+    export TUNNEL_REG_SOURCE=test
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    tunnel_registry_remove "$FX_PEER"
+    local op
+    op="$(cat "$TUNNEL_REGISTRY.bak" | "$PYTHON3_CMD" -c 'import json,sys; d=json.load(sys.stdin); e=[t for t in d["tunnels"] if t["peer"]=="prime"][0]; print(e["transactions"][-1]["op"])')"
+    assert_eq "remove" "$op" "removed entry's final transaction must survive in the .bak"
 }
 
 test_t436_update_rejects_duplicate_remote_port() {
