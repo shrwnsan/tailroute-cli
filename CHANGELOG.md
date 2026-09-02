@@ -2,6 +2,12 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.1] - 2026-09-02
+
+### Features
+- **`tunnel drift` with no peer audits every registered tunnel** — one section per peer in registry order (same format as the single-peer report), probed sequentially. Exit 0 when every peer produced a verdict; 1 when any peer's probe failed or its serve reply was unparseable. An empty registry prints a hint and exits 0. `tunnel drift <peer>` is unchanged (including unregistered-peer support), and flags are still refused in both forms — the read-only, applies-nothing invariant holds and is now tested for the loop path too.
+- Tests: 5 new (290 → 295).
+
 ## [0.8.0] - 2026-09-02
 
 ### Features
