@@ -1373,12 +1373,12 @@ print(json.dumps(e, sort_keys=True))
     rm -f "$plist.prev"
     _tun_journal_write update "$peer" "$update_steps" '["registry","plist","bootstrap","tls"]' || true
     _tun_journal_clear
-    echo "Forward added: $peer"
     local ap
     for ap in $added_pairs; do
         lport="${ap%%:*}"; rport="${ap##*:}"
         echo "  URL: https://$hostname:$lport (forwards to remote port $rport)"
     done
+    echo "Forward added: $peer"
     return 0
 }
 
@@ -1476,7 +1476,8 @@ tunnel_do_add() {
             fi
             tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
             tunnel_lock_release
-            echo "Forward added: $peer"
+            # tunnel_update_add_forward already printed the URL list and the
+            # confirmation — printing it here duplicated both lines (v0.7.8).
             return 0
         fi
         echo "ERROR: tunnel for '$peer' already registered — remove it first: tailroute tunnel remove $peer" >&2

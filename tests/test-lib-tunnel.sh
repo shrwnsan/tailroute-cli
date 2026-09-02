@@ -1243,6 +1243,20 @@ test_status_backend_probe_targets_peer_ts_ip() {
     assert_contains "/usr/bin/nc -z $FX_IP 443" "$(cat "$FAKE_PROBE_LOG")"
 }
 
+test_incremental_add_prints_forward_added_once_after_urls() {
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || { echo "incremental add failed: $out"; return 1; }
+    assert_eq 1 "$(printf '%s\n' "$out" | grep -c '^Forward added:')" "exactly one 'Forward added' line expected"
+    local url_line added_line
+    url_line="$(printf '%s\n' "$out" | grep -n 'URL:.*8444' | head -1 | cut -d: -f1)"
+    added_line="$(printf '%s\n' "$out" | grep -n '^Forward added:' | head -1 | cut -d: -f1)"
+    [ -n "$url_line" ] || { echo "no URL line for the new forward: $out"; return 1; }
+    [ -n "$added_line" ] || { echo "no 'Forward added' line: $out"; return 1; }
+    [ "$url_line" -lt "$added_line" ] || _assert_fail "URL list must precede 'Forward added': $out"
+}
+
 # =============================================================================
 # Production-asymmetry hardening (v0.7.4)
 # =============================================================================
