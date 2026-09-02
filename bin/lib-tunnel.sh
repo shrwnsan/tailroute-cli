@@ -2595,6 +2595,34 @@ tunnel_do_list() {
     tunnel_registry_entries
 }
 
+# v0.8.4: quick human index of registered tunnels — registry read only,
+# zero probing (the slow end is `status`, the comparison is `drift`).
+tunnel_do_peers() {
+    local count=0 entry p alias fwd_pairs first_lport hostname
+    while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        p="$(tunnel_registry_field "$entry" peer)"
+        hostname="$(tunnel_registry_field "$entry" hostname)"
+        alias="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin).get("sshAlias", ""))')"
+        fwd_pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+        local nfwd=0
+        nfwd=$(printf ' %s ' "$fwd_pairs" | wc -w | tr -d ' ')
+        first_lport="${fwd_pairs%%:*}"
+        count=$((count + 1))
+        printf '%s' "$p"
+        if [ -n "$alias" ] && [ "$alias" != "$p" ]; then
+            printf ' (alias: %s)' "$alias"
+        fi
+        printf ' — %s forward%s — https://%s:%s\n' "$nfwd" "$([ "$nfwd" -eq 1 ] || printf s)" "$hostname" "$first_lport"
+    done <<EOF
+$(tunnel_registry_entries)
+EOF
+    if [ "$count" -eq 0 ]; then
+        echo "No registered tunnels. Add one: tailroute tunnel add <peer>"
+    fi
+    return 0
+}
+
 # T-420: open the tunnel's bookmarkable URL in the default browser.
 tunnel_do_open() { # <peer>
     local peer="${1:-}"

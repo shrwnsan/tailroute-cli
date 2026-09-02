@@ -137,6 +137,7 @@ Usage:
                                   status        Health of all tunnels
                                   open <peer>   Open a tunnel's URL in the browser
                                   list          Registered tunnels (JSON)
+                                  peers         Registered tunnels at a glance
                                   restart       Restart tunnel jobs
                                   drift <peer>  Report serve-config drift (read-only; no peer = all)
   tailroute --version           Show version
@@ -1284,6 +1285,10 @@ Commands:
         commands. Exit codes: 0 healthy, 1 degraded, 2 error, 3 not found.
   list
         Registered tunnels as JSON, one per line.
+  peers
+        Registered tunnels at a glance: peer, ssh alias, forward count,
+        and the primary URL. Registry-only — no probing (use status for
+        health, drift for comparison).
   restart [<peer>]
         Restart one or all tunnel jobs.
   journal clear [--force]
@@ -1321,6 +1326,10 @@ EOF
         list)
             shift
             tunnel_do_list "$@"
+            ;;
+        peers)
+            shift
+            tunnel_do_peers "$@"
             ;;
         restart)
             shift
