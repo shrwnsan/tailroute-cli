@@ -2,6 +2,11 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.6] - 2026-09-03
+
+### Changed
+- **Sanitized test fixtures and docs of real environment values** — a real tailnet hostname, real peer hostnames, and the real peer IP had leaked into test fixtures, the e2e script default, and one changelog line; all replaced with generic equivalents (`prime.tailnet.ts.net`, `micro.tailnet.ts.net`, `100.100.100.100`). No behavior change; 311/311.
+
 ## [0.8.5] - 2026-09-03
 
 ### Fixed
