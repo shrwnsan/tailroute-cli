@@ -1330,6 +1330,306 @@ print(" ".join(ports))
 '
 }
 
+# -----------------------------------------------------------------------------
+# Serve-config drift advisor (T-439) — strictly read-only
+# -----------------------------------------------------------------------------
+# `tunnel drift <peer>` compares what a peer's `tailscale serve` config claims
+# (queried over ssh) with the local tunnel registry and prints the difference.
+# It writes nothing — no registry, no hosts, no plists, no journal, and not even
+# a lock dir (acquiring the transaction lock would itself create a directory).
+# It never touches the peer. There is no apply path and none may grow: every
+# suggestion is a full command the human runs themselves, and removal stays
+# manual by policy.
+
+# Probe the peer's serve status. Deliberately NOT tunnel_detect_serve_ports,
+# whose contract folds every failure into "no ports": here the outcome is
+# explicit, because a peer that cannot be queried is not a peer that serves
+# nothing.
+#   rc 0 + claims on stdout  peer reported a parseable serve config. Claims are
+#                            TSV `listen-port<TAB>backend`; an EMPTY stdout is a
+#                            verdict too — the peer reports no serve config.
+#   rc 3                     probe FAILED (ssh could not run the command) — no verdict
+#   rc 4                     the peer replied, but the output is unrecognizable — no verdict
+tunnel_probe_serve_config() { # <alias>
+    local alias="$1" raw
+    raw="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$alias" \
+        "tailscale serve status" 2>/dev/null </dev/null)" || return 3
+    TUNNEL_PROBE_SERVE_RAW="$raw" "$PYTHON3_CMD" <<'PY' || return 4
+import json, os, re, sys
+
+raw = os.environ["TUNNEL_PROBE_SERVE_RAW"]
+stripped = raw.strip()
+
+def port_of(url):
+    # https://host.ts.net without an explicit port is serve's default 443.
+    m = re.search(r":(\d+)", url)
+    if m:
+        return m.group(1)
+    return "443" if url.lower().startswith("https://") else "80"
+
+def collect(rows):
+    # One HTTPS endpoint shows up in both Web and TCP; keep one claim per port
+    # and let a later report fill in a backend the earlier one lacked.
+    by_port = {}
+    for port, backend in rows:
+        if port in by_port and by_port[port]:
+            continue
+        by_port[port] = backend
+    return list(by_port.items())
+
+def emit(rows):
+    for port, backend in collect(rows):
+        print("%s\t%s" % (port, backend))
+    sys.exit(0)
+
+# Nothing on the wire — or tailscale's own "no serve config" wording — is a
+# parseable empty report: the peer answered and serves nothing.
+if stripped == "" or "no serve config" in stripped.lower():
+    emit([])
+
+rows = []
+try:
+    data = json.loads(stripped)
+except Exception:
+    data = None
+if isinstance(data, dict):
+    web = data.get("Web") or {}
+    for url in web.keys():
+        backend = ""
+        for handler in ((web[url] or {}).get("Handlers") or {}).values():
+            candidate = (handler or {}).get("Backend") or ""
+            if candidate and not backend:
+                backend = candidate
+        rows.append((port_of(str(url)), backend))
+    for listen, spec in (data.get("TCP") or {}).items():
+        # A hostile or odd key is dropped rather than reported or turned into a port.
+        if re.match(r"^[0-9]+$", str(listen)):
+            rows.append((str(listen), (spec or {}).get("Backend") or ""))
+    emit(rows)
+
+# Older builds print human-readable status: a listen URL on its own line, with
+# the backend on a "|-" continuation line under it.
+last = None
+for line in stripped.splitlines():
+    bare = line.strip()
+    if bare.startswith("|"):
+        if last is not None and not rows[last][1]:
+            m = re.search(r"https?://[^\s\"']+", bare)
+            if m:
+                rows[last] = (rows[last][0], m.group(0))
+        continue
+    m = re.search(r"https?://[^\s\"']+", bare)
+    if not m:
+        continue
+    rows.append((port_of(m.group(0)), ""))
+    last = len(rows) - 1
+if rows:
+    emit(rows)
+
+sys.exit(4)   # the peer replied, but nothing recognizable — no verdict
+PY
+}
+
+# Read-only registry snapshot for the advisor. Deliberately does NOT go through
+# tunnel_registry_check_env: that helper mkdir/chmods the config dir, and drift
+# must write nothing — including on a machine that never created a registry.
+# Prints two lines: the peer's entry JSON ("" when the peer is unregistered) and
+# every registered local port, space-separated (forward-cap arithmetic).
+# rc: 0 ok · 6 registry unreadable (corrupt or unsupported version)
+tunnel_drift_registry_state() { # <peer>
+    if [[ -L "$TUNNEL_REGISTRY" ]]; then
+        echo "ERROR: $TUNNEL_REGISTRY is a symlink — refusing to read" >&2
+        return 6
+    fi
+    if [ ! -f "$TUNNEL_REGISTRY" ]; then
+        printf '\n\n'
+        return 0
+    fi
+    TUNNEL_DRIFT_PEER="$1" TUNNEL_DRIFT_VERSION="$TUNNEL_REGISTRY_VERSION" \
+    TUNNEL_DRIFT_REGISTRY="$TUNNEL_REGISTRY" "$PYTHON3_CMD" <<'PY'
+import json, os, sys
+
+peer = os.environ["TUNNEL_DRIFT_PEER"]
+try:
+    # Opened by path, not stdin: the heredoc below owns this process's stdin.
+    with open(os.environ["TUNNEL_DRIFT_REGISTRY"], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    sys.stderr.write("ERROR: cannot read the tunnel registry\n")
+    sys.exit(6)
+if (not isinstance(data, dict)
+        or data.get("version") != int(os.environ["TUNNEL_DRIFT_VERSION"])
+        or not isinstance(data.get("tunnels"), list)):
+    sys.stderr.write("ERROR: tunnel registry version unsupported or corrupt\n")
+    sys.exit(6)
+
+entry = ""
+ports = []
+for t in data["tunnels"]:
+    if not isinstance(t, dict):
+        continue
+    if entry == "" and t.get("peer") == peer:
+        entry = json.dumps(t, sort_keys=True)
+    for f in t.get("forwards") or []:
+        if isinstance(f, dict) and isinstance(f.get("localPort"), int):
+            ports.append(str(f["localPort"]))
+print(entry)
+print(" ".join(ports))
+PY
+}
+
+# Render the report. Peer-derived strings are semi-untrusted: they are printed,
+# never executed, and backends are reduced to inert characters before printing.
+tunnel_drift_render() { # <peer> <entry-json-or-""> <claims-tsv> <cap>
+    TUNNEL_DRIFT_PEER="$1" TUNNEL_DRIFT_ENTRY="$2" TUNNEL_DRIFT_CLAIMS="$3" \
+    TUNNEL_DRIFT_CAP="$4" TUNNEL_DRIFT_PORT_START="$TUNNEL_PORT_START" \
+    TUNNEL_DRIFT_PORT_END="$TUNNEL_PORT_END" "$PYTHON3_CMD" <<'PY'
+import json, os, re, sys
+
+peer = os.environ["TUNNEL_DRIFT_PEER"]
+cap = int(os.environ["TUNNEL_DRIFT_CAP"])
+start = os.environ["TUNNEL_DRIFT_PORT_START"]
+end = os.environ["TUNNEL_DRIFT_PORT_END"]
+
+claims = []
+for line in os.environ["TUNNEL_DRIFT_CLAIMS"].splitlines():
+    parts = line.split("\t")
+    port = parts[0] if parts else ""
+    if not re.match(r"^[0-9]+$", port):
+        continue
+    backend = parts[1] if len(parts) > 1 else ""
+    if not re.match(r"^[A-Za-z0-9._:/?#[\]()*-]*$", backend):
+        backend = "(unrecognized backend)"
+    claims.append((port, backend))
+
+entry_raw = os.environ["TUNNEL_DRIFT_ENTRY"]
+registered = entry_raw != ""
+hostname = ""
+forwards = []
+if registered:
+    entry = json.loads(entry_raw)
+    hostname = entry.get("hostname", "")
+    for f in entry.get("forwards") or []:
+        forwards.append((str(f.get("localPort")), str(f.get("remotePort"))))
+
+reg_remote = [r for _, r in forwards]
+claim_ports = [p for p, _ in claims]
+missing = [c for c in claims if c[0] not in reg_remote]
+stale = [f for f in forwards if f[1] not in claim_ports]
+
+if not registered:
+    if claims:
+        n = len(claims)
+        print("%s: peer reports %d serve endpoint%s — not registered"
+              % (peer, n, "" if n == 1 else "s"))
+    else:
+        print("%s: peer reports no serve config — not registered" % peer)
+elif missing or stale:
+    print("%s: drift between the registry and the peer's serve config" % peer)
+else:
+    print("%s: no drift — registry matches the peer's serve config" % peer)
+
+print("  Registry forwards:")
+if registered:
+    for local, remote in forwards:
+        print("    127.0.0.1:%s -> remote %s   https://%s:%s" % (local, remote, hostname, local))
+else:
+    print("    (none — this peer is not registered)")
+
+print("  Peer reports (queried over ssh; read-only):")
+if claims:
+    for port, backend in claims:
+        print("    %s (backend %s)" % (port, backend or "unreported"))
+else:
+    print("    (none — the peer reports no serve config)")
+
+if missing and registered:
+    print("  Reported but not forwarded:")
+    for port, _ in missing:
+        print("    %s" % port)
+        print("    Run it yourself: tailroute tunnel add %s --remote-port %s" % (peer, port))
+if stale:
+    print("  Forwarded but not reported (the peer no longer serves these):")
+    for local, remote in stale:
+        print("    remote %s (local %s)   https://%s:%s" % (remote, local, hostname, local))
+        print("    Run it yourself: tailroute tunnel remove %s && tailroute tunnel add %s"
+              % (peer, peer))
+
+if len(claims) > cap:
+    print("  Cap: the peer reports %d serve endpoints; the local port range %s-%s has %d"
+          " free ports, so not all of them can be forwarded" % (len(claims), start, end, cap))
+
+if not registered:
+    if claims and len(claims) <= cap:
+        print("  Equivalent: tailroute tunnel add %s --remote-port %s"
+              % (peer, ",".join(p for p, _ in claims)))
+    else:
+        print("  Equivalent: tailroute tunnel add %s" % peer)
+
+print("  Policy: drift applies nothing — it cannot change the registry, hosts,")
+print("  launchd jobs, or the peer's serve config. Every command above is yours to run.")
+PY
+}
+
+# `tunnel drift <peer>` (T-439) — read-only serve-config advisor.
+# Exit: 0 a verdict was produced (including "the peer serves nothing")
+#       1 no verdict (probe failed, output unparseable, registry unreadable)
+#       2 usage error (missing/invalid peer, or any flag — drift takes none)
+tunnel_do_drift() {
+    [ $# -gt 0 ] || { echo "ERROR: tunnel drift requires <peer>" >&2; return 2; }
+    local peer="$1"
+    shift
+    [ $# -eq 0 ] || {
+        echo "ERROR: tunnel drift takes no flags or extra arguments — it is read-only advice (got '$1')" >&2
+        return 2
+    }
+    peer="$(tunnel_normalize_lower "$peer")"
+    tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 2; }
+
+    local state entry="" reg_ports=""
+    state="$(tunnel_drift_registry_state "$peer")" || {
+        echo "$peer: registry unreadable — no verdict; inspect with: tailroute tunnel status"
+        return 1
+    }
+    entry="$(printf '%s\n' "$state" | sed -n '1p')"
+    reg_ports="$(printf '%s\n' "$state" | sed -n '2p')"
+
+    # A registered peer is queried through the alias it was added with
+    # (same rule add/update apply); an unregistered peer falls back to proxy-<peer>.
+    local alias="$peer"
+    if [ -n "$entry" ]; then
+        alias="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; e=json.load(sys.stdin); print(e.get("sshAlias") or e["peer"])' 2>/dev/null)" || alias="$peer"
+    fi
+
+    local claims="" prc=0
+    claims="$(tunnel_probe_serve_config "$alias")" || prc=$?
+    if [ "$prc" -eq 3 ]; then
+        echo "$peer: probe FAILED — no verdict"
+        echo "  'tailscale serve status' over ssh to proxy-$alias did not succeed. Nothing was changed."
+        echo "  Trust the host first:  ssh proxy-$alias true"
+        echo "  Missing ssh config?  tailroute proxy-config ssh --peer $peer"
+        return 1
+    fi
+    if [ "$prc" -eq 4 ]; then
+        echo "$peer: serve status unparseable — no verdict"
+        echo "  proxy-$alias replied, but the output is not a recognizable serve config. Nothing was changed."
+        echo "  Inspect it yourself:  ssh proxy-$alias 'tailscale serve status'"
+        return 1
+    fi
+
+    # Forward cap: free local ports in the allocation range (T-404.1) — i.e. how
+    # many of the peer's reported endpoints could actually be forwarded.
+    local cap=0 p
+    # shellcheck disable=SC2086  # seq output is a plain port list
+    for p in $(seq "$TUNNEL_PORT_START" "$TUNNEL_PORT_END"); do
+        case " $reg_ports " in *" $p "*) continue ;; esac
+        cap=$((cap + 1))
+    done
+
+    tunnel_drift_render "$peer" "$entry" "$claims" "$cap"
+    return 0
+}
+
 # T-436: append one or more forwards to an existing peer's job, replacing the
 # launchd job transactionally (restore the previous healthy job on failure).
 # Per-user lock must already be held. Local ports come from tunnel_pick_port,

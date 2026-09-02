@@ -305,3 +305,26 @@ test_journal_clear_refuses_add_through_cli() {
     assert_contains "--force" "$out"
     [ -f "$journal" ] || { echo "journal must survive a refused clear"; return 1; }
 }
+
+# T-439: `tunnel drift` is a standalone, read-only advisor — it must be
+# dispatched, documented, and must accept no flags (no apply path exists).
+test_help_documents_drift() {
+    local top tunnel
+    top="$("$BIN_DIR/tailroute.sh" --help 2>/dev/null)"
+    assert_contains "drift <peer>" "$top"
+    tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
+    assert_contains "drift <peer>" "$tunnel"
+    assert_contains "read-only" "$tunnel"
+    assert_contains "Exit codes: 0 verdict" "$tunnel"
+}
+
+test_tunnel_drift_dispatches_and_requires_peer() {
+    local out rc=0
+    out="$("$BIN_DIR/tailroute.sh" tunnel drift 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "drift without a peer must be a usage error"
+    assert_contains "requires <peer>" "$out"
+    rc=0
+    out="$("$BIN_DIR/tailroute.sh" tunnel drift prime --apply 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "drift must refuse flags outright (no apply path)"
+    assert_contains "takes no flags" "$out"
+}

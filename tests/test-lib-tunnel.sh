@@ -83,12 +83,18 @@ esac
 MOCK
     cat > "$TUNNEL_SANDBOX/bin/ssh" <<'MOCK'
 #!/bin/sh
+[ -n "${SSH_CALL_LOG:-}" ] && printf '%s\n' "$*" >> "$SSH_CALL_LOG"
 [ "${FAIL_SSH:-0}" = "1" ] && exit 255
 # T-413: serve-status probe. Unset FAKE_SERVE_STATUS = locked-down peer
 # (remote command fails) — silent fallback.
 case "$*" in
     *"tailscale serve status"*)
-        [ -n "${FAKE_SERVE_STATUS:-}" ] && { printf '%s\n' "$FAKE_SERVE_STATUS"; exit 0; }
+        if [ -n "${FAKE_SERVE_STATUS:-}" ]; then
+            printf '%s\n' "$FAKE_SERVE_STATUS"
+            exit "${FAKE_SERVE_STATUS_RC:-0}"
+        fi
+        # T-439: reachable peer that reports no serve config (rc 0, no output)
+        [ "${FAKE_SERVE_STATUS_EMPTY:-0}" = "1" ] && exit "${FAKE_SERVE_STATUS_RC:-0}"
         exit 1 ;;
 esac
 # Remote backend probe (v0.7.8): the CLI asks the peer to run
@@ -1547,4 +1553,357 @@ test_t420_open_unknown_peer_fails() {
     local rc=0
     tunnel_do_open ghost >/dev/null 2>&1 || rc=$?
     assert_eq 3 "$rc" "unknown peer should exit 3 like status"
+}
+
+# =============================================================================
+# `tunnel drift` — read-only serve-config advisor (T-439)
+# =============================================================================
+# Spec contract: the advisor compares what the peer's `tailscale serve` config
+# claims (queried over ssh) against the local registry and prints the
+# difference. It writes NOTHING — not the registry, not hosts, not plists, not
+# the peer's serve config — in every outcome, and no apply path may exist.
+
+# Fixture: register prime directly (no launchd/plist machinery, no autodetect
+# interference from FAKE_SERVE_STATUS).
+_t439_register_prime() { # [forwards-pairs] [ssh-alias]
+    local pairs="${1:-$FX_FWD1}" alias="${2:-}" entry
+    if [ -n "$alias" ]; then
+        entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$pairs" "$alias")"
+    else
+        entry="$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$pairs")"
+    fi
+    tunnel_registry_add "$FX_PEER" "$entry" >/dev/null
+}
+
+# Byte-for-byte snapshot of every state tree drift could touch (config dir,
+# hosts file, LaunchAgents dir) plus the absence/presence of locks and journal.
+_t439_state_snapshot() {
+    local dir f
+    for dir in "$TUNNEL_CONFIG_DIR" "$TUNNEL_LAUNCHAGENTS_DIR"; do
+        echo "-- listing $dir"
+        [ -d "$dir" ] && (cd "$dir" && find . | LC_ALL=C sort)
+    done
+    for dir in "$TUNNEL_CONFIG_DIR" "$TUNNEL_LAUNCHAGENTS_DIR"; do
+        [ -d "$dir" ] || continue
+        (cd "$dir" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+            echo "-- bytes $dir/$f"
+            cat "$f"
+        done)
+    done
+    echo "-- hosts"
+    cat "$TUNNEL_HOSTS_FILE" 2>/dev/null || true
+    [ -e "$TUNNEL_LOCK_DIR" ] && echo "transaction lock dir present"
+    [ -e "$TUNNEL_JOURNAL_PATH" ] && echo "journal present"
+    [ -e "$TUNNEL_HOSTS_LOCK_DIR" ] && echo "hosts lock dir present"
+    return 0
+}
+
+# Runs one drift invocation and asserts it produced the expected exit code
+# AND left every state byte identical. Emits the output for content asserts.
+_t439_drift_inert() { # <peer> <expected-rc>
+    local peer="$1" expected_rc="$2" rc=0 out before after
+    before="$(_t439_state_snapshot)"
+    out="$(tunnel_do_drift "$peer" 2>&1)" || rc=$?
+    after="$(_t439_state_snapshot)"
+    assert_eq "$expected_rc" "$rc" "drift exit code (output was: $out)"
+    assert_eq "$before" "$after" "drift must not write any state (output was: $out)"
+    printf '%s\n' "$out"
+}
+
+_t439_claims_fixture() { # two Serve endpoints: 443 (backend 3000) + 8444 (backend 3001)
+    printf '%s' '{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"8444":{"Listen":"100.97.245.83:8444","Backend":"http://127.0.0.1:3001"}}}'
+}
+
+# --- probe wrapper: rc discipline and claims -------------------------------
+
+test_t439_probe_reports_claims_as_tsv() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"
+    export FAKE_SERVE_STATUS
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc" "a parsed report is a successful probe"
+    assert_contains "$(printf '443\thttp://127.0.0.1:3000')" "$out"
+    assert_contains "$(printf '8444\thttp://127.0.0.1:3001')" "$out"
+}
+
+test_t439_probe_dedupes_a_port_reported_twice() {
+    _tunnel_setup_sandbox
+    # one HTTPS serve shows up in both Web and TCP — one claim, not two
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"443":{"Backend":"http://127.0.0.1:3000"}}}'
+    export FAKE_SERVE_STATUS
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc"
+    assert_eq "$(printf '443\thttp://127.0.0.1:3000')" "$out" "duplicate port must collapse to one claim"
+}
+
+test_t439_probe_parses_human_text_status() {
+    _tunnel_setup_sandbox
+    # older builds print human-readable serve status, not JSON
+    FAKE_SERVE_STATUS='https://prime.tailnet.ts.net:443 (tailnet serve)
+|-- proxy to http://127.0.0.1:3000'
+    export FAKE_SERVE_STATUS
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc" "text serve status is parseable"
+    assert_contains "$(printf '443\thttp://127.0.0.1:3000')" "$out"
+}
+
+test_t439_probe_empty_report_is_rc0() {
+    _tunnel_setup_sandbox
+    # rc 0 with nothing on the wire = reachable peer, no serve config
+    FAKE_SERVE_STATUS_EMPTY=1
+    export FAKE_SERVE_STATUS_EMPTY
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc" "an empty report must be a successful probe, not a failure"
+    assert_eq "" "$out" "no claims expected"
+}
+
+test_t439_probe_tailscale_no_serve_wording_is_empty_report() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS='No serve config.'
+    export FAKE_SERVE_STATUS
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc" "tailscale's own empty-report wording must not become unparseable"
+    assert_eq "" "$out"
+}
+
+test_t439_probe_unparseable_is_rc4() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS='hello there, this is not a serve config'
+    export FAKE_SERVE_STATUS
+    local rc=0
+    tunnel_probe_serve_config "$FX_PEER" >/dev/null 2>&1 || rc=$?
+    assert_eq 4 "$rc" "replied-but-unrecognizable output is its own outcome"
+}
+
+test_t439_probe_failure_is_rc3() {
+    _tunnel_setup_sandbox
+    # locked-down peer: the remote command fails
+    local rc=0
+    tunnel_probe_serve_config "$FX_PEER" >/dev/null 2>&1 || rc=$?
+    assert_eq 3 "$rc" "a failed ssh probe must be its own outcome"
+    # reachable host, command refused: still a probe failure
+    FAKE_SERVE_STATUS='{"Web":{}}'
+    FAKE_SERVE_STATUS_RC=255
+    export FAKE_SERVE_STATUS FAKE_SERVE_STATUS_RC
+    rc=0
+    tunnel_probe_serve_config "$FX_PEER" >/dev/null 2>&1 || rc=$?
+    assert_eq 3 "$rc" "non-zero ssh exit must stay a probe failure"
+}
+
+test_t439_probe_drops_hostile_non_numeric_ports() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS='{"TCP":{"443":{},"8443; touch /tmp/pwned":{},"not-a-port":{}}}'
+    export FAKE_SERVE_STATUS
+    local out rc=0
+    out="$(tunnel_probe_serve_config "$FX_PEER")" || rc=$?
+    assert_eq 0 "$rc" "hostile TCP keys must not fail the probe"
+    assert_contains "$(printf '443\t')" "$out"
+    if printf '%s' "$out" | grep -q "pwned"; then
+        _assert_fail "hostile port text leaked into the claims"
+    fi
+}
+
+# --- verdicts ---------------------------------------------------------------
+
+test_t439_registered_peer_no_drift() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "no drift" "$out"
+    assert_contains "https://$FX_HOSTNAME:8443" "$out" "the full current forward set + URL must be shown"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "applies nothing" "$out" "inertness is stated as policy, not implied"
+}
+
+test_t439_missing_forward_detected() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    # peer serves 443 (forwarded) and 8444 (not forwarded)
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "drift between the registry and the peer's serve config" "$out"
+    assert_contains "Reported but not forwarded:" "$out"
+    assert_contains "8444" "$out"
+    assert_contains "tailroute tunnel add $FX_PEER --remote-port 8444" "$out" \
+        "the copy-paste artifact must be a full command"
+}
+
+test_t439_registry_forward_peer_does_not_serve() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443 8444:8080"
+    # peer serves only 443: the 8080 forward is now extra serve config
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "drift between the registry and the peer's serve config" "$out"
+    assert_contains "Forwarded but not reported" "$out"
+    assert_contains "remote 8080" "$out"
+    assert_contains "tailroute tunnel remove $FX_PEER && tailroute tunnel add $FX_PEER" "$out" \
+        "removal is manual and the artifact is a full command"
+}
+
+test_t439_peer_stopped_serving_entirely() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    # reachable, but reports no serve config at all -> the forward is stale
+    FAKE_SERVE_STATUS_EMPTY=1
+    export FAKE_SERVE_STATUS_EMPTY
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "drift between the registry and the peer's serve config" "$out"
+    assert_contains "the peer reports no serve config" "$out"
+    assert_contains "remote 443" "$out"
+}
+
+test_t439_unregistered_peer_with_claims() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "peer reports 2 serve endpoints — not registered" "$out"
+    assert_contains "Equivalent: tailroute tunnel add $FX_PEER --remote-port 443,8444" "$out"
+    assert_contains "applies nothing" "$out"
+    # the per-forward drift sections belong to registered peers only
+    if printf '%s' "$out" | grep -q "Reported but not forwarded"; then
+        _assert_fail "unregistered peer must not get per-forward drift sections: $out"
+    fi
+}
+
+test_t439_unregistered_peer_serves_nothing() {
+    _tunnel_setup_sandbox
+    FAKE_SERVE_STATUS_EMPTY=1
+    export FAKE_SERVE_STATUS_EMPTY
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "peer reports no serve config — not registered" "$out"
+    assert_contains "Equivalent: tailroute tunnel add $FX_PEER" "$out"
+}
+
+test_t439_probe_failed_no_verdict() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    # locked-down peer: remote command fails -> no verdict, exit 1
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 1)"
+    assert_contains "probe FAILED — no verdict" "$out"
+    assert_contains "ssh proxy-$FX_PEER true" "$out"
+    if printf '%s' "$out" | grep -q "no drift"; then
+        _assert_fail "a failed probe must not produce a verdict"
+    fi
+}
+
+test_t439_unparseable_no_verdict() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    FAKE_SERVE_STATUS='hello there, this is not a serve config'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 1)"
+    assert_contains "unparseable" "$out"
+    assert_contains "no verdict" "$out"
+}
+
+test_t439_unreadable_registry_no_verdict() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    echo "{ not json" > "$TUNNEL_REGISTRY"
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 1)"
+    assert_contains "no verdict" "$out"
+    assert_contains "tailroute tunnel status" "$out" "guidance must point at the recovery surface"
+}
+
+# --- inertness + command inertness -----------------------------------------
+
+test_t439_every_outcome_is_inert_and_read_only() {
+    _tunnel_setup_sandbox
+    export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
+    : > "$SSH_CALL_LOG"
+    _t439_register_prime "8443:443"
+
+    # every probe outcome, back to back
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"; export FAKE_SERVE_STATUS
+    _t439_drift_inert "$FX_PEER" 0 >/dev/null
+    unset FAKE_SERVE_STATUS
+    _t439_drift_inert "$FX_PEER" 1 >/dev/null                       # probe failed
+    FAKE_SERVE_STATUS_EMPTY=1; export FAKE_SERVE_STATUS_EMPTY
+    _t439_drift_inert "$FX_PEER" 0 >/dev/null
+    FAKE_SERVE_STATUS='unparseable noise'; export FAKE_SERVE_STATUS
+    unset FAKE_SERVE_STATUS_EMPTY
+    _t439_drift_inert "$FX_PEER" 1 >/dev/null
+
+    # the unregistered path (registry entry removed) is inert too
+    tunnel_registry_remove "$FX_PEER" >/dev/null
+    FAKE_SERVE_STATUS="$(_t439_claims_fixture)"; export FAKE_SERVE_STATUS
+    _t439_drift_inert "$FX_PEER" 0 >/dev/null
+
+    # command inertness: the only remote command ever run is the read-only one
+    local non_read
+    non_read="$(grep -cv 'tailscale serve status' "$SSH_CALL_LOG" || true)"
+    assert_eq 0 "$non_read" "drift must run nothing but 'tailscale serve status' over ssh: $(cat "$SSH_CALL_LOG")"
+}
+
+test_t439_uses_the_stored_ssh_alias() {
+    _tunnel_setup_sandbox
+    export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
+    : > "$SSH_CALL_LOG"
+    _t439_register_prime "8443:443" "shorty"
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+    export FAKE_SERVE_STATUS
+    _t439_drift_inert "$FX_PEER" 0 >/dev/null
+    grep -q "proxy-shorty" "$SSH_CALL_LOG" || { _assert_fail "probe must use the registry's stored ssh alias: $(cat "$SSH_CALL_LOG")"; }
+}
+
+test_t439_forward_cap_is_stated_when_exceeded() {
+    _tunnel_setup_sandbox
+    TUNNEL_PORT_START=8443
+    TUNNEL_PORT_END=8444          # cap: 2 free local ports
+    export TUNNEL_PORT_START TUNNEL_PORT_END
+    # three reported endpoints (443, 8444, 3000) against a cap of 2
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}},"TCP":{"8444":{},"3000":{}}}'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "$FX_PEER" 0)"
+    assert_contains "8443-8444 has 2 free ports" "$out" "the forward cap must be stated when the peer reports beyond it"
+}
+
+test_t439_usage_errors_take_no_flags() {
+    _tunnel_setup_sandbox
+    local rc=0 out
+    out="$(tunnel_do_drift 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "missing peer is a usage error"
+    assert_contains "requires <peer>" "$out"
+    rc=0
+    out="$(tunnel_do_drift "Bad Peer" 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "invalid peer label is a usage error"
+    rc=0
+    out="$(tunnel_do_drift "$FX_PEER" --json 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "drift takes no flags — advisory output only"
+    rc=0
+    out="$(tunnel_do_drift "$FX_PEER" extra 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "a second positional is a usage error"
+}
+
+test_t439_drift_normalizes_peer_label_case() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    FAKE_SERVE_STATUS='{"Web":{"https://prime.tailnet.ts.net:443":{"Handlers":{"/":{"Backend":"http://127.0.0.1:3000"}}}}}'
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert "PRIME" 0)"
+    assert_contains "no drift" "$out"
 }
