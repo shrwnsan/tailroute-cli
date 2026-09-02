@@ -20,7 +20,7 @@ When you have both Tailscale and a VPN (NordVPN, ProtonVPN, etc.) connected:
 
 ## Tuning
 
-The daemon re-asserts its MagicDNS decision every `RECONCILE_REASSERT_TICKS` reconcile ticks (default 15) so out-of-band DNS changes self-heal: within ~1 minute while route events are flowing, up to ~15 minutes on a quiet routing table. Invalid values fall back to the default. Override via the daemon's launchd `EnvironmentVariables` — the plist is rewritten on reinstall/upgrade, so re-apply after those.
+The daemon re-asserts its MagicDNS decision once `RECONCILE_REASSERT_SECONDS` (default 60) have passed since the last apply, so out-of-band DNS changes self-heal within about a minute on both the event and safety-net paths. Values below `POLL_SECONDS` (60) cannot make the safety-net poll faster; invalid values fall back to the default. Override via the daemon's launchd `EnvironmentVariables` — the plist is rewritten on reinstall/upgrade, so re-apply after those.
 
 ## Usage
 

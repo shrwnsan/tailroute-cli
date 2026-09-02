@@ -38,6 +38,30 @@ POLL_PID=""
 CLEANUP_IN_PROGRESS=0
 
 # =============================================================================
+# initial_reconcile — Apply policy once at daemon startup
+# =============================================================================
+# Closes the window where a freshly started daemon manages nothing (state is
+# per-Tailscale-session and resets on reconnect). Failure is non-fatal: the
+# event loop retries on the next route event, and startup must not
+# crash-loop via launchd KeepAlive. Guarded lock shape — a held lock must
+# never cause this process to release someone else's lock.
+#
+# Returns:
+#   0 - Always
+# =============================================================================
+initial_reconcile() {
+    if acquire_lock; then
+        if ! reconcile; then
+            log_warn "Initial reconcile failed (will retry)"
+        fi
+        release_lock 2>/dev/null || true
+    else
+        log_debug "Lock held at startup; skipping initial reconcile"
+    fi
+    return 0
+}
+
+# =============================================================================
 # run_event_loop — Monitor routing table and trigger reconciliation
 # =============================================================================
 # Pipes `/sbin/route -n monitor` output into a debounced event handler.
@@ -51,36 +75,55 @@ CLEANUP_IN_PROGRESS=0
 #   SIGHUP — Force immediate reconcile
 #
 # Returns:
-#   0 - Event loop exited cleanly (on signal)
-#   1 - Failed to setup signal handlers or start monitoring
+#   1 - Setup failed, or the route monitor stream died (poll killed; the
+#       caller should exit non-zero so launchd restarts the daemon).
+#       Signal termination exits from inside the handler and does not
+#       return through here.
 #
 # Side effects:
 #   - Sets up signal traps (SIGTERM, SIGINT, SIGHUP)
-#   - Starts background poll process
+#   - Applies reconcile() once at startup
+#   - Starts background poll process (killed on every exit path via EXIT trap)
 #   - Calls reconcile() repeatedly on route changes
 #   - Calls disable_magicdns() / enable_magicdns() indirectly via reconcile()
 # =============================================================================
 run_event_loop() {
     log_info "Event loop starting"
-    
+
     # Setup signal handlers before entering loop
     setup_signal_handlers || {
         log_error "Failed to setup signal handlers"
         return 1
     }
-    
+
+    # Apply policy once: daemon start should not wait for the first route
+    # event or poll tick (MagicDNS state is per-Tailscale-session). Must run
+    # BEFORE start_poll so the forked poll inherits applied state and its
+    # first tick is a time-gated re-assert, not a duplicate apply.
+    initial_reconcile
+
     # Start background safety-net poll
     start_poll || {
         log_error "Failed to start background poll"
         cleanup
         return 1
     }
-    
-    # Monitor routing table
-    # This will run until a signal interrupts it
-    route_monitor_loop
-    
-    # After signal, cleanup happens in signal handler
+
+    # Kill the poll on ANY exit path: a non-signal exit (route monitor
+    # death, a set -e failure) would otherwise orphan the poll subshell,
+    # which keeps reconciling forever, reparented to launchd. No-op on the
+    # signal path — handle_shutdown already cleaned up (idempotent).
+    trap cleanup EXIT
+
+    # Monitor routing table. Normal termination is a signal trap exiting
+    # the process, so reaching the end of route_monitor_loop means the
+    # monitor stream died — kill the poll and let launchd restart us.
+    route_monitor_loop || {
+        log_warn "Route monitor exited; daemon will restart"
+        cleanup
+        return 1
+    }
+
     return 0
 }
 
@@ -135,6 +178,11 @@ route_monitor_loop() {
     done < <("$ROUTE_CMD" -n monitor 2>/dev/null || true)
     
     log_debug "Route monitor loop exited"
+
+    # The while loop only exits on EOF from the monitor stream — normal
+    # termination is a signal trap exiting the process. Return non-zero so
+    # the caller kills the poll and launchd restarts the daemon.
+    return 1
 }
 
 # =============================================================================

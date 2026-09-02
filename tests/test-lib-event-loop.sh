@@ -219,25 +219,124 @@ test_event_loop_signal_setup() {
 
 test_event_loop_cleanup_on_shutdown() {
     setup_event_loop_test
-    
+
     # Start poll, verify it runs
     start_poll
     local pid="$POLL_PID"
-    
+
     if ! kill -0 "$pid" 2>/dev/null; then
         teardown_event_loop_test
         return 1
     fi
-    
+
     # Simulate shutdown cleanup
     cleanup
-    
+
     # Verify poll is dead
     if kill -0 "$pid" 2>/dev/null; then
         teardown_event_loop_test
         return 1
     fi
-    
+
+    teardown_event_loop_test
+    return 0
+}
+
+# =============================================================================
+# initial_reconcile tests
+# =============================================================================
+
+test_initial_reconcile_applies_policy() {
+    setup_event_loop_test
+
+    # Count reconcile invocations (mock: never touch real DNS state)
+    reconcile() { RECONCILE_CALLED=$((RECONCILE_CALLED + 1)); return 0; }
+    RECONCILE_CALLED=0
+
+    initial_reconcile
+
+    if (( RECONCILE_CALLED == 1 )); then
+        teardown_event_loop_test
+        return 0
+    fi
+    teardown_event_loop_test
+    return 1
+}
+
+test_initial_reconcile_failure_is_nonfatal() {
+    setup_event_loop_test
+
+    reconcile() { return 1; }
+
+    # Startup must not propagate failure — launchd KeepAlive would loop
+    if initial_reconcile >/dev/null 2>&1; then
+        teardown_event_loop_test
+        return 0
+    fi
+    teardown_event_loop_test
+    return 1
+}
+
+test_initial_reconcile_held_lock_skips() {
+    setup_event_loop_test
+
+    # Lock held by another process: must skip reconcile entirely (and must
+    # never release a lock this process does not hold)
+    acquire_lock() { return 1; }
+    reconcile() { RECONCILE_CALLED=$((RECONCILE_CALLED + 1)); return 0; }
+    RECONCILE_CALLED=0
+
+    initial_reconcile
+
+    if (( RECONCILE_CALLED == 0 )); then
+        teardown_event_loop_test
+        return 0
+    fi
+    teardown_event_loop_test
+    return 1
+}
+
+# =============================================================================
+# route monitor EOF tests
+# =============================================================================
+
+test_route_monitor_eof_returns_nonzero() {
+    setup_event_loop_test
+
+    # Monitor that exits immediately: the stream EOFs, loop ends
+    ROUTE_CMD="/usr/bin/true"
+
+    # EOF is abnormal — must report failure so the caller restarts
+    if route_monitor_loop >/dev/null 2>&1; then
+        teardown_event_loop_test
+        return 1
+    fi
+    teardown_event_loop_test
+    return 0
+}
+
+test_event_loop_restarts_cleanly_on_monitor_eof() {
+    setup_event_loop_test
+
+    # Mock the reconcile layer: never touch real DNS state from a test
+    reconcile() { return 0; }
+    # Monitor that exits immediately
+    ROUTE_CMD="/usr/bin/true"
+
+    # The loop must report failure AND kill the poll itself — an orphaned
+    # poll keeps reconciling forever, reparented to launchd
+    if run_event_loop >/dev/null 2>&1; then
+        teardown_event_loop_test
+        return 1
+    fi
+
+    if [[ -n "${POLL_PID:-}" ]] && kill -0 "$POLL_PID" 2>/dev/null; then
+        kill "$POLL_PID" 2>/dev/null || true
+        wait "$POLL_PID" 2>/dev/null || true
+        teardown_event_loop_test
+        return 1
+    fi
+
     teardown_event_loop_test
     return 0
 }
