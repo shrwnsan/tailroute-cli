@@ -337,3 +337,30 @@ test_tunnel_drift_dispatches_and_refuses_flags() {
     assert_eq 2 "$rc" "drift must refuse flags outright (no apply path)"
     assert_contains "takes no flags" "$out"
 }
+
+# `tunnel check <peer>` is the third read-only verb: it must be dispatched,
+# documented, and carry the disambiguation line that separates it from
+# status/drift. Takes no flags (drift precedent).
+test_help_documents_check() {
+    local top tunnel
+    top="$("$BIN_DIR/tailroute.sh" --help 2>/dev/null)"
+    assert_contains "check <peer>" "$top"
+    assert_contains "status = inventory" "$top"
+    assert_contains "check = the browser's truth" "$top"
+    tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
+    assert_contains "check <peer>" "$tunnel"
+    assert_contains "browser's truth" "$tunnel"
+    assert_contains "Exit codes: 0 healthy" "$tunnel"
+}
+
+test_tunnel_check_dispatches_and_refuses_flags() {
+    local out rc=0
+    # bare form: an explicit peer is required (out of scope without one)
+    out="$("$BIN_DIR/tailroute.sh" tunnel check 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "bare check is a usage error"
+    assert_contains "requires <peer>" "$out"
+    rc=0
+    out="$("$BIN_DIR/tailroute.sh" tunnel check --json 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "check must refuse flags outright (read-only probe)"
+    assert_contains "takes no flags" "$out"
+}

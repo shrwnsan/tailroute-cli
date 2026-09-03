@@ -66,6 +66,7 @@ LAUNCHCTL_CMD="${LAUNCHCTL_CMD:-/bin/launchctl}"
 DSCACHEUTIL_CMD="${DSCACHEUTIL_CMD:-/usr/bin/dscacheutil}"
 PYTHON3_CMD="${PYTHON3_CMD:-/usr/bin/python3}"
 MKTEMP_CMD="${MKTEMP_CMD:-/usr/bin/mktemp}"
+CURL_CMD="${CURL_CMD:-/usr/bin/curl}"
 # ${VAR:-sudo} would also override an explicitly-empty value; tests set
 # TUNNEL_SUDO_CMD="" to run the privileged path unprivileged.
 if [ -z "${TUNNEL_SUDO_CMD+x}" ]; then
@@ -1729,6 +1730,166 @@ EOF
         tunnel_do_drift "$peer" || rc=1
     done
     return "$rc"
+}
+
+# -----------------------------------------------------------------------------
+# `tunnel check <peer>` — the browser's truth (read-only)
+# -----------------------------------------------------------------------------
+# Probes, from this Mac, the exact path a browser crosses for one registered
+# tunnel — hosts override → local forward listener → TLS identity → HTTP
+# answer — and names the first layer that breaks with its repair. Zero ssh:
+# unlike drift, the verdict comes from this machine's network path, not from
+# what the peer claims.  status = inventory · drift = the peer's claim ·
+# check = the browser's truth.
+# It writes nothing in every outcome — no registry, hosts, plist, journal, or
+# lock dir (the registry read is the same inert snapshot drift uses), and the
+# peer is never contacted. There is no apply path: every repair is a command
+# the human runs themselves.
+
+# One browser-equivalent HTTPS round trip through the local forward. Prints
+# the HTTP status code on stdout; prints nothing when curl itself fails
+# before an HTTP answer exists (transport failure — curl's own write-out for
+# that case is "000"). Single-purpose seam: the add paths will reuse this
+# probe, so it stays dependency-light and verifies only what it is given.
+tunnel_check_http_code() { # <hostname> <port>
+    local code
+    code="$("$CURL_CMD" -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$1:$2/" 2>/dev/null)" || true
+    printf '%s\n' "$code"
+}
+
+# `tunnel check <peer>` — read-only browser-path probe.
+# Layers run in browser order and stop at the first break, so the repair is
+# always the next thing the browser would need. Per registered forward.
+# Exit: 0 every layer green on every forward (verdict: healthy)
+#       1 a layer failed, or no verdict was possible (registry unreadable)
+#       2 usage error (missing peer, invalid label, any flag — check takes none)
+#       3 unregistered peer (status's ghost contract)
+tunnel_do_check() {
+    if [ $# -eq 0 ]; then
+        echo "ERROR: tunnel check requires <peer>" >&2
+        return 2
+    fi
+    local peer="$1"
+    shift
+    case "$peer" in
+        -*)
+            echo "ERROR: tunnel check takes no flags — it is a read-only probe (got '$peer')" >&2
+            return 2
+            ;;
+    esac
+    [ $# -eq 0 ] || {
+        echo "ERROR: tunnel check takes no flags or extra arguments — it is a read-only probe (got '$1')" >&2
+        return 2
+    }
+    peer="$(tunnel_normalize_lower "$peer")"
+    tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 2; }
+
+    local state entry="" hostname pairs
+    state="$(tunnel_drift_registry_state "$peer")" || {
+        echo "$peer: registry unreadable — no verdict; inspect with: tailroute tunnel status"
+        return 1
+    }
+    entry="$(printf '%s\n' "$state" | sed -n '1p')"
+    if [ -z "$entry" ]; then
+        echo "ERROR: tunnel for '$peer' not found — register it first: tailroute tunnel add $peer" >&2
+        return 3
+    fi
+
+    # The registry snapshot re-serialises entries as written, but a hand-edited
+    # registry can still hold a malformed one: a diagnostic names it, it does
+    # not die on it.
+    # shellcheck disable=SC2015  # the || branch is a shared no-verdict exit, not an else
+    hostname="$(tunnel_registry_field "$entry" hostname)" && [ -n "$hostname" ] && \
+        pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')" || {
+        echo "$peer: registry entry unreadable — no verdict; inspect with: tailroute tunnel status"
+        return 1
+    }
+    # An entry that forwards nothing would otherwise run zero probes and reach
+    # the healthy verdict below over layers it never tested.
+    if [ -z "$pairs" ]; then
+        echo "$peer: registry entry has no forwards — no verdict; inspect with: tailroute tunnel status"
+        return 1
+    fi
+
+    # Informational only: the branch is picked per connection by the ssh
+    # wrapper, so this reports which one current state would favour.
+    local branch
+    if tunnel_port_in_use 1055; then
+        branch="SOCKS5 proxy branch (127.0.0.1:1055 up)"
+    else
+        branch="direct branch (127.0.0.1:1055 down)"
+    fi
+
+    echo "$peer: probing the browser path for $hostname (read-only — nothing is applied, the peer is not contacted)"
+    local failed="" pair lport rport http_code
+    # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pairs
+    for pair in $pairs; do
+        lport="${pair%%:*}"; rport="${pair##*:}"
+        echo ""
+        echo "  127.0.0.1:$lport -> remote $rport   https://$hostname:$lport"
+        if tunnel_hosts_has_mapping "$hostname"; then
+            echo "    hosts:    $hostname -> 127.0.0.1 ($TUNNEL_HOSTS_FILE)"
+        else
+            echo "    hosts:    MISSING for $hostname in $TUNNEL_HOSTS_FILE"
+            echo "              repair: tailroute tunnel remove $peer && tailroute tunnel add $peer"
+            failed="hosts entry missing for $hostname"
+            continue
+        fi
+        if tunnel_port_in_use "$lport"; then
+            echo "    listener: 127.0.0.1:$lport accepting"
+        else
+            echo "    listener: 127.0.0.1:$lport closed — the tunnel job is down"
+            echo "              repair: tailroute tunnel restart $peer"
+            failed="listener closed on 127.0.0.1:$lport"
+            continue
+        fi
+        if _tun_tls_verify "$hostname" "$lport"; then
+            echo "    tls:      certificate verifies for $hostname"
+        else
+            echo "    tls:      certificate problem for $hostname — compare with the peer's claim: tailroute tunnel drift $peer"
+            failed="TLS does not verify for $hostname"
+            continue
+        fi
+        http_code="$(tunnel_check_http_code "$hostname" "$lport")"
+        case "$http_code" in
+            2??|3??)
+                echo "    http:     HTTP $http_code from the peer's Serve"
+                ;;
+            502|503|504)
+                echo "    http:     HTTP $http_code — the peer's Serve upstream reports $http_code"
+                echo "              fix the service on the peer (the tunnel itself delivered it)"
+                failed="the peer's Serve upstream reports $http_code on 127.0.0.1:$lport"
+                ;;
+            ""|000)
+                # The registry stores no scheme, so this is open between a
+                # target that does not speak TLS/HTTP on this port and a
+                # broken transport — it must not assert one over the other.
+                echo "    http:     no HTTP answer — the target may not speak TLS/HTTP on this port, or the transport broke"
+                echo "              inspect the service on the peer, or: tailroute tunnel restart $peer, then re-check"
+                failed="no HTTP answer on 127.0.0.1:$lport"
+                ;;
+            *)
+                # Anything else is the peer's app answering after the tunnel
+                # delivered the request: all four layers are proven, so it is
+                # information, never a path failure (same discipline as
+                # drift/status — app behaviour does not flip path health).
+                echo "    http:     HTTP $http_code — the tunnel delivered the request; the peer's app answered"
+                echo "              the path is proven end to end — what the app says is the peer's business"
+                ;;
+        esac
+        echo "    path:     $branch (informational — the ssh wrapper picks per connection)"
+    done
+
+    echo ""
+    if [ -z "$failed" ]; then
+        # Path health, not app health: a delivered 404 proves the path and
+        # must not be called a green layer.
+        echo "$peer: healthy — the path is proven on every forward"
+    else
+        echo "$peer: check FAILED — $failed"
+    fi
+    echo "Policy: check probes and prints only — it changes nothing on this Mac or the peer."
+    [ -z "$failed" ]
 }
 
 # T-436: append one or more forwards to an existing peer's job, replacing the

@@ -140,6 +140,8 @@ Usage:
                                   peers         Registered tunnels at a glance
                                   restart       Restart tunnel jobs
                                   drift <peer>  Report serve-config drift (read-only; no peer = all)
+                                  check <peer>  Probe the live browser path (read-only; zero ssh)
+  Read-only verbs: status = inventory · drift = the peer's claim · check = the browser's truth
   tailroute --version           Show version
   tailroute --dry-run           Preview actions without modifying DNS
   tailroute install             Install daemon (requires sudo)
@@ -1306,6 +1308,16 @@ Commands:
         Exit codes: 0 every peer gave a verdict (including "serves
         nothing"), 1 some peer gave no verdict (probe failed or output
         unparseable), 2 usage.
+  check <peer>
+        Probe the exact path a browser takes from this Mac — hosts
+        override, local forward listener, TLS identity, HTTP answer —
+        and name the first layer that breaks with its repair. The
+        browser's truth: the three read-only verbs answer different
+        questions (status = inventory · drift = the peer's claim ·
+        check = the browser's truth). Read-only: nothing is applied and
+        the peer is never contacted. Takes no flags; <peer> is required.
+        Exit codes: 0 healthy, 1 a layer failed or no verdict, 2 usage,
+        3 not registered.
 
 Browser URL after add: https://<peer>.<tailnet>.ts.net:<local-port>
 Works with VPN active (via SOCKS5) or inactive (direct) — adaptive.
@@ -1351,6 +1363,10 @@ EOF
         drift)
             shift
             tunnel_do_drift "$@"
+            ;;
+        check)
+            shift
+            tunnel_do_check "$@"
             ;;
         remove-all)
             # Used by `tailroute uninstall` (per-user cleanup); not interactive
