@@ -1854,14 +1854,20 @@ tunnel_do_check() {
                 failed="the peer's Serve upstream reports $http_code on 127.0.0.1:$lport"
                 ;;
             ""|000)
-                echo "    http:     no answer — the connection failed before HTTP (transport-level)"
-                echo "              repair: tailroute tunnel restart $peer, then re-check"
-                failed="no HTTP answer on 127.0.0.1:$lport (transport)"
+                # The registry stores no scheme, so this is open between a
+                # target that does not speak TLS/HTTP on this port and a
+                # broken transport — it must not assert one over the other.
+                echo "    http:     no HTTP answer — the target may not speak TLS/HTTP on this port, or the transport broke"
+                echo "              inspect the service on the peer, or: tailroute tunnel restart $peer, then re-check"
+                failed="no HTTP answer on 127.0.0.1:$lport"
                 ;;
             *)
-                echo "    http:     HTTP $http_code — the tunnel delivered the request; this answer is the peer's app's"
-                echo "              investigate the service on the peer"
-                failed="the peer's app answered HTTP $http_code on 127.0.0.1:$lport"
+                # Anything else is the peer's app answering after the tunnel
+                # delivered the request: all four layers are proven, so it is
+                # information, never a path failure (same discipline as
+                # drift/status — app behaviour does not flip path health).
+                echo "    http:     HTTP $http_code — the tunnel delivered the request; the peer's app answered"
+                echo "              the path is proven end to end — what the app says is the peer's business"
                 ;;
         esac
         echo "    path:     $branch (informational — the ssh wrapper picks per connection)"

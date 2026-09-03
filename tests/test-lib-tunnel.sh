@@ -2441,16 +2441,94 @@ test_check_curl_transport_failure_is_distinct_from_502() {
     _t439_register_prime "8443:443"
     _tunnel_check_add_hosts_mapping
     FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
-    # curl rc 7 with a "000" write-out: connection-level, no HTTP answer exists
+    # curl rc 7 with a "000" write-out: no HTTP answer exists. The registry
+    # stores no scheme, so the wording must stay open between "the target
+    # does not speak TLS/HTTP here" and "the transport broke" — never assert
+    # one over the other, and never read as a Serve upstream error.
     _tunnel_check_set_http 000 7
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 1)"
-    assert_contains "no answer" "$out"
+    assert_contains "no HTTP answer" "$out"
+    assert_contains "may not speak TLS/HTTP" "$out"
     assert_contains "transport" "$out"
-    assert_contains "tailroute tunnel restart $FX_PEER" "$out" "a connection-level failure points at the local path first"
+    assert_contains "tailroute tunnel restart $FX_PEER" "$out" "the local path is one of the named remedies"
     if printf '%s' "$out" | grep -q "upstream"; then
-        _assert_fail "a transport failure must not read as an upstream error: $out"
+        _assert_fail "a missing HTTP answer must not read as an upstream error: $out"
     fi
+}
+
+test_check_http_404_is_delivered_not_failed() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    # An app-generated answer is proof the path works: only Serve-generated
+    # 502/503/504 are path information (drift/status discipline — peer app
+    # behaviour never flips path health).
+    _tunnel_check_set_http 404
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    assert_contains "HTTP 404" "$out"
+    assert_contains "delivered" "$out" "the answer must be reported as delivered, not as a path failure"
+    assert_contains "healthy" "$out" "all four layers green is the verb's verdict"
+    if printf '%s' "$out" | grep -q "upstream"; then
+        _assert_fail "an app-generated answer must not read as a Serve upstream failure: $out"
+    fi
+    if printf '%s' "$out" | grep -q "FAILED"; then
+        _assert_fail "a delivered app answer must not fail the check: $out"
+    fi
+}
+
+test_check_app_answer_on_one_forward_does_not_degrade_the_verdict() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443 8444:8080"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443 8444"; export FAKE_NC_OPEN
+    # per-port answers: 8443 is an app 404 (delivered), 8444 answers 200
+    cat > "$TUNNEL_SANDBOX/bin/curl-selective" <<'MOCK'
+#!/bin/sh
+for _a in "$@"; do
+    case "$_a" in
+        *:8443*) printf '404'; exit 0 ;;
+        *:8444*) printf '200'; exit 0 ;;
+    esac
+done
+printf '200'
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/curl-selective"
+    CURL_CMD="$TUNNEL_SANDBOX/bin/curl-selective"
+    export CURL_CMD
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    assert_contains "HTTP 404" "$out"
+    assert_contains "HTTP 200" "$out"
+    assert_contains "healthy" "$out" "an app answer on one forward must not degrade the peer verdict"
+}
+
+test_check_serve_upstream_failure_still_degrades_mixed_forwards() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443 8444:8080"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443 8444"; export FAKE_NC_OPEN
+    # guard (green before and after the catch-all fix): a Serve upstream
+    # failure still wins the worst-verdict aggregation alongside an app answer
+    cat > "$TUNNEL_SANDBOX/bin/curl-selective" <<'MOCK'
+#!/bin/sh
+for _a in "$@"; do
+    case "$_a" in
+        *:8443*) printf '404'; exit 0 ;;
+        *:8444*) printf '502'; exit 0 ;;
+    esac
+done
+printf '200'
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/curl-selective"
+    CURL_CMD="$TUNNEL_SANDBOX/bin/curl-selective"
+    export CURL_CMD
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "fix the service on the peer" "$out"
+    assert_contains "check FAILED" "$out"
 }
 
 test_check_reports_each_forward_of_a_multi_forward_tunnel() {
