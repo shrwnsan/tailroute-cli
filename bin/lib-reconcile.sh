@@ -54,6 +54,26 @@ _RECONCILE_LAST_APPLY=0
 RECONCILE_REASSERT_SECONDS="${RECONCILE_REASSERT_SECONDS:-60}"
 _reconcile_sanitize_reassert_seconds
 
+# -----------------------------------------------------------------------------
+# _reconcile_log — Emit a reconcile outcome line at the level it merits
+# -----------------------------------------------------------------------------
+# A periodic re-assert repeats what the last genuine transition already
+# reported, so it logs at debug; transitions and forced reconciles log at INFO.
+#
+# Args:
+#   $1 - 1 when this pass is a periodic re-assert, 0 otherwise
+#   $2 - message
+# -----------------------------------------------------------------------------
+_reconcile_log() {
+    local reassert="$1"
+    shift
+    if (( reassert == 1 )); then
+        log_debug "$*"
+    else
+        log_info "$*"
+    fi
+}
+
 # =============================================================================
 # reconcile — Main decision logic
 # =============================================================================
@@ -73,8 +93,8 @@ _reconcile_sanitize_reassert_seconds
 #   1 - Failed to perform reconciliation
 #
 # Side effects:
-#   - Calls `log_info()` on mode transitions and periodic re-asserts;
-#     unchanged ticks log at debug level only
+#   - Calls `log_info()` on mode transitions and forced reconciles; periodic
+#     re-asserts and unchanged ticks log at debug level only
 #   - May call `disable_magicdns()` or `enable_magicdns()`
 #   - Updates state manifest via those functions
 # =============================================================================
@@ -84,6 +104,7 @@ reconcile() {
     local vpn_interface
     local ts_ip
     local mode
+    local reassert=0
 
     # Detect current interfaces
     ts_interface=$(find_tailscale_interface 2>/dev/null) || ts_interface=""
@@ -121,6 +142,7 @@ reconcile() {
             return 0
         fi
         log_debug "reconcile: re-asserting unchanged mode ($mode) after ${RECONCILE_REASSERT_SECONDS}s"
+        reassert=1
     fi
     # Stamp BEFORE the toggle: a wedged tailscale CLI must re-apply at the
     # next gate expiry, not on every event tick. Do not move this below the
@@ -130,12 +152,12 @@ reconcile() {
 
     case "$mode" in
         idle)
-            log_info "No Tailscale interface detected; idle"
+            _reconcile_log "$reassert" "No Tailscale interface detected; idle"
             return 0
             ;;
         vpn)
             # VPN is active with Tailscale — disable MagicDNS
-            log_info "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); disabling MagicDNS"
+            _reconcile_log "$reassert" "Tailscale detected ($ts_ip on $ts_interface), VPN active ($vpn_interface); disabling MagicDNS"
 
             if ! disable_magicdns; then
                 log_error "Failed to disable MagicDNS"
@@ -145,7 +167,7 @@ reconcile() {
             ;;
         no-vpn)
             # Tailscale active, no VPN — enable MagicDNS
-            log_info "Tailscale detected ($ts_ip on $ts_interface), no VPN; ensuring MagicDNS is enabled"
+            _reconcile_log "$reassert" "Tailscale detected ($ts_ip on $ts_interface), no VPN; ensuring MagicDNS is enabled"
 
             if ! enable_magicdns; then
                 log_error "Failed to enable MagicDNS"

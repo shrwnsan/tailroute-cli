@@ -146,7 +146,16 @@ test_cleanup_kills_poll() {
     
     # Run cleanup
     cleanup
-    
+
+    # stop_poll reaps and clears the handle so a later call cannot kill a
+    # recycled PID
+    if [[ -z "$POLL_PID" ]]; then
+        teardown_event_loop_test
+    else
+        teardown_event_loop_test
+        return 1
+    fi
+
     # Verify poll is dead
     if ! kill -0 "$pid" 2>/dev/null; then
         teardown_event_loop_test
@@ -312,6 +321,207 @@ test_route_monitor_eof_returns_nonzero() {
         return 1
     fi
     teardown_event_loop_test
+    return 0
+}
+
+# =============================================================================
+# shutdown vs in-flight toggle tests
+# =============================================================================
+# The poll subshell can be inside reconcile() — between spawning a `tailscale`
+# mutation and the state-manifest write that records it — when cleanup or
+# handle_shutdown delivers TERM. A subshell resets inherited traps to their
+# default action, so an untrapped TERM kills it at whatever command boundary it
+# is at: the mutation is orphaned (reparented to launchd, still running), the
+# manifest write never happens, and release_lock is skipped. These tests pin
+# the contract: TERM must take effect only at a reconcile boundary.
+
+# Cross-process rendezvous markers live under the test state dir
+setup_toggle_test() {
+    setup_event_loop_test
+    rm -f "$STATE_DIR"/*.marker "$STATE_DIR"/*.gate
+}
+
+# Bounded wait for a substring to appear in a marker file. Rendezvous, not
+# sleep-and-hope: the cap exists so a broken implementation fails the test
+# instead of hanging the suite.
+await_marker() {
+    local file="$1"
+    local want="$2"
+    local i=0
+    while (( i < 200 )); do
+        if [[ -f "$file" ]] && grep -q "$want" "$file" 2>/dev/null; then
+            return 0
+        fi
+        "$SLEEP_CMD" 0.05
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# Line number of the first occurrence of a pattern, or empty if absent
+marker_line() {
+    grep -n "$2" "$1" 2>/dev/null | head -1 | cut -d: -f1 || true
+}
+
+test_poll_survives_term_during_reconcile_and_completes_toggle() {
+    setup_toggle_test
+    local marker="$STATE_DIR/toggle.marker"
+    local gate="$STATE_DIR/toggle.gate"
+
+    # Mock the toggle layer: stays in flight until the test opens the gate
+    reconcile() {
+        echo "toggle-start" >> "$marker"
+        local i=0
+        while (( i < 200 )) && [[ ! -f "$gate" ]]; do
+            "$SLEEP_CMD" 0.05
+            i=$((i + 1))
+        done
+        echo "toggle-end" >> "$marker"
+        return 0
+    }
+
+    start_poll
+    local pid="$POLL_PID"
+    await_marker "$marker" "toggle-start" || return 1
+
+    # TERM lands while the toggle is in flight — what cleanup/handle_shutdown do
+    kill -TERM "$pid" 2>/dev/null || true
+    : > "$gate"
+
+    # The in-flight toggle must run to completion rather than be orphaned
+    await_marker "$marker" "toggle-end" || return 1
+
+    # The poll must have released the lock it held for that toggle
+    wait "$pid" 2>/dev/null || true
+    [[ ! -f "$LOCK_DIR/lock" ]] || return 1
+    return 0
+}
+
+# A TERM landing between the tick's spawn and the pid assignment leaves
+# _poll_halt nothing to kill, so the loop's wait would block out the full
+# POLL_SECONDS and shutdown overruns launchd's 20s exit timeout. The override
+# widens that spawn->track gap deterministically; the re-check, wait and break
+# after it are the production logic under test.
+test_poll_term_during_spawn_gap_does_not_block() {
+    setup_toggle_test
+    local marker="$STATE_DIR/gap.marker"
+
+    POLL_SECONDS=6
+    _poll_spawn_sleep() {
+        "$SLEEP_CMD" "$POLL_SECONDS" &
+        "$SLEEP_CMD" 0.3
+        _POLL_SLEEP_PID=$!
+    }
+
+    start_poll
+    local pid="$POLL_PID"
+
+    # Watchdog: SIGKILLs the poll and records the hang if the loop blocked
+    (
+        _wd_sleep=""
+        trap '"$KILL_CMD" "$_wd_sleep" 2>/dev/null || true; exit 0' TERM
+        "$SLEEP_CMD" 5 &
+        _wd_sleep=$!
+        wait "$_wd_sleep" 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
+        echo "hang" >> "$marker"
+    ) &
+    local watchdog=$!
+
+    # TERM lands inside the widened gap
+    ( "$SLEEP_CMD" 0.15; kill -TERM "$pid" 2>/dev/null || true ) &
+
+    wait "$pid" 2>/dev/null || true
+    kill -TERM "$watchdog" 2>/dev/null || true
+    wait "$watchdog" 2>/dev/null || true
+
+    # The watchdog must never have fired
+    [[ ! -f "$marker" ]] || return 1
+    return 0
+}
+
+test_poll_exits_promptly_on_term_while_idle() {
+    setup_toggle_test
+    local marker="$STATE_DIR/idle.marker"
+
+    reconcile() { echo "unexpected-reconcile" >> "$marker"; return 0; }
+
+    start_poll
+    local pid="$POLL_PID"
+
+    # Watchdog: if the cooperative trap turned "stop the poll" into "wait out
+    # the sleep", the poll would still be alive when this fires. The watchdog
+    # kills its own sleep on TERM so it leaves no orphan behind.
+    (
+        _wd_sleep=""
+        trap '"$KILL_CMD" "$_wd_sleep" 2>/dev/null || true; exit 0' TERM
+        "$SLEEP_CMD" 3 &
+        _wd_sleep=$!
+        wait "$_wd_sleep" 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
+        echo "hang" >> "$marker"
+    ) &
+    local watchdog=$!
+
+    kill -TERM "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    kill -TERM "$watchdog" 2>/dev/null || true
+    wait "$watchdog" 2>/dev/null || true
+
+    # The watchdog must never have fired, and no tick may have run
+    [[ ! -f "$marker" ]] || return 1
+    return 0
+}
+
+test_shutdown_restores_only_after_poll_toggle_lands() {
+    setup_toggle_test
+    local marker="$STATE_DIR/shutdown.marker"
+    local gate="$STATE_DIR/shutdown.gate"
+
+    # Manifest says we disabled MagicDNS, so handle_shutdown will restore
+    printf '2026-01-01T00:00:00Z|disable|false\n' > "$STATE_MANIFEST"
+
+    # The scenario runs in a subshell so handle_shutdown's `exit 0` cannot end
+    # the test, and so the poll is a child of whoever waits on it.
+    _run_shutdown_scenario() {
+        reconcile() {
+            echo "toggle-start" >> "$marker"
+            local i=0
+            while (( i < 200 )) && [[ ! -f "$gate" ]]; do
+                "$SLEEP_CMD" 0.05
+                i=$((i + 1))
+            done
+            echo "toggle-end" >> "$marker"
+            return 0
+        }
+        enable_magicdns() { echo "restore" >> "$marker"; return 0; }
+
+        start_poll
+        await_marker "$marker" "toggle-start" || return 1
+
+        # Release the toggle only after shutdown has already been asked to
+        # stop the poll: the restore must not overtake the in-flight toggle.
+        ( "$SLEEP_CMD" 1; : > "$gate" ) &
+
+        handle_shutdown
+    }
+    # Command substitution: handle_shutdown ends in `exit 0`, which must end
+    # the scenario, not the test.
+    local scenario_rc=0
+    local scenario_log
+    scenario_log=$(_run_shutdown_scenario 2>&1) || scenario_rc=$?
+    (( scenario_rc == 0 )) || return 1
+
+    # The restore must have come from the shutdown path
+    [[ "$scenario_log" == *"[INFO] Shutdown signal received; cleaning up"* ]] || return 1
+    [[ "$scenario_log" == *"[INFO] Restoring MagicDNS on shutdown"* ]] || return 1
+
+    local end_line restore_line
+    end_line=$(marker_line "$marker" "toggle-end")
+    restore_line=$(marker_line "$marker" "^restore$")
+    [[ -n "$end_line" ]] || return 1
+    [[ -n "$restore_line" ]] || return 1
+    (( end_line < restore_line )) || return 1
     return 0
 }
 

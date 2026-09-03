@@ -137,3 +137,40 @@ test_reconcile_unchanged_tick_emits_no_info() {
     [[ "$out" == *"[INFO]"* ]] || return 1
     return 0
 }
+
+# A gated re-assert still applies the toggle, but the mode did not change, so
+# the line repeats what the last transition already reported: debug only.
+test_reconcile_reassert_after_interval_emits_no_info() {
+    mkdir -p "$STATE_DIR"
+    local out_file="$STATE_DIR/reassert.out"
+    local out
+
+    # no-vpn: re-assert applies (ENABLE_CALLED) and stays quiet
+    _mock_reconcile_env
+    reconcile >/dev/null 2>&1                # transition → applies (INFO)
+    _RECONCILE_LAST_APPLY=$((SECONDS - 61))  # 61s since last apply
+    reconcile > "$out_file"                  # re-assert → applies, quietly
+    out=$(cat "$out_file")
+    [[ "$out" != *"[INFO]"* ]] || return 1
+    (( ENABLE_CALLED == 2 )) || return 1
+
+    # vpn: same cadence, same quietness
+    _mock_reconcile_env
+    find_vpn_default_route() { echo "utun3"; }
+    reconcile >/dev/null 2>&1
+    _RECONCILE_LAST_APPLY=$((SECONDS - 61))
+    reconcile > "$out_file"
+    out=$(cat "$out_file")
+    [[ "$out" != *"[INFO]"* ]] || return 1
+    (( DISABLE_CALLED == 2 )) || return 1
+
+    # idle: nothing to apply, still must not log at INFO
+    _mock_reconcile_env
+    find_tailscale_interface() { return 1; }  # no Tailscale → idle
+    reconcile >/dev/null 2>&1
+    _RECONCILE_LAST_APPLY=$((SECONDS - 61))
+    reconcile > "$out_file"
+    out=$(cat "$out_file")
+    [[ "$out" != *"[INFO]"* ]] || return 1
+    return 0
+}
