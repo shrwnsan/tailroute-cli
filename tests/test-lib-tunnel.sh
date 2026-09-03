@@ -2639,3 +2639,165 @@ test_check_takes_no_flags_and_no_bare_form() {
     out="$(tunnel_do_check "Bad Peer" 2>&1)" || rc=$?
     assert_eq 2 "$rc" "an invalid peer label is a usage error"
 }
+
+# =============================================================================
+# `tunnel_registry_index_hint` — the not-found hint index (read-only)
+# =============================================================================
+# A not-found error names what IS registered, so the human can pick the right
+# label instead of guessing. The index is read-only in the same sense drift's
+# readers are: no mkdir, no lock, no journal — and it prints NOTHING (not even
+# a header) when the registry is empty or unreadable, so every caller keeps
+# its exact empty-registry message.
+
+test_index_hint_lists_label_alias_and_primary_url() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local out
+    out="$(tunnel_registry_index_hint)"
+    assert_contains "registered tunnels:" "$out"
+    assert_contains "prime (alias: shorty) — https://$FX_HOSTNAME:8443" "$out"
+}
+
+test_index_hint_hides_alias_when_it_matches_the_label() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    local out
+    out="$(tunnel_registry_index_hint)"
+    assert_contains "prime — https://$FX_HOSTNAME:8443" "$out"
+    if printf '%s' "$out" | grep -q "alias:"; then
+        _assert_fail "the default alias must not be echoed back: $out"
+    fi
+}
+
+test_index_hint_lists_every_registered_tunnel() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _t439_register_second "8444:8080"
+    local out
+    out="$(tunnel_registry_index_hint)"
+    assert_contains "prime" "$out"
+    assert_contains "second" "$out"
+    assert_contains "second.$FX_SUFFIX:8444" "$out"
+}
+
+test_index_hint_silent_when_registry_is_empty() {
+    _tunnel_setup_sandbox
+    local out rc=0
+    out="$(tunnel_registry_index_hint)" || rc=$?
+    assert_eq 0 "$rc" "an empty registry is not a hint failure (got: $out)"
+    assert_eq "" "$out" "no index, not even a header"
+}
+
+test_index_hint_silent_when_registry_is_unreadable() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    echo "{ not json" > "$TUNNEL_REGISTRY"
+    local out rc=0
+    out="$(tunnel_registry_index_hint)" || rc=$?
+    assert_eq 0 "$rc" "a broken registry is not a hint failure (got: $out)"
+    assert_eq "" "$out" "a broken registry must not upgrade a not-found into a crash"
+}
+
+test_index_hint_does_not_create_a_config_dir() {
+    _tunnel_setup_sandbox
+    # read-only means read-only: a machine that never ran tailroute must not
+    # grow a config dir on the way to a not-found hint (drift's invariant)
+    rmdir "$TUNNEL_CONFIG_DIR"
+    local out rc=0
+    out="$(tunnel_registry_index_hint)" || rc=$?
+    assert_eq 0 "$rc" "an absent registry is not a hint failure (got: $out)"
+    assert_eq "" "$out" "nothing to index"
+    if [ -d "$TUNNEL_CONFIG_DIR" ]; then
+        _assert_fail "the index hint must not create the config dir"
+    fi
+    return 0
+}
+
+# --- wired into the not-found sites: error text stays, index appends --------
+
+test_check_not_found_appends_the_registry_index() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    local out rc=0
+    out="$(tunnel_do_check ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "check keeps its not-found contract"
+    assert_contains "not found" "$out"
+    assert_contains "registered tunnels:" "$out"
+    assert_contains "prime — https://$FX_HOSTNAME:8443" "$out"
+}
+
+test_remove_not_found_appends_the_registry_index() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    local out rc=0
+    out="$(tunnel_do_remove ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "remove keeps its not-found contract"
+    assert_contains "tunnel for 'ghost' not found" "$out" "the existing error text stays"
+    assert_contains "registered tunnels:" "$out"
+    assert_contains "prime — https://$FX_HOSTNAME:8443" "$out"
+}
+
+test_open_not_found_appends_the_registry_index() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local out rc=0
+    out="$(tunnel_do_open ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "open keeps its not-found contract"
+    assert_contains "registered tunnels:" "$out"
+    assert_contains "prime (alias: shorty)" "$out"
+}
+
+test_restart_not_found_appends_the_registry_index() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    local out rc=0
+    out="$(tunnel_do_restart ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "restart keeps its not-found contract"
+    assert_contains "registered tunnels:" "$out"
+}
+
+test_status_not_found_appends_the_registry_index() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    local out rc=0
+    out="$(tunnel_do_status ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "status keeps its not-found contract"
+    assert_contains "registered tunnels:" "$out"
+}
+
+test_not_found_stays_bare_on_an_empty_registry() {
+    _tunnel_setup_sandbox
+    local out rc=0
+    out="$(tunnel_do_open ghost 2>&1)" || rc=$?
+    assert_eq 3 "$rc"
+    assert_contains "not found" "$out" "today's message is unchanged"
+    if printf '%s' "$out" | grep -q "registered tunnels:"; then
+        _assert_fail "an empty registry must not grow an index block: $out"
+    fi
+}
+
+# The \037 tab-translation idiom in tunnel_registry_index_hint exists because
+# a plain whitespace-IFS `read` collapses an empty field and shifts every
+# later one left (the v0.8.3 status bug). This fixture pins that class: a
+# pre-v0.8.2-shaped row with no sshAlias next to a normal row.
+test_index_hint_empty_alias_does_not_shift_fields() {
+    _tunnel_setup_sandbox
+    cat > "$TUNNEL_REGISTRY" <<JSON
+{
+  "version": 2,
+  "tunnels": [
+    {"peer": "old", "hostname": "old.$FX_SUFFIX", "sshAlias": "", "forwards": [{"localPort": 8444, "remotePort": 443}]},
+    {"peer": "$FX_PEER", "hostname": "$FX_HOSTNAME", "sshAlias": "shorty", "forwards": [{"localPort": 8443, "remotePort": 443}]}
+  ]
+}
+JSON
+    local out
+    out="$(tunnel_registry_index_hint)"
+    assert_contains "registered tunnels:" "$out"
+    printf '%s\n' "$out" | grep -Fqx "  old — https://old.$FX_SUFFIX:8444" || {
+        _assert_fail "the empty-alias row must render with its fields in place: $out"
+    }
+    printf '%s\n' "$out" | grep -Fqx "  $FX_PEER (alias: shorty) — https://$FX_HOSTNAME:8443" || {
+        _assert_fail "the aliased row must render unchanged: $out"
+    }
+}
