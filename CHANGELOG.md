@@ -2,6 +2,13 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.10] - 2026-09-03
+
+### Fixed
+- **Shutdown can no longer leave MagicDNS in the wrong state** — the poll subshell previously died instantly on daemon shutdown (subshells reset inherited traps), so a reconcile killed mid-toggle orphaned the in-flight `tailscale` RPC and lost its state write — and because shutdown restored MagicDNS *before* killing the poll, an in-flight disable could land after the restore and leave MagicDNS in the opposite of the intended state. The poll now stops cooperatively: it traps TERM/INT, lets an in-flight reconcile run to completion (state written, lock released) and kills only its tick sleep (`sleep` runs as `sleep N & wait` so an idle stop is immediate). A shared `stop_poll` makes the signal and EXIT paths quiesce identically, and shutdown stops the poll *before* reading the manifest, so the restore acts on the state the toggle actually left. A TERM landing in the tick's spawn window is re-checked after the pid is captured, so the stop cannot block out the full poll interval. Worst-case shutdown latency is one in-flight tailscale RPC; launchd's default 20s `ExitTimeOut` remains the backstop (no `ExitTimeOut` is configured; a wedged `tailscaled` can still make shutdown unbounded — same failure shape as earlier releases, not a regression).
+- **Steady-state re-asserts log at debug** — the periodic re-assert shared its mode-branch INFO lines with genuine transitions, so a quiet routing table produced ~1440 INFO lines/day (plus the unconditional `[DNS]` audit line per apply). INFO now means "something changed or something's wrong": genuine transitions and `reconcile force` still log INFO; steady-state re-asserts and unchanged ticks log at debug (set `DEBUG=1` via the daemon's launchd `EnvironmentVariables` to see them). The `[DNS]` audit line remains the per-apply heartbeat. Completes the log-noise work begun in 0.8.8.
+- Tests: cooperative poll stop (in-flight toggle completes, shutdown ordered after it, spawn-gap stop, prompt idle exit), POLL_PID clear, re-assert log level across all three modes. 324 → 329.
+
 ## [0.8.9] - 2026-09-03
 
 ### Fixed
