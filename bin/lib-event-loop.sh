@@ -197,13 +197,38 @@ route_monitor_loop() {
 # =============================================================================
 start_poll() {
     log_debug "Starting background safety-net poll (${POLL_SECONDS}s interval)"
-    
-    # Spawn background poll process
+
+    # Spawn background poll process.
+    #
+    # TERM/INT are trapped INSIDE the subshell on purpose: a subshell resets
+    # inherited traps to their default action, so an untrapped TERM kills the
+    # poll at whatever command boundary it happens to be at — including between
+    # the `tailscale` mutation reconcile() spawns and the state-manifest write
+    # that records it. That orphans the still-running mutation to race
+    # shutdown's own restore, and skips release_lock. The handler only raises a
+    # flag: bash delivers a trapped signal at the next command boundary, so an
+    # in-flight reconcile always runs to completion before the poll exits.
+    #
+    # `sleep` runs in the background under `wait` so the flag is acted on
+    # immediately instead of up to POLL_SECONDS later.
      (
-         # In subshell: infinite loop that sleeps and reconciles
-         while true; do
-             "$SLEEP_CMD" "$POLL_SECONDS"
-             
+         _POLL_STOP=0
+         _POLL_SLEEP_PID=""
+         _poll_halt() {
+             _POLL_STOP=1
+             if [[ -n "$_POLL_SLEEP_PID" ]]; then
+                 "$KILL_CMD" "$_POLL_SLEEP_PID" 2>/dev/null || true
+             fi
+         }
+         trap _poll_halt TERM INT
+
+         while (( _POLL_STOP == 0 )); do
+             "$SLEEP_CMD" "$POLL_SECONDS" &
+             _POLL_SLEEP_PID=$!
+             wait "$_POLL_SLEEP_PID" 2>/dev/null || true
+             _POLL_SLEEP_PID=""
+             (( _POLL_STOP == 1 )) && break
+
              if acquire_lock; then
                  if ! reconcile; then
                      log_warn "Reconcile failed in poll (continuing)"
@@ -211,11 +236,13 @@ start_poll() {
                  release_lock 2>/dev/null || true
              fi
          done
+
+         exit 0
      ) &
-    
+
     POLL_PID=$!
     log_debug "Poll process started: PID $POLL_PID"
-    
+
     return 0
 }
 
@@ -241,6 +268,28 @@ setup_signal_handlers() {
 }
 
 # =============================================================================
+# stop_poll — Stop the background poll and wait for it to finish
+# =============================================================================
+# Sends TERM to the poll subshell and reaps it. Because the poll traps TERM
+# (see start_poll), this returns only once any reconcile it was running has
+# completed and released its lock — never while a `tailscale` mutation is
+# still in flight. Shared by the signal path and the EXIT path so both
+# quiesce the poll identically.
+#
+# Returns:
+#   0 - Always
+# =============================================================================
+stop_poll() {
+    if [[ -n "$POLL_PID" ]] && kill -0 "$POLL_PID" 2>/dev/null; then
+        log_debug "Killing poll process: $POLL_PID"
+        "$KILL_CMD" "$POLL_PID" 2>/dev/null || true
+        wait "$POLL_PID" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # handle_shutdown — SIGTERM/SIGINT handler
 # =============================================================================
 # Restores MagicDNS if we disabled it, releases lock, kills poll, and exits cleanly.
@@ -257,16 +306,16 @@ handle_shutdown() {
         # Already cleaning up
         return
     fi
-    
+
     CLEANUP_IN_PROGRESS=1
-    
+
     log_info "Shutdown signal received; cleaning up"
-    
+
     # Restore MagicDNS if we disabled it
     if [[ -n "${STATE_MANIFEST:-}" ]] && [[ -f "$STATE_MANIFEST" ]]; then
         local last_state
         last_state=$(state_read 2>/dev/null) || last_state=""
-        
+
         if [[ "$last_state" =~ disable ]]; then
             log_info "Restoring MagicDNS on shutdown"
             if ! enable_magicdns 2>/dev/null; then
@@ -274,17 +323,13 @@ handle_shutdown() {
             fi
         fi
     fi
-    
+
     # Kill background poll
-    if [[ -n "$POLL_PID" ]] && kill -0 "$POLL_PID" 2>/dev/null; then
-        log_debug "Killing poll process: $POLL_PID"
-        "$KILL_CMD" "$POLL_PID" 2>/dev/null || true
-        wait "$POLL_PID" 2>/dev/null || true
-    fi
-    
+    stop_poll
+
     # Release lock
     release_lock 2>/dev/null || true
-    
+
     log_info "Shutdown complete; exiting"
     exit 0
 }
@@ -322,12 +367,9 @@ handle_sighup() {
 #   0 - Always
 # =============================================================================
 cleanup() {
-    if [[ -n "$POLL_PID" ]] && kill -0 "$POLL_PID" 2>/dev/null; then
-        "$KILL_CMD" "$POLL_PID" 2>/dev/null || true
-        wait "$POLL_PID" 2>/dev/null || true
-    fi
-    
+    stop_poll
+
     release_lock 2>/dev/null || true
-    
+
     return 0
 }

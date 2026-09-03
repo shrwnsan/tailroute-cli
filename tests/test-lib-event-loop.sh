@@ -315,6 +315,103 @@ test_route_monitor_eof_returns_nonzero() {
     return 0
 }
 
+# =============================================================================
+# shutdown vs in-flight toggle tests
+# =============================================================================
+# The poll subshell can be inside reconcile() — between spawning a `tailscale`
+# mutation and the state-manifest write that records it — when cleanup or
+# handle_shutdown delivers TERM. A subshell resets inherited traps to their
+# default action, so an untrapped TERM kills it at whatever command boundary it
+# is at: the mutation is orphaned (reparented to launchd, still running), the
+# manifest write never happens, and release_lock is skipped. These tests pin
+# the contract: TERM must take effect only at a reconcile boundary.
+
+# Cross-process rendezvous markers live under the test state dir
+setup_toggle_test() {
+    setup_event_loop_test
+    rm -f "$STATE_DIR"/*.marker "$STATE_DIR"/*.gate
+}
+
+# Bounded wait for a substring to appear in a marker file. Rendezvous, not
+# sleep-and-hope: the cap exists so a broken implementation fails the test
+# instead of hanging the suite.
+await_marker() {
+    local file="$1"
+    local want="$2"
+    local i=0
+    while (( i < 200 )); do
+        if [[ -f "$file" ]] && grep -q "$want" "$file" 2>/dev/null; then
+            return 0
+        fi
+        "$SLEEP_CMD" 0.05
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# Line number of the first occurrence of a pattern, or empty if absent
+marker_line() {
+    grep -n "$2" "$1" 2>/dev/null | head -1 | cut -d: -f1 || true
+}
+
+test_poll_survives_term_during_reconcile_and_completes_toggle() {
+    setup_toggle_test
+    local marker="$STATE_DIR/toggle.marker"
+    local gate="$STATE_DIR/toggle.gate"
+
+    # Mock the toggle layer: stays in flight until the test opens the gate
+    reconcile() {
+        echo "toggle-start" >> "$marker"
+        local i=0
+        while (( i < 200 )) && [[ ! -f "$gate" ]]; do
+            "$SLEEP_CMD" 0.05
+            i=$((i + 1))
+        done
+        echo "toggle-end" >> "$marker"
+        return 0
+    }
+
+    start_poll
+    local pid="$POLL_PID"
+    await_marker "$marker" "toggle-start" || return 1
+
+    # TERM lands while the toggle is in flight — what cleanup/handle_shutdown do
+    kill -TERM "$pid" 2>/dev/null || true
+    : > "$gate"
+
+    # The in-flight toggle must run to completion rather than be orphaned
+    await_marker "$marker" "toggle-end" || return 1
+
+    # The poll must have released the lock it held for that toggle
+    wait "$pid" 2>/dev/null || true
+    [[ ! -f "$LOCK_DIR/lock" ]] || return 1
+    return 0
+}
+
+test_poll_exits_promptly_on_term_while_idle() {
+    setup_toggle_test
+    local marker="$STATE_DIR/idle.marker"
+
+    reconcile() { echo "unexpected-reconcile" >> "$marker"; return 0; }
+
+    start_poll
+    local pid="$POLL_PID"
+
+    # Watchdog: if the cooperative trap turned "stop the poll" into "wait out
+    # the sleep", the poll would still be alive when this fires.
+    ( "$SLEEP_CMD" 3; kill -KILL "$pid" 2>/dev/null; echo "hang" >> "$marker" ) &
+    local watchdog=$!
+
+    kill -TERM "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    kill -TERM "$watchdog" 2>/dev/null || true
+    wait "$watchdog" 2>/dev/null || true
+
+    # The watchdog must never have fired, and no tick may have run
+    [[ ! -f "$marker" ]] || return 1
+    return 0
+}
+
 test_event_loop_restarts_cleanly_on_monitor_eof() {
     setup_event_loop_test
 
