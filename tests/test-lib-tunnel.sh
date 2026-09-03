@@ -206,6 +206,20 @@ MOCK
     chmod +x "$TUNNEL_SANDBOX/bin/openssl"
     export OPENSSL_CMD="$TUNNEL_SANDBOX/bin/openssl"
 
+    # --- curl mock (tunnel check HTTP probe) ---
+    # Mocks `curl -w '%{http_code}'`: FAKE_HTTP_CODE is what the write-out
+    # reports (default 200); FAKE_CURL_RC models a transport-level failure,
+    # where real curl still prints its write-out ("000").
+    cat > "$TUNNEL_SANDBOX/bin/curl" <<'MOCK'
+#!/bin/sh
+printf '%s' "${FAKE_HTTP_CODE:-200}"
+exit "${FAKE_CURL_RC:-0}"
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/curl"
+    export CURL_CMD="$TUNNEL_SANDBOX/bin/curl"
+    export FAKE_HTTP_CODE="200"
+    export FAKE_CURL_RC=0
+
     # SSH config fixture with an adaptive proxy-prime entry
     cat > "$TUNNEL_SSH_CONFIG" <<CFG
 Host proxy-$FX_PEER
@@ -2297,4 +2311,229 @@ test_t439_drift_all_without_a_config_dir_writes_nothing() {
     assert_eq 0 "$rc" "an empty registry is a clean exit (output was: $out)"
     assert_eq "$before" "$after" "drift-all must not create the config dir"
     assert_contains "No registered tunnels" "$out"
+}
+
+# =============================================================================
+# `tunnel check <peer>` — the browser's truth (read-only)
+# =============================================================================
+# Spec contract: probe, from this Mac, the exact path a browser crosses for
+# one registered tunnel — hosts override → local forward listener → TLS
+# identity → HTTP answer — and report the first layer that breaks with its
+# repair. Zero ssh: the peer is never contacted. It writes NOTHING in every
+# outcome (no registry, hosts, plist, journal, lock dir) and has no apply
+# path.  status = inventory · drift = the peer's claim · check = the
+# browser's truth.
+
+# What the HTTP probe's curl sees (the mock above prints $1, exits $2).
+_tunnel_check_set_http() { # <code> [curl-rc]
+    FAKE_HTTP_CODE="$1"
+    FAKE_CURL_RC="${2:-0}"
+    export FAKE_HTTP_CODE FAKE_CURL_RC
+}
+
+# The hosts mapping `tunnel add` would have written (the sandbox starts clean).
+_tunnel_check_add_hosts_mapping() {
+    printf '127.0.0.1\t%s\n' "$FX_HOSTNAME" >> "$TUNNEL_HOSTS_FILE"
+}
+
+# One invocation, asserted for exit code AND byte-identical state afterwards.
+_tunnel_check_inert() { # <peer> <expected-rc>
+    local peer="$1" expected_rc="$2" rc=0 out before after
+    before="$(_t439_state_snapshot)"
+    out="$(tunnel_do_check "$peer" 2>&1)" || rc=$?
+    after="$(_t439_state_snapshot)"
+    assert_eq "$expected_rc" "$rc" "check exit code (output was: $out)"
+    assert_eq "$before" "$after" "check must not write any state (output was: $out)"
+    printf '%s\n' "$out"
+}
+
+test_check_unregistered_peer_errors_like_status() {
+    _tunnel_setup_sandbox
+    # a machine that never created a config dir: the error path must not
+    # create one either (read-only covers the error path too)
+    rmdir "$TUNNEL_CONFIG_DIR"
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 3)"
+    assert_contains "not found" "$out"
+    assert_contains "tailroute tunnel add $FX_PEER" "$out" "the way out must be named"
+}
+
+test_check_hosts_missing_names_the_repair() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_set_http 200            # would be green — hosts is what breaks
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "hosts:" "$out"
+    assert_contains "MISSING" "$out"
+    assert_contains "tailroute tunnel remove $FX_PEER && tailroute tunnel add $FX_PEER" "$out" \
+        "the repair artifact must be a full command"
+    if printf '%s' "$out" | grep -q "http:"; then
+        _assert_fail "a missing hosts entry must short-circuit the probe chain: $out"
+    fi
+}
+
+test_check_listener_closed_suggests_restart() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    _tunnel_check_set_http 200            # would be green — the listener is what breaks
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "listener:" "$out"
+    assert_contains "closed" "$out"
+    assert_contains "tailroute tunnel restart $FX_PEER" "$out"
+    if printf '%s' "$out" | grep -q "tls:"; then
+        _assert_fail "a closed listener must short-circuit the probe chain: $out"
+    fi
+}
+
+test_check_tls_failure_reports_certificate_problem() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    FAKE_TLS_HOSTNAME="unverified"; export FAKE_TLS_HOSTNAME
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "tls:" "$out"
+    assert_contains "certificate" "$out"
+    if printf '%s' "$out" | grep -q "healthy"; then
+        _assert_fail "a certificate problem must not read as healthy: $out"
+    fi
+}
+
+test_check_http_502_names_the_peer_upstream() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 502
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "502" "$out"
+    assert_contains "upstream" "$out"
+    assert_contains "fix the service on the peer" "$out" \
+        "the kill-feature verdict must say which side to fix"
+    assert_contains "listener" "$out" "the transport layers that did pass must still be reported"
+}
+
+test_check_healthy_all_layers_green() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443 1055"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 200
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    assert_contains "healthy" "$out"
+    assert_contains "hosts:" "$out"
+    assert_contains "listener:" "$out"
+    assert_contains "tls:" "$out"
+    assert_contains "http:" "$out"
+    assert_contains "HTTP 200" "$out"
+    assert_contains "SOCKS5" "$out" "the adaptive branch is reported as information"
+    assert_contains "changes nothing" "$out" "inertness is stated as policy, not implied"
+}
+
+test_check_curl_transport_failure_is_distinct_from_502() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    # curl rc 7 with a "000" write-out: connection-level, no HTTP answer exists
+    _tunnel_check_set_http 000 7
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "no answer" "$out"
+    assert_contains "transport" "$out"
+    assert_contains "tailroute tunnel restart $FX_PEER" "$out" "a connection-level failure points at the local path first"
+    if printf '%s' "$out" | grep -q "upstream"; then
+        _assert_fail "a transport failure must not read as an upstream error: $out"
+    fi
+}
+
+test_check_reports_each_forward_of_a_multi_forward_tunnel() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443 8444:8080"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443 8444"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 200
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
+    assert_eq 2 "$(printf '%s\n' "$out" | grep -c '    http:')" "every forward gets its own HTTP probe"
+}
+
+test_check_unreadable_registry_gives_no_verdict() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    echo "{ not json" > "$TUNNEL_REGISTRY"
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "no verdict" "$out"
+    assert_contains "tailroute tunnel status" "$out" "guidance must point at the recovery surface"
+}
+
+test_check_malformed_registry_entry_gives_no_verdict() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    # a hand-edited entry: parses as JSON, passes the version check, but its
+    # forwards are unusable — a diagnostic must name it, not die on it
+    printf '{"version": 2, "tunnels": [{"peer": "prime", "hostname": "%s", "magicDNSSuffix": "%s", "tailscaleIP": "%s", "forwards": [{"localPort": "oops"}]}]}' "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_IP" > "$TUNNEL_REGISTRY"
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "no verdict" "$out"
+    assert_contains "tailroute tunnel status" "$out"
+}
+
+test_check_every_outcome_is_inert_and_never_touches_the_peer() {
+    _tunnel_setup_sandbox
+    export SSH_CALL_LOG="$TUNNEL_SANDBOX/ssh-calls.log"
+    : > "$SSH_CALL_LOG"
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+
+    # every verdict outcome, back to back
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 502
+    _tunnel_check_inert "$FX_PEER" 1 >/dev/null
+    _tunnel_check_set_http 200
+    _tunnel_check_inert "$FX_PEER" 0 >/dev/null
+    _tunnel_check_set_http 000 7
+    _tunnel_check_inert "$FX_PEER" 1 >/dev/null
+    FAKE_NC_OPEN=""; export FAKE_NC_OPEN
+    _tunnel_check_inert "$FX_PEER" 1 >/dev/null           # listener closed
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    FAKE_TLS_HOSTNAME="unverified"; export FAKE_TLS_HOSTNAME
+    _tunnel_check_inert "$FX_PEER" 1 >/dev/null           # TLS failure
+
+    # the unregistered path is inert too
+    tunnel_registry_remove "$FX_PEER" >/dev/null
+    _tunnel_check_inert "$FX_PEER" 3 >/dev/null
+
+    assert_eq 0 "$(wc -l < "$SSH_CALL_LOG" | tr -d ' ')" \
+        "check must not contact the peer at all: $(cat "$SSH_CALL_LOG")"
+}
+
+test_check_takes_no_flags_and_no_bare_form() {
+    _tunnel_setup_sandbox
+    local rc=0 out
+    out="$(tunnel_do_check 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "bare check is a usage error — an explicit peer is required"
+    assert_contains "requires <peer>" "$out"
+    rc=0
+    out="$(tunnel_do_check --json 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "check takes no flags (drift precedent)"
+    assert_contains "takes no flags" "$out"
+    rc=0
+    out="$(tunnel_do_check "$FX_PEER" --json 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "check takes no flags after the peer either"
+    rc=0
+    out="$(tunnel_do_check "$FX_PEER" extra 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "a second positional is a usage error"
+    rc=0
+    out="$(tunnel_do_check "Bad Peer" 2>&1)" || rc=$?
+    assert_eq 2 "$rc" "an invalid peer label is a usage error"
 }
