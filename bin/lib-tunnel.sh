@@ -2375,7 +2375,7 @@ tunnel_status_rows() {
         if tunnel_hosts_has_mapping "$hostname"; then hosts_state="present"; else hosts_state="missing"; fi
 
         if [ "$job" = "not-running" ] && [ "$hosts_state" = "present" ]; then
-            notes="stale hosts entry (browser gets connection refused)"
+            notes="stale hosts entry (browser gets connection refused) — repair: tailroute tunnel restart $p"
         fi
         if [ -f "$TUNNEL_LOG_DIR/tunnel-$p.log" ] && tail -20 "$TUNNEL_LOG_DIR/tunnel-$p.log" 2>/dev/null | grep -Eq "Permission denied|Host key verification failed"; then
             notes="${notes:+$notes; }ssh auth failing — key rotated? re-run: tailroute tunnel add $p"

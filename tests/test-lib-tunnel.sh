@@ -747,6 +747,17 @@ test_status_healthy_and_degraded() {
     assert_eq 1 "$rc"
 }
 
+test_stale_note_suggests_restart() {
+    _tunnel_setup_sandbox
+    tunnel_do_add prime --yes >/dev/null
+    # Job dies (label dropped from launchctl state) while the hosts entry stays -> stale
+    grep -vx "com.tailroute.tunnel.prime" "$LAUNCHCTL_STATE" > "$LAUNCHCTL_STATE.tmp" || true
+    mv "$LAUNCHCTL_STATE.tmp" "$LAUNCHCTL_STATE"
+    local out=""
+    out="$(tunnel_do_status prime 2>/dev/null)" || true
+    assert_contains "stale hosts entry (browser gets connection refused) — repair: tailroute tunnel restart prime" "$out"
+}
+
 test_status_not_found_and_empty() {
     _tunnel_setup_sandbox
     local rc=0
