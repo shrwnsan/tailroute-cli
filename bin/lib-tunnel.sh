@@ -1536,6 +1536,81 @@ for t in data["tunnels"]:
 PY
 }
 
+# -----------------------------------------------------------------------------
+# Not-found hint index (read-only)
+# -----------------------------------------------------------------------------
+# A not-found error names what IS registered, so the human can pick the right
+# label instead of guessing. The index is read-only in the same sense the drift
+# readers are — no mkdir, no lock, no journal — and it prints NOTHING (not even
+# a header) when the registry is empty or unreadable, so every caller keeps its
+# exact empty-registry message and a broken registry never upgrades a not-found
+# into a crash.
+
+# One TSV row per tunnel: peer, sshAlias, hostname, first local port.
+# rc: 0 ok (possibly no rows; unreadable/corrupt is reported as no rows)
+tunnel_registry_index_rows() {
+    if [[ -L "$TUNNEL_REGISTRY" ]]; then
+        return 0
+    fi
+    if [ ! -f "$TUNNEL_REGISTRY" ]; then
+        return 0
+    fi
+    TUNNEL_INDEX_REGISTRY="$TUNNEL_REGISTRY" TUNNEL_INDEX_VERSION="$TUNNEL_REGISTRY_VERSION" \
+    "$PYTHON3_CMD" <<'PY'
+import json, os, sys
+
+try:
+    # Opened by path, not stdin: the heredoc below owns this process's stdin.
+    with open(os.environ["TUNNEL_INDEX_REGISTRY"], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(0)   # unreadable — the caller's error already says why it looked
+if (not isinstance(data, dict)
+        or data.get("version") != int(os.environ["TUNNEL_INDEX_VERSION"])
+        or not isinstance(data.get("tunnels"), list)):
+    sys.exit(0)
+for t in data["tunnels"]:
+    if not isinstance(t, dict):
+        continue
+    peer = t.get("peer")
+    if not isinstance(peer, str) or not peer:
+        continue
+    alias = t.get("sshAlias") or ""
+    hostname = t.get("hostname") or ""
+    lport = ""
+    forwards = t.get("forwards")
+    if isinstance(forwards, list) and forwards and isinstance(forwards[0], dict):
+        port = forwards[0].get("localPort")
+        if isinstance(port, int):
+            lport = str(port)
+    print("\t".join([peer, alias, hostname, lport]))
+PY
+}
+
+# The hint block: "registered tunnels:" plus one line per tunnel — label,
+# sshAlias when it differs from the label, and the primary URL. Empty output
+# means "nothing to hint", never an error.
+tunnel_registry_index_hint() {
+    local rows
+    rows="$(tunnel_registry_index_rows)" || rows=""
+    [ -n "$rows" ] || return 0
+    echo "registered tunnels:"
+    local peer alias hostname lport
+    # v0.8.3 idiom: tabs become \037 (unit separator, not IFS whitespace) so an
+    # empty alias field cannot shift the read.
+    while IFS=$'\037' read -r peer alias hostname lport; do
+        [ -n "$peer" ] || continue
+        if [ -n "$alias" ] && [ "$alias" != "$peer" ]; then
+            printf '  %s (alias: %s) — https://%s:%s\n' "$peer" "$alias" "$hostname" "$lport"
+        else
+            printf '  %s — https://%s:%s\n' "$peer" "$hostname" "$lport"
+        fi
+    done <<EOF
+$(printf '%s\n' "$rows" | tr '\t' '\037')
+EOF
+    return 0
+}
+
 # Render the report. Peer-derived strings are semi-untrusted: they are printed,
 # never executed, and backends are reduced to inert characters before printing.
 tunnel_drift_render() { # <peer> <entry-json-or-""> <claims-tsv> <cap>
@@ -1792,6 +1867,7 @@ tunnel_do_check() {
     entry="$(printf '%s\n' "$state" | sed -n '1p')"
     if [ -z "$entry" ]; then
         echo "ERROR: tunnel for '$peer' not found — register it first: tailroute tunnel add $peer" >&2
+        tunnel_registry_index_hint >&2
         return 3
     fi
 
@@ -1901,7 +1977,7 @@ tunnel_update_add_forward() { # <peer> <remote-port>...
     local peer="$1"; shift
     local entry new_fwd lport rport
     entry="$(tunnel_registry_get "$peer")" || {
-        echo "ERROR: no registry entry for '$peer'" >&2; return 1; }
+        echo "ERROR: no registry entry for '$peer'" >&2; tunnel_registry_index_hint >&2; return 1; }
 
     local ip hostname alias allow_tls pairs lport
     ip="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["tailscaleIP"])')"
@@ -2357,6 +2433,7 @@ tunnel_do_remove() {
     local entry
     entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
         echo "ERROR: tunnel for '$peer' not found" >&2
+        tunnel_registry_index_hint >&2
         tunnel_lock_release; return 3
     }
     local hostname label plist failed=""
@@ -2505,7 +2582,7 @@ tunnel_do_restart() {
 $(tunnel_registry_entries)
 EOF
     if [ "$rc" -eq 0 ] && [ -n "$peer" ]; then
-        tunnel_registry_get "$peer" >/dev/null 2>&1 || { echo "ERROR: tunnel for '$peer' not found" >&2; return 3; }
+        tunnel_registry_get "$peer" >/dev/null 2>&1 || { echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; return 3; }
     fi
     return "$rc"
 }
@@ -2663,6 +2740,7 @@ tunnel_do_status() {
         rows="$(printf '%s\n' "$rows" | awk -F'\t' -v p="$peer" '$1 == p')"
         if [ -z "$rows" ]; then
             echo "ERROR: tunnel for '$peer' not found" >&2
+            tunnel_registry_index_hint >&2
             return 3
         fi
     fi
@@ -2807,7 +2885,7 @@ tunnel_do_open() { # <peer>
     peer="$(tunnel_normalize_lower "$peer")"
     local entry hostname lport url
     entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
-        echo "ERROR: tunnel for '$peer' not found" >&2; return 3; }
+        echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; return 3; }
     hostname="$(tunnel_registry_field "$entry" hostname)"
     lport="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["forwards"][0]["localPort"])')"
     url="https://$hostname:$lport"
