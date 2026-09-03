@@ -1798,11 +1798,18 @@ tunnel_do_check() {
     # The registry snapshot re-serialises entries as written, but a hand-edited
     # registry can still hold a malformed one: a diagnostic names it, it does
     # not die on it.
+    # shellcheck disable=SC2015  # the || branch is a shared no-verdict exit, not an else
     hostname="$(tunnel_registry_field "$entry" hostname)" && [ -n "$hostname" ] && \
         pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')" || {
         echo "$peer: registry entry unreadable — no verdict; inspect with: tailroute tunnel status"
         return 1
     }
+    # An entry that forwards nothing would otherwise run zero probes and reach
+    # the healthy verdict below over layers it never tested.
+    if [ -z "$pairs" ]; then
+        echo "$peer: registry entry has no forwards — no verdict; inspect with: tailroute tunnel status"
+        return 1
+    fi
 
     # Informational only: the branch is picked per connection by the ssh
     # wrapper, so this reports which one current state would favour.
@@ -1875,7 +1882,9 @@ tunnel_do_check() {
 
     echo ""
     if [ -z "$failed" ]; then
-        echo "$peer: healthy — hosts, listener, TLS, and HTTP are green on every forward"
+        # Path health, not app health: a delivered 404 proves the path and
+        # must not be called a green layer.
+        echo "$peer: healthy — the path is proven on every forward"
     else
         echo "$peer: check FAILED — $failed"
     fi

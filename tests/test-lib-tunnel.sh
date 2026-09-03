@@ -2471,6 +2471,12 @@ test_check_http_404_is_delivered_not_failed() {
     assert_contains "HTTP 404" "$out"
     assert_contains "delivered" "$out" "the answer must be reported as delivered, not as a path failure"
     assert_contains "healthy" "$out" "all four layers green is the verb's verdict"
+    # path health is not app health: the verdict must not claim the HTTP layer
+    # is "green" when the app answered 404
+    assert_contains "the path is proven on every forward" "$out"
+    if printf '%s' "$out" | grep -q "HTTP are green"; then
+        _assert_fail "the verdict must not overclaim app health as a green layer: $out"
+    fi
     if printf '%s' "$out" | grep -q "upstream"; then
         _assert_fail "an app-generated answer must not read as a Serve upstream failure: $out"
     fi
@@ -2503,6 +2509,7 @@ MOCK
     assert_contains "HTTP 404" "$out"
     assert_contains "HTTP 200" "$out"
     assert_contains "healthy" "$out" "an app answer on one forward must not degrade the peer verdict"
+    assert_contains "the path is proven on every forward" "$out"
 }
 
 test_check_serve_upstream_failure_still_degrades_mixed_forwards() {
@@ -2564,6 +2571,23 @@ test_check_malformed_registry_entry_gives_no_verdict() {
     out="$(_tunnel_check_inert "$FX_PEER" 1)"
     assert_contains "no verdict" "$out"
     assert_contains "tailroute tunnel status" "$out"
+}
+
+test_check_empty_forwards_gives_no_verdict() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    # sibling of the malformed entry above: this one parses cleanly and passes
+    # every registry check, but forwards nothing — the one shape that used to
+    # slip through to the verb's best verdict over layers it never probed
+    printf '{"version": 2, "tunnels": [{"peer": "prime", "hostname": "%s", "magicDNSSuffix": "%s", "tailscaleIP": "%s", "sshAlias": "prime", "forwards": []}]}' "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_IP" > "$TUNNEL_REGISTRY"
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "no forwards" "$out"
+    assert_contains "no verdict" "$out"
+    assert_contains "tailroute tunnel status" "$out"
+    if printf '%s' "$out" | grep -q "healthy"; then
+        _assert_fail "an entry with no forwards must not claim a healthy path: $out"
+    fi
 }
 
 test_check_every_outcome_is_inert_and_never_touches_the_peer() {
