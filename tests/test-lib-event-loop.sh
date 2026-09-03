@@ -146,7 +146,16 @@ test_cleanup_kills_poll() {
     
     # Run cleanup
     cleanup
-    
+
+    # stop_poll reaps and clears the handle so a later call cannot kill a
+    # recycled PID
+    if [[ -z "$POLL_PID" ]]; then
+        teardown_event_loop_test
+    else
+        teardown_event_loop_test
+        return 1
+    fi
+
     # Verify poll is dead
     if ! kill -0 "$pid" 2>/dev/null; then
         teardown_event_loop_test
@@ -388,6 +397,49 @@ test_poll_survives_term_during_reconcile_and_completes_toggle() {
     return 0
 }
 
+# A TERM landing between the tick's spawn and the pid assignment leaves
+# _poll_halt nothing to kill, so the loop's wait would block out the full
+# POLL_SECONDS and shutdown overruns launchd's 20s exit timeout. The override
+# widens that spawn->track gap deterministically; the re-check, wait and break
+# after it are the production logic under test.
+test_poll_term_during_spawn_gap_does_not_block() {
+    setup_toggle_test
+    local marker="$STATE_DIR/gap.marker"
+
+    POLL_SECONDS=6
+    _poll_spawn_sleep() {
+        "$SLEEP_CMD" "$POLL_SECONDS" &
+        "$SLEEP_CMD" 0.3
+        _POLL_SLEEP_PID=$!
+    }
+
+    start_poll
+    local pid="$POLL_PID"
+
+    # Watchdog: SIGKILLs the poll and records the hang if the loop blocked
+    (
+        _wd_sleep=""
+        trap '"$KILL_CMD" "$_wd_sleep" 2>/dev/null || true; exit 0' TERM
+        "$SLEEP_CMD" 5 &
+        _wd_sleep=$!
+        wait "$_wd_sleep" 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
+        echo "hang" >> "$marker"
+    ) &
+    local watchdog=$!
+
+    # TERM lands inside the widened gap
+    ( "$SLEEP_CMD" 0.15; kill -TERM "$pid" 2>/dev/null || true ) &
+
+    wait "$pid" 2>/dev/null || true
+    kill -TERM "$watchdog" 2>/dev/null || true
+    wait "$watchdog" 2>/dev/null || true
+
+    # The watchdog must never have fired
+    [[ ! -f "$marker" ]] || return 1
+    return 0
+}
+
 test_poll_exits_promptly_on_term_while_idle() {
     setup_toggle_test
     local marker="$STATE_DIR/idle.marker"
@@ -398,8 +450,17 @@ test_poll_exits_promptly_on_term_while_idle() {
     local pid="$POLL_PID"
 
     # Watchdog: if the cooperative trap turned "stop the poll" into "wait out
-    # the sleep", the poll would still be alive when this fires.
-    ( "$SLEEP_CMD" 3; kill -KILL "$pid" 2>/dev/null; echo "hang" >> "$marker" ) &
+    # the sleep", the poll would still be alive when this fires. The watchdog
+    # kills its own sleep on TERM so it leaves no orphan behind.
+    (
+        _wd_sleep=""
+        trap '"$KILL_CMD" "$_wd_sleep" 2>/dev/null || true; exit 0' TERM
+        "$SLEEP_CMD" 3 &
+        _wd_sleep=$!
+        wait "$_wd_sleep" 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
+        echo "hang" >> "$marker"
+    ) &
     local watchdog=$!
 
     kill -TERM "$pid" 2>/dev/null || true

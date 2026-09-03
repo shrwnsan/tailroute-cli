@@ -223,8 +223,16 @@ start_poll() {
          trap _poll_halt TERM INT
 
          while (( _POLL_STOP == 0 )); do
-             "$SLEEP_CMD" "$POLL_SECONDS" &
-             _POLL_SLEEP_PID=$!
+             _poll_spawn_sleep
+             # A TERM can land in the gap between the spawn and the assignment
+             # inside _poll_spawn_sleep, leaving _poll_halt nothing to kill.
+             # Re-check here or the wait below blocks out the full
+             # POLL_SECONDS, and shutdown overruns launchd's 20s default exit
+             # timeout — the daemon gets SIGKILLed before it can restore
+             # MagicDNS.
+             if (( _POLL_STOP == 1 )); then
+                 "$KILL_CMD" "$_POLL_SLEEP_PID" 2>/dev/null || true
+             fi
              wait "$_POLL_SLEEP_PID" 2>/dev/null || true
              _POLL_SLEEP_PID=""
              (( _POLL_STOP == 1 )) && break
@@ -244,6 +252,18 @@ start_poll() {
     log_debug "Poll process started: PID $POLL_PID"
 
     return 0
+}
+
+# =============================================================================
+# _poll_spawn_sleep — Start the poll tick's sleep and track its PID
+# =============================================================================
+# Runs inside the poll subshell. Split out so the spawn and the assignment of
+# _POLL_SLEEP_PID are one named step — and so tests can widen the gap between
+# them deterministically (a TERM landing there is what _poll_halt cannot kill).
+# =============================================================================
+_poll_spawn_sleep() {
+    "$SLEEP_CMD" "$POLL_SECONDS" &
+    _POLL_SLEEP_PID=$!
 }
 
 # =============================================================================
@@ -285,6 +305,9 @@ stop_poll() {
         "$KILL_CMD" "$POLL_PID" 2>/dev/null || true
         wait "$POLL_PID" 2>/dev/null || true
     fi
+
+    # Reaped: keep the field honest so a later call cannot kill a reused PID
+    POLL_PID=""
 
     return 0
 }
