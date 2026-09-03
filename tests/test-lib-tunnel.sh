@@ -2775,3 +2775,29 @@ test_not_found_stays_bare_on_an_empty_registry() {
         _assert_fail "an empty registry must not grow an index block: $out"
     fi
 }
+
+# The \037 tab-translation idiom in tunnel_registry_index_hint exists because
+# a plain whitespace-IFS `read` collapses an empty field and shifts every
+# later one left (the v0.8.3 status bug). This fixture pins that class: a
+# pre-v0.8.2-shaped row with no sshAlias next to a normal row.
+test_index_hint_empty_alias_does_not_shift_fields() {
+    _tunnel_setup_sandbox
+    cat > "$TUNNEL_REGISTRY" <<JSON
+{
+  "version": 2,
+  "tunnels": [
+    {"peer": "old", "hostname": "old.$FX_SUFFIX", "sshAlias": "", "forwards": [{"localPort": 8444, "remotePort": 443}]},
+    {"peer": "$FX_PEER", "hostname": "$FX_HOSTNAME", "sshAlias": "shorty", "forwards": [{"localPort": 8443, "remotePort": 443}]}
+  ]
+}
+JSON
+    local out
+    out="$(tunnel_registry_index_hint)"
+    assert_contains "registered tunnels:" "$out"
+    printf '%s\n' "$out" | grep -Fqx "  old — https://old.$FX_SUFFIX:8444" || {
+        _assert_fail "the empty-alias row must render with its fields in place: $out"
+    }
+    printf '%s\n' "$out" | grep -Fqx "  $FX_PEER (alias: shorty) — https://$FX_HOSTNAME:8443" || {
+        _assert_fail "the aliased row must render unchanged: $out"
+    }
+}
