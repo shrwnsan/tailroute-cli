@@ -412,6 +412,58 @@ test_poll_exits_promptly_on_term_while_idle() {
     return 0
 }
 
+test_shutdown_restores_only_after_poll_toggle_lands() {
+    setup_toggle_test
+    local marker="$STATE_DIR/shutdown.marker"
+    local gate="$STATE_DIR/shutdown.gate"
+
+    # Manifest says we disabled MagicDNS, so handle_shutdown will restore
+    printf '2026-01-01T00:00:00Z|disable|false\n' > "$STATE_MANIFEST"
+
+    # The scenario runs in a subshell so handle_shutdown's `exit 0` cannot end
+    # the test, and so the poll is a child of whoever waits on it.
+    _run_shutdown_scenario() {
+        reconcile() {
+            echo "toggle-start" >> "$marker"
+            local i=0
+            while (( i < 200 )) && [[ ! -f "$gate" ]]; do
+                "$SLEEP_CMD" 0.05
+                i=$((i + 1))
+            done
+            echo "toggle-end" >> "$marker"
+            return 0
+        }
+        enable_magicdns() { echo "restore" >> "$marker"; return 0; }
+
+        start_poll
+        await_marker "$marker" "toggle-start" || return 1
+
+        # Release the toggle only after shutdown has already been asked to
+        # stop the poll: the restore must not overtake the in-flight toggle.
+        ( "$SLEEP_CMD" 1; : > "$gate" ) &
+
+        handle_shutdown
+    }
+    # Command substitution: handle_shutdown ends in `exit 0`, which must end
+    # the scenario, not the test.
+    local scenario_rc=0
+    local scenario_log
+    scenario_log=$(_run_shutdown_scenario 2>&1) || scenario_rc=$?
+    (( scenario_rc == 0 )) || return 1
+
+    # The restore must have come from the shutdown path
+    [[ "$scenario_log" == *"[INFO] Shutdown signal received; cleaning up"* ]] || return 1
+    [[ "$scenario_log" == *"[INFO] Restoring MagicDNS on shutdown"* ]] || return 1
+
+    local end_line restore_line
+    end_line=$(marker_line "$marker" "toggle-end")
+    restore_line=$(marker_line "$marker" "^restore$")
+    [[ -n "$end_line" ]] || return 1
+    [[ -n "$restore_line" ]] || return 1
+    (( end_line < restore_line )) || return 1
+    return 0
+}
+
 test_event_loop_restarts_cleanly_on_monitor_eof() {
     setup_event_loop_test
 

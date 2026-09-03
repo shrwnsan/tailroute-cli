@@ -292,12 +292,12 @@ stop_poll() {
 # =============================================================================
 # handle_shutdown — SIGTERM/SIGINT handler
 # =============================================================================
-# Restores MagicDNS if we disabled it, releases lock, kills poll, and exits cleanly.
+# Stops the poll, restores MagicDNS if we disabled it, releases lock, exits cleanly.
 #
 # Side effects:
+#   - Stops the background poll process, waiting out any in-flight reconcile
 #   - Reads state manifest to determine if we disabled MagicDNS
 #   - Calls enable_magicdns() if needed
-#   - Kills background poll process
 #   - Releases lock
 #   - Exits process with code 0
 # =============================================================================
@@ -311,6 +311,11 @@ handle_shutdown() {
 
     log_info "Shutdown signal received; cleaning up"
 
+    # Stop the poll BEFORE reading the manifest: the poll may be mid-reconcile,
+    # and stopping it first means the manifest we read is final and no toggle
+    # can land after our restore and undo it.
+    stop_poll
+
     # Restore MagicDNS if we disabled it
     if [[ -n "${STATE_MANIFEST:-}" ]] && [[ -f "$STATE_MANIFEST" ]]; then
         local last_state
@@ -323,9 +328,6 @@ handle_shutdown() {
             fi
         fi
     fi
-
-    # Kill background poll
-    stop_poll
 
     # Release lock
     release_lock 2>/dev/null || true
