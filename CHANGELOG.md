@@ -2,6 +2,19 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.11] - 2026-09-03
+
+### Added
+- **`tunnel check <peer>`** — the browser's truth. A read-only diagnostic that walks the exact browser path from this Mac — hosts mapping → local listener → TLS/SNI → HTTP → adaptive branch — against the tunnel's registry data, and prints a per-layer verdict naming the repair for the first break. It is the first command that can see the 502 class: a peer's Serve upstream down behind a perfectly valid certificate reports "fix the service on the peer", where `status` (transport facts) and `add` (cert-only verification) both reported healthy. Inert by construction and test-enforced: probes and prints only — byte-identical registry, hosts, and launchd state, zero ssh to the peer. Exit codes: 0 path proven, 1 failure or no verdict, 2 usage, 3 unknown peer.
+  - App answers (404/500) are reported as *delivered* — the path is proven; only Serve-generated 502/503/504 fail the verdict, and a multi-forward tunnel degrades only when a real path failure exists.
+  - A registry entry with no forwards gets "no verdict", never a false-healthy claim.
+  - Deliberate boundaries: explicit peer required (no bare form, no flags, no `--json` in v1); `--allow-unverified-tls` tunnels always show the TLS layer as unverified; the standalone e2e script is untouched.
+  - Help now carries the read-only verb map: *status = inventory · drift = the peer's claim · check = the browser's truth*.
+
+### Fixed
+- **The stale-tunnel note names the repair** — `status`'s stale case (hosts entry present but job not running) was the only detected-but-verbless state in the renderer; the note now ends with `repair: tailroute tunnel restart <peer>`, matching the plist-missing and orphan precedents.
+- Tests: 330 → 348.
+
 ## [0.8.10] - 2026-09-03
 
 ### Fixed
