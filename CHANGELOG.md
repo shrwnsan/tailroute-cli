@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.12] - 2026-09-04
+
+### Added
+- **Not-found errors now list the registered tunnels** — every tunnel verb that misses a peer (`check`, `status <peer>`, `open`, `restart`, `remove`, `update --remote-port`) appends a registry index to the error: label, ssh alias (when it differs from the label), and URL. Typing an ssh alias where the label goes — `tunnel check micro` for the tunnel registered as `oci-micro` — now shows the right name instead of a dead end.
+  - Stderr only: stdout output and exit codes are unchanged at every site, so JSON consumers and scripted pipelines are unaffected. An empty or unreadable registry adds nothing.
+  - `tunnel drift` is deliberately unchanged — it treats unknown peers as data ("peer reports X — not registered"), which is better than an error.
+- Tests: 348 → 361.
+
 ## [0.8.11] - 2026-09-03
 
 ### Added
