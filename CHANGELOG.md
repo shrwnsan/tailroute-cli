@@ -2,6 +2,13 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.13] - 2026-09-12
+
+### Fixed
+- **`sudo tailroute install` works from a Homebrew install** — `do_install` staged libraries via `$script_dir/lib-*.sh`, which matches nothing under the brew layout (the formula installs libs into `../lib`), so a fresh install copied zero libraries and then aborted at the integrity manifest with `shasum: /usr/local/bin/lib-*.sh: No such file or directory` — a half-installed daemon, no `launchctl bootstrap`. This was the documented quick-start path (`brew install shrwnsan/tap/tailroute-cli` → `sudo tailroute install`), so every fresh Homebrew install hit it. Install now delegates to `install_lib_files()`, globbing the same `LIB_DIR` the runtime resolves (beside the script in a source checkout, `../lib` under Homebrew), keeps the only-if-newer copy semantics, and fails with an explicit `no lib-*.sh files found` error instead of a cryptic shasum line if the layout is broken.
+- **The wrapper's SOCKS5 probe actually probes** (T-433) — the `proxy-config ssh` wrapper's hand-built greeting+CONNECT pipeline has been dead since introduction (doubled `| \` backslashes inside the quoted heredoc, the port sent as ASCII hex text instead of two raw bytes, `dd` resolved at `/usr/bin` where macOS ships `/bin/dd`, and a `-q` flag macOS `/usr/bin/nc` doesn't have) — every connection silently routed direct. The probe is now `nc -X 5 -x "$PROXY_ADDR:$PROXY_PORT" -z -w 3 "$HOST" "$PORT"`: nc performs the real SOCKS5 CONNECT to the actual target and its exit code alone decides proxy vs direct.
+- Tests: 361 → 365.
+
 ## [0.8.12] - 2026-09-04
 
 ### Added
