@@ -622,6 +622,78 @@ WRAP
 }
 
 # =============================================================================
+# SOCKS5 target-aware probe — behavioral (T-433)
+# =============================================================================
+# The installed wrapper hard-codes /usr/bin/* paths by design (ProxyCommand
+# runs with a minimal PATH), so PATH mocking does not reach it. These tests
+# execute a sandbox copy with nc redirected to a scripted responder and pin
+# the whole contract: probe invocation shape, proxy branch on probe success,
+# direct branch on probe failure — and zero stderr noise in both cases.
+#
+# The probe delegates the SOCKS5 handshake to nc itself (`-X 5 -x ... -z`):
+# the same code path as the real connection, no hand-built bytes. The argv
+# assertions below are load-bearing: macOS /usr/bin/nc has no -q flag (the
+# original probe used one and died with a usage error its 2>/dev/null hid),
+# so the exact flag set is pinned, not just the branch outcome.
+
+_wrapper_probe_run() { # <host> <port> — echoes wrapper stderr
+    # Callers must export FAKE_SOCKS5_LOG / FAKE_SOCKS5_PROBE_RC first: the
+    # mock resolves them at runtime (helper runs inside $( ) and its own
+    # exports would not survive back into the test body).
+    local host="$1" port="$2"
+    cat > "$TUNNEL_SANDBOX/bin/probe-nc" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_SOCKS5_LOG"
+case "$*" in
+    *" -z "*) exit "${FAKE_SOCKS5_PROBE_RC:-0}" ;;   # probe call
+esac
+exit 0                                               # exec-branch call
+MOCK
+    chmod +x "$TUNNEL_SANDBOX/bin/probe-nc"
+    sed "s|/usr/bin/nc|$TUNNEL_SANDBOX/bin/probe-nc|g" \
+        "$TUNNEL_SSH_WRAPPER" > "$TUNNEL_SANDBOX/bin/wrapper-under-test.sh"
+    chmod +x "$TUNNEL_SANDBOX/bin/wrapper-under-test.sh"
+    "$TUNNEL_SANDBOX/bin/wrapper-under-test.sh" "$host" "$port" </dev/null 2>&1 >/dev/null
+}
+
+test_wrapper_probe_success_selects_proxy_branch() {
+    _tunnel_setup_sandbox
+    assert_ok tunnel_install_ssh_wrapper no
+    local host="probe.tailnet.ts.net" port=443
+    export FAKE_SOCKS5_LOG="$TUNNEL_SANDBOX/nc-calls.log"
+    export FAKE_SOCKS5_PROBE_RC=0   # proxy reachable, target reachable
+    : > "$FAKE_SOCKS5_LOG"
+    local noise
+    noise="$(_wrapper_probe_run "$host" "$port")"
+    # Probe shape pinned exactly: nc's own SOCKS5 client, -z scan, -w timeout.
+    # No -q (macOS nc lacks it), no hand-built handshake bytes.
+    assert_contains "-x 127.0.0.1:1055 -z -w 3 $host $port" "$(cat "$FAKE_SOCKS5_LOG")"
+    assert_contains "-x 127.0.0.1:1055 $host $port" "$(cat "$FAKE_SOCKS5_LOG")"
+    assert_eq "" "$noise"
+}
+
+test_wrapper_probe_failure_falls_back_to_direct() {
+    _tunnel_setup_sandbox
+    assert_ok tunnel_install_ssh_wrapper no
+    local host="probe.tailnet.ts.net" port=443
+    export FAKE_SOCKS5_LOG="$TUNNEL_SANDBOX/nc-calls.log"
+    export FAKE_SOCKS5_PROBE_RC=1   # proxy down / target unreachable via proxy
+    : > "$FAKE_SOCKS5_LOG"
+    local noise
+    noise="$(_wrapper_probe_run "$host" "$port")"
+    # Same shape pinning on the failure path: the probe must have run with
+    # nc's own SOCKS5 client (exit code drives the fallback).
+    assert_contains "-x 127.0.0.1:1055 -z -w 3 $host $port" "$(cat "$FAKE_SOCKS5_LOG")"
+    if grep -qF -- '-x 127.0.0.1:1055 '"$host" "$FAKE_SOCKS5_LOG"; then
+        _assert_fail "proxy branch chosen despite failed probe"
+    fi
+    # The direct exec form carries "<host> <port>" with no -X/-x prefix.
+    [ -n "$(grep -F "$host $port" "$FAKE_SOCKS5_LOG" | grep -v -- '-X 5')" ] \
+        || { echo "direct nc branch never invoked"; return 1; }
+    assert_eq "" "$noise"
+}
+
+# =============================================================================
 # End-to-end add / status / remove against mocks
 # =============================================================================
 
