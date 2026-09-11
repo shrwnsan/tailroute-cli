@@ -272,6 +272,32 @@ do_dry_run() {
     exit 0
 }
 
+# install_lib_files — Stage the runtime libraries into the daemon bin dir.
+# Globs $LIB_DIR rather than the invoking script's dir: the script runs from
+# a source checkout (libs beside it) or a Homebrew prefix (libs in ../lib),
+# and install must work from both. Fails when no libraries are found so a
+# broken source layout cannot yield a half-installed daemon (the integrity
+# manifest step would otherwise hash an unexpanded /usr/local/bin glob).
+install_lib_files() {
+    local dest="$1"
+    local lib lib_name found=0
+    for lib in "$LIB_DIR"/lib-*.sh; do
+        if [[ -f "$lib" ]]; then
+            found=1
+            lib_name="$(basename "$lib")"
+            if [[ ! -f "$dest/$lib_name" ]] || [[ "$lib" -nt "$dest/$lib_name" ]]; then
+                cp -f "$lib" "$dest/"
+            fi
+            chown root:wheel "$dest/$lib_name"
+            chmod 0644 "$dest/$lib_name"
+        fi
+    done
+    if [[ $found -eq 0 ]]; then
+        echo "ERROR: no lib-*.sh files found in $LIB_DIR - cannot install" >&2
+        return 1
+    fi
+}
+
 # =============================================================================
 # do_install — Install daemon (requires root)
 # =============================================================================
@@ -327,17 +353,7 @@ do_install() {
     
     # Copy library files to /usr/local/bin (only if newer)
     echo "  Installing library files..."
-    local lib_name
-    for lib in "$script_dir"/lib-*.sh; do
-        if [[ -f "$lib" ]]; then
-            lib_name="$(basename "$lib")"
-            if [[ ! -f "/usr/local/bin/$lib_name" ]] || [[ "$lib" -nt "/usr/local/bin/$lib_name" ]]; then
-                cp -f "$lib" /usr/local/bin/
-            fi
-            chown root:wheel "/usr/local/bin/$lib_name"
-            chmod 0644 "/usr/local/bin/$lib_name"
-        fi
-    done
+    install_lib_files /usr/local/bin
     
     # Copy plist to /Library/LaunchDaemons
     if [[ -f "$project_root/etc/com.tailroute.daemon.plist" ]]; then
