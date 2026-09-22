@@ -529,6 +529,19 @@ PROXY_SOCKS_ADDR="127.0.0.1:1055"
 PROXY_PID_FILE="$HOME/.tailroute/proxy.pid"
 PROXY_VERSION="${VERSION}"
 
+# System-wide proxy location used by `sudo tailroute install` (source
+# checkouts). Function, not constant, so tests can redirect the legacy-path
+# logic to a scratch dir (#42 defect 3).
+_system_proxy_bin() {
+    echo "/usr/local/bin/$PROXY_BIN_NAME"
+}
+
+# True when this script itself was installed to /usr/local/bin — that layout
+# owns the system proxy location, so there it is canonical, not legacy.
+_script_is_system_install() {
+    [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]
+}
+
 # Download URL (update for public releases)
 # Proxy binaries are released from the tailroute-cli repo (tag-matched)
 PROXY_DOWNLOAD_BASE="https://github.com/shrwnsan/tailroute-cli/releases/download"
@@ -669,8 +682,8 @@ do_proxy_auth() {
     local bin_path
     if is_proxy_installed; then
         bin_path="$PROXY_BIN_PATH"
-    elif [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-        bin_path="/usr/local/bin/$PROXY_BIN_NAME"
+    elif [[ -x "$(_system_proxy_bin)" ]]; then
+        bin_path=$(_system_proxy_bin)
     else
         echo "ERROR: Proxy binary not installed."
         echo "Run 'tailroute proxy install' first."
@@ -694,10 +707,40 @@ do_proxy_auth() {
     echo "Start the proxy with: tailroute proxy start"
 }
 
+_check_proxy_binary_version() {
+    local bin="$1" ver
+    ver=$("$bin" --version 2>/dev/null | tail -n 1 | awk '{print $NF}' || true)
+    if [[ -z "$ver" ]]; then
+        echo "⚠️  Binary did not report a version (pre-0.5 generation?) — reinstall to align"
+    elif [[ "$ver" != "$VERSION" ]]; then
+        echo "⚠️  Version skew: binary $ver, CLI v$VERSION — reinstall to align"
+    else
+        echo "Version: $ver (matches CLI)"
+    fi
+}
+
+# Exactly one spawnable proxy per host (#42 defect 3): when the canonical
+# download location is the one this install manages, a leftover binary at
+# the system path is a stale generation — rename it aside (never rm).
+_retire_legacy_system_proxy() {
+    local system_bin retired
+    _script_is_system_install && return 0
+    system_bin=$(_system_proxy_bin)
+    [[ -x "$system_bin" ]] || return 0
+    retired="${system_bin}.retired"
+    if mv -f "$system_bin" "$retired" 2>/dev/null; then
+        echo "Retired legacy proxy: $system_bin → $retired"
+    else
+        echo "⚠️  Legacy proxy at $system_bin could not be retired (permissions)."
+        echo "   Run: sudo mv \"$system_bin\" \"$retired\""
+    fi
+}
+
 do_proxy_install() {
     if is_proxy_installed; then
         echo "Proxy already installed at $PROXY_BIN_PATH"
-        "$PROXY_BIN_PATH" --version 2>/dev/null || true
+        _check_proxy_binary_version "$PROXY_BIN_PATH"
+        _retire_legacy_system_proxy
         return 0
     fi
     
@@ -735,7 +778,8 @@ do_proxy_install() {
     
     chmod +x "$PROXY_BIN_PATH"
     echo "Installed: $PROXY_BIN_PATH"
-    "$PROXY_BIN_PATH" --version 2>/dev/null || true
+    _check_proxy_binary_version "$PROXY_BIN_PATH"
+    _retire_legacy_system_proxy
 }
 
 do_proxy_uninstall() {
@@ -783,8 +827,9 @@ do_proxy_start() {
     # Check if installed, offer to download
     if ! is_proxy_installed; then
         # Check for system-wide install
-        if [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-            PROXY_BIN_PATH="/usr/local/bin/$PROXY_BIN_NAME"
+        if [[ -x "$(_system_proxy_bin)" ]]; then
+            PROXY_BIN_PATH=$(_system_proxy_bin)
+            echo "⚠️  Using legacy proxy at $PROXY_BIN_PATH — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
         else
             echo "Proxy binary not installed."
             read -p "Download tailroute-proxy (~20MB)? [Y/n] " confirm
@@ -879,8 +924,8 @@ do_proxy_status() {
     
     if is_proxy_installed; then
         echo "Binary:   $PROXY_BIN_PATH"
-    elif [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-        echo "Binary:   /usr/local/bin/$PROXY_BIN_NAME (system)"
+    elif [[ -x "$(_system_proxy_bin)" ]]; then
+        echo "Binary:   $(_system_proxy_bin) (system)"
     else
         echo "Binary:   Not installed"
         echo "          Run 'tailroute proxy install' to download"

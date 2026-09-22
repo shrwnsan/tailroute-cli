@@ -74,6 +74,8 @@ _install_proxy_mocks() {
     }
     # nc -z host port — port probes stay closed unless a test opens them
     nc() { return 1; }
+    # readiness/stop wait loops must not actually wait
+    sleep() { :; }
 }
 
 fake_comm() { printf '%s' "$2" > "$PROXY_TEST_PROC/$1"; }
@@ -179,4 +181,95 @@ test_status_reports_the_resolved_pid_not_the_stale_one() {
     local out
     out=$(do_proxy_status 2>&1)
     assert_contains "Running (pid $PPID)" "$out"
+}
+
+# =============================================================================
+# Canonical binary location and version awareness (#42 defect 3)
+# =============================================================================
+
+# Fixture "binaries" are /bin/sh stubs that answer --version.
+
+test_install_flags_version_skew_between_binary_and_cli() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy 0.2.2"\n' > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }   # keep /usr/local/bin out of it
+
+    local out
+    out=$(do_proxy_install 2>&1)
+    assert_contains "Version skew" "$out"
+    assert_contains "0.2.2" "$out"
+}
+
+test_install_accepts_matching_version() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$VERSION" > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+
+    local out
+    out=$(do_proxy_install 2>&1)
+    assert_contains "matches CLI" "$out"
+}
+
+test_install_flags_unversioned_legacy_binary() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\nexit 0\n' > "$PROXY_BIN_PATH"        # answers nothing
+    chmod +x "$PROXY_BIN_PATH"
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+
+    local out
+    out=$(do_proxy_install 2>&1)
+    assert_contains "did not report a version" "$out"
+}
+
+test_install_retires_legacy_system_binary() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$VERSION" > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    local legacy="$PROXY_TEST_HOME/system/tailroute-proxy"
+    mkdir -p "$PROXY_TEST_HOME/system"
+    printf '#!/bin/sh\nexit 0\n' > "$legacy"
+    chmod +x "$legacy"
+    _system_proxy_bin() { echo "$legacy"; }
+
+    local out
+    out=$(do_proxy_install 2>&1)
+    assert_contains "Retired legacy proxy" "$out"
+    if [[ -x "$legacy" ]]; then
+        _assert_fail "legacy binary must be moved aside, not left spawnable"
+    fi
+    if [[ ! -x "$legacy.retired" ]]; then
+        _assert_fail "retired binary must be preserved (rename, never rm)"
+    fi
+}
+
+test_install_leaves_system_binary_alone_for_source_installs() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$VERSION" > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    local legacy="$PROXY_TEST_HOME/system/tailroute-proxy"
+    mkdir -p "$PROXY_TEST_HOME/system"
+    printf '#!/bin/sh\nexit 0\n' > "$legacy"
+    chmod +x "$legacy"
+    _system_proxy_bin() { echo "$legacy"; }
+    _script_is_system_install() { return 0; }               # `sudo tailroute install` layout
+
+    do_proxy_install > /dev/null 2>&1
+    if [[ ! -x "$legacy" ]]; then
+        _assert_fail "the system install owns /usr/local/bin — it must not be retired"
+    fi
+}
+
+test_start_warns_when_falling_back_to_legacy_system_binary() {
+    _setup_proxy_sandbox
+    local legacy="$PROXY_TEST_HOME/system/tailroute-proxy"
+    mkdir -p "$PROXY_TEST_HOME/system"
+    printf '#!/bin/sh\nexit 0\n' > "$legacy"                # spawn exits immediately; port stays closed
+    chmod +x "$legacy"
+    _system_proxy_bin() { echo "$legacy"; }
+
+    local out
+    out=$(do_proxy_start 2>&1 </dev/null)
+    assert_contains "legacy" "$out"
 }
