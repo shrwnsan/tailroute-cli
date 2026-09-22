@@ -1280,6 +1280,10 @@ do_tunnel() {
             cat <<'EOF'
 Usage: tailroute tunnel <command> [args]
 
+A <peer> argument accepts the tunnel's ssh alias as well as its exact
+label (the alias the not-found hint shows). An exact label wins; an
+alias shared by more than one tunnel is refused — name the label.
+
 Commands:
   add <peer> [--port N] [--remote-port N[,N...]]... [--adopt]
             [--ssh-alias A] [--allow-unverified-tls] [--yes]

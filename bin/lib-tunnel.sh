@@ -1604,6 +1604,55 @@ EOF
     return 0
 }
 
+# Canonicalize a peer argument before a verb acts on it: an exact registry
+# label wins, then a UNIQUE sshAlias maps to its label. The alias is what the
+# not-found hint (v0.8.12) teaches, so typing it back must work; but remove
+# and restart act on the answer, so an ambiguous alias is an error, never a
+# guess. Everything else passes through UNCHANGED — an unknown peer, an empty
+# or unreadable registry all return the input as-is, leaving each verb's own
+# not-found path in charge byte for byte. Reads only the inert index rows
+# (no mkdir, no lock, no journal), so check/drift stay write-free and remove
+# may resolve before it takes the transaction lock. Prints the canonical
+# peer on stdout; rc 3 only for an ambiguous alias (error already printed).
+tunnel_resolve_peer() { # <peer> — call after tunnel_normalize_lower
+    if [ $# -ne 1 ] || [ -z "$1" ]; then
+        echo "ERROR: tunnel_resolve_peer requires <peer>" >&2
+        return 2
+    fi
+    local want="$1" rows peer alias matches="" count=0
+    rows="$(tunnel_registry_index_rows 2>/dev/null)" || rows=""
+    [ -n "$rows" ] || { printf '%s\n' "$want"; return 0; }
+    while IFS=$'\037' read -r peer alias _hostname _lport; do
+        [ -n "$peer" ] || continue
+        if [ "$peer" = "$want" ]; then
+            printf '%s\n' "$want"
+            return 0
+        fi
+        if [ -n "$alias" ] && [ "$alias" != "$peer" ] && [ "$alias" = "$want" ]; then
+            # newline-separated: a label is validator-shaped today, but a
+            # hand-edited registry must never word-split inside the error
+            matches="${matches}${peer}
+"
+            count=$((count + 1))
+        fi
+    done <<EOF
+$(printf '%s\n' "$rows" | tr '\t' '\037')
+EOF
+    if [ "$count" -eq 0 ]; then
+        printf '%s\n' "$want"
+        return 0
+    fi
+    if [ "$count" -gt 1 ]; then
+        echo "ERROR: alias '$want' is ambiguous — it matches more than one tunnel:" >&2
+        printf '%s\n' "$matches" | sed '/^$/d' | while IFS= read -r peer; do
+            echo "  $peer" >&2
+        done
+        echo "Name the tunnel by its label instead." >&2
+        return 3
+    fi
+    printf '%s\n' "$matches"
+}
+
 # Render the report. Peer-derived strings are semi-untrusted: they are printed,
 # never executed, and backends are reduced to inert characters before printing.
 tunnel_drift_render() { # <peer> <entry-json-or-""> <claims-tsv> <cap>
@@ -1724,6 +1773,7 @@ tunnel_do_drift() {
     }
     peer="$(tunnel_normalize_lower "$peer")"
     tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 2; }
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
 
     local state entry="" reg_ports=""
     state="$(tunnel_drift_registry_state "$peer")" || {
@@ -1851,6 +1901,7 @@ tunnel_do_check() {
     }
     peer="$(tunnel_normalize_lower "$peer")"
     tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 2; }
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
 
     local state entry="" hostname pairs
     state="$(tunnel_drift_registry_state "$peer")" || {
@@ -1968,6 +2019,8 @@ tunnel_do_check() {
 # this call, so (peer, localPort, remotePort) identities stay unique.
 tunnel_update_add_forward() { # <peer> <remote-port>...
     local peer="$1"; shift
+    peer="$(tunnel_normalize_lower "$peer")"
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
     local entry new_fwd lport rport
     entry="$(tunnel_registry_get "$peer")" || {
         echo "ERROR: no registry entry for '$peer'" >&2; tunnel_registry_index_hint >&2; return 1; }
@@ -2122,6 +2175,7 @@ tunnel_do_add() {
     [ -n "$peer" ] || { echo "ERROR: tunnel add requires <peer>" >&2; return 2; }
     peer="$(tunnel_normalize_lower "$peer")"
     tunnel_validate_peer_label "$peer" || { echo "ERROR: invalid peer label '$peer'" >&2; return 2; }
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
     if [ -n "$ssh_alias" ]; then
         ssh_alias="$(tunnel_normalize_lower "$ssh_alias")"
         tunnel_validate_peer_label "$ssh_alias" || { echo "ERROR: invalid ssh alias '$ssh_alias'" >&2; return 2; }
@@ -2408,6 +2462,7 @@ tunnel_do_remove() {
     local peer="${1:-}"
     [ -n "$peer" ] || { echo "ERROR: tunnel remove requires <peer>" >&2; return 2; }
     peer="$(tunnel_normalize_lower "$peer")"
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
     tunnel_lock_acquire || return 1
 
     # Check for incomplete journal from a previous crash
@@ -2554,6 +2609,10 @@ tunnel_do_journal_clear() {
 
 tunnel_do_restart() {
     local peer="${1:-}" entry p label plist rc=0
+    if [ -n "$peer" ]; then
+        peer="$(tunnel_normalize_lower "$peer")"
+        peer="$(tunnel_resolve_peer "$peer")" || return $?
+    fi
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         p="$(tunnel_registry_field "$entry" peer)"
@@ -2730,6 +2789,7 @@ tunnel_do_status() {
     orphans="$(tunnel_status_orphans)"
 
     if [ -n "$peer" ]; then
+        peer="$(tunnel_resolve_peer "$peer")" || return $?
         rows="$(printf '%s\n' "$rows" | awk -F'\t' -v p="$peer" '$1 == p')"
         if [ -z "$rows" ]; then
             echo "ERROR: tunnel for '$peer' not found" >&2
@@ -2876,6 +2936,7 @@ tunnel_do_open() { # <peer>
     local peer="${1:-}"
     [ -n "$peer" ] || { echo "ERROR: tunnel open requires <peer>" >&2; return 2; }
     peer="$(tunnel_normalize_lower "$peer")"
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
     local entry hostname lport url
     entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
         echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; return 3; }
