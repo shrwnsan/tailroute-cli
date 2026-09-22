@@ -2,6 +2,13 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.14] - 2026-09-23
+
+### Added
+- **Every tunnel verb now accepts the ssh alias where the label goes** — `tunnel check prime` for the tunnel registered as `oci-prime` resolves to it instead of dead-ending on "not found". The v0.8.12 not-found hint taught the alias but only displayed it; now a UNIQUE `sshAlias` maps to its label for `check`, `drift`, `status`, `restart`, `remove`, `open`, and `add` (including the incremental `--remote-port` update, which previously failed the tailscale lookup on the alias). Precedence is exact-label-first, so every input that worked before behaves identically, and an unresolvable argument passes through unchanged — each verb's existing not-found error still renders verbatim. An alias shared by more than one registry entry is refused with the candidate list — never guessed, because `remove` and `restart` act on the answer. Resolution reads only the inert registry index (no mkdir, no lock, no journal), so `check` and `drift` stay write-free and `remove` may resolve before taking the transaction lock.
+- `restart` and the incremental `add --remote-port` path now lowercase the peer argument like every other verb, so `tunnel restart OCI-Prime` no longer misses a registered `oci-prime`.
+- Tests: 367 → 383.
+
 ## [0.8.13] - 2026-09-12
 
 ### Fixed
