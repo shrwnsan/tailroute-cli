@@ -2873,3 +2873,182 @@ JSON
         _assert_fail "the aliased row must render unchanged: $out"
     }
 }
+
+# =============================================================================
+# ssh-alias argument resolution — the alias the CLI displays is the alias it
+# accepts (v0.8.12 taught the alias through the not-found hint; typing it
+# back must not dead-end). Precedence: an exact registry label wins, then a
+# UNIQUE sshAlias. An ambiguous alias is an error, never a guess (remove and
+# restart act on the answer). Unresolvable input passes through UNCHANGED so
+# every verb's existing not-found path renders its own contract verbatim.
+# =============================================================================
+
+test_resolve_peer_maps_a_unique_ssh_alias_to_its_label() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local got
+    got="$(tunnel_resolve_peer shorty)"
+    assert_eq "$FX_PEER" "$got" "the alias resolves to the label"
+}
+
+test_resolve_peer_prefers_the_exact_label_over_a_foreign_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "second"      # prime's alias IS second's label
+    _t439_register_second "8444:8080"
+    local got
+    got="$(tunnel_resolve_peer second)"
+    assert_eq "second" "$got" "an exact label beats any alias"
+}
+
+test_resolve_peer_rejects_an_ambiguous_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "dup"
+    local entry
+    entry="$(tunnel_build_entry_json "second" "$FX_IP" "second.$FX_SUFFIX" "$FX_SUFFIX" "8444:8080" "dup")"
+    tunnel_registry_add second "$entry" >/dev/null
+    local out rc=0
+    out="$(tunnel_resolve_peer dup 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "an ambiguous alias is a not-found-class failure"
+    assert_contains "ambiguous" "$out"
+    assert_contains "prime" "$out" "the candidates are named"
+    assert_contains "second" "$out"
+}
+
+test_resolve_peer_passes_unknown_input_through_unchanged() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local got
+    got="$(tunnel_resolve_peer ghost)"
+    assert_eq "ghost" "$got" "strict mode leaves unknown input for the verb's own not-found path"
+}
+
+test_add_does_not_resolve_the_ssh_alias_flag_value_as_the_peer() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local out rc=0
+    out="$(tunnel_do_add newtunnel --ssh-alias shorty --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "a new peer still goes to the tailscale lookup (got: $out)"
+    assert_contains "peer 'newtunnel' not found in tailnet" "$out" \
+        "only the positional resolves — the --ssh-alias value must not replace it"
+}
+
+test_resolve_peer_passes_through_when_the_registry_is_unreadable() {
+    _tunnel_setup_sandbox
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    echo "{ not json" > "$TUNNEL_REGISTRY"
+    local got
+    got="$(tunnel_resolve_peer ghost)"
+    assert_eq "ghost" "$got" "the verb's own unreadable-registry handling stays in charge"
+}
+
+# --- wired into the verbs: the alias reaches the real code path --------------
+
+test_check_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443 1055"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 200
+    local out
+    out="$(_tunnel_check_inert shorty 0)"
+    assert_contains "healthy" "$out" "the alias reached the real check path"
+}
+
+test_check_rejects_an_ambiguous_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "dup"
+    local entry
+    entry="$(tunnel_build_entry_json "second" "$FX_IP" "second.$FX_SUFFIX" "$FX_SUFFIX" "8444:8080" "dup")"
+    tunnel_registry_add second "$entry" >/dev/null
+    local out
+    out="$(_tunnel_check_inert dup 3)"
+    assert_contains "ambiguous" "$out"
+    if printf '%s' "$out" | grep -q "not found"; then
+        _assert_fail "ambiguity must not masquerade as not-found: $out"
+    fi
+}
+
+test_drift_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    FAKE_SERVE_STATUS="{\"Web\":{\"https://$FX_HOSTNAME:443\":{\"Handlers\":{\"/\":{\"Backend\":\"http://127.0.0.1:3000\"}}}}}"
+    export FAKE_SERVE_STATUS
+    local out
+    out="$(_t439_drift_inert shorty 0)"
+    assert_contains "$FX_PEER: no drift" "$out" "the verdict names the canonical label"
+}
+
+test_drift_rejects_an_ambiguous_alias_rather_than_calling_it_unregistered() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "dup"
+    local entry
+    entry="$(tunnel_build_entry_json "second" "$FX_IP" "second.$FX_SUFFIX" "$FX_SUFFIX" "8444:8080" "dup")"
+    tunnel_registry_add second "$entry" >/dev/null
+    local out
+    out="$(_t439_drift_inert dup 3)"
+    assert_contains "ambiguous" "$out"
+    if printf '%s' "$out" | grep -q "not registered"; then
+        _assert_fail "both candidates are registered — that report would be a lie: $out"
+    fi
+}
+
+test_status_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    local out rc=0
+    out="$(tunnel_do_status --skip-remote-check shorty 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "status resolves the alias (got: $out)"
+    assert_contains "prime" "$out"
+}
+
+test_open_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "shorty"
+    local out rc=0
+    out="$(tunnel_do_open shorty 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "open resolves the alias (got: $out)"
+    assert_contains "Opened https://$FX_HOSTNAME:8443" "$out"
+}
+
+test_remove_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null
+    assert_ok tunnel_do_remove shorty
+    assert_fail tunnel_registry_get "$FX_PEER"
+}
+
+test_remove_rejects_an_ambiguous_alias() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443" "dup"
+    local entry
+    entry="$(tunnel_build_entry_json "second" "$FX_IP" "second.$FX_SUFFIX" "$FX_SUFFIX" "8444:8080" "dup")"
+    tunnel_registry_add second "$entry" >/dev/null
+    local out rc=0
+    out="$(tunnel_do_remove dup 2>&1)" || rc=$?
+    assert_eq 3 "$rc" "an ambiguous alias never reaches the destructive path"
+    assert_contains "ambiguous" "$out"
+    assert_ok tunnel_registry_get "$FX_PEER"
+    assert_ok tunnel_registry_get second
+}
+
+test_restart_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null
+    assert_ok tunnel_do_restart shorty
+    grep -qx "com.tailroute.tunnel.$FX_PEER" "$LAUNCHCTL_STATE" || { echo "job not loaded after alias restart"; return 1; }
+}
+
+test_incremental_add_accepts_the_ssh_alias() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" > "$TUNNEL_SSH_CONFIG"
+    tunnel_do_add "$FX_PEER" --ssh-alias shorty --yes >/dev/null 2>&1
+    local out
+    out="$(tunnel_do_add shorty --remote-port 8080 --yes 2>&1)" || { echo "incremental add by alias failed: $out"; return 1; }
+    local fwd
+    fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    assert_eq "8443:443 8444:8080" "$fwd"
+}

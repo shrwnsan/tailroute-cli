@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tailroute.sh — Main daemon and CLI entry point
-# tailroute v0.8.13
+# tailroute v0.8.14
 #
 # Usage:
 #   tailroute daemon        Run as daemon (for launchd)
@@ -21,7 +21,7 @@ set -euo pipefail
 export HOME
 
 # Version
-readonly VERSION="0.8.13"
+readonly VERSION="0.8.14"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -1279,6 +1279,10 @@ do_tunnel() {
         ""|--help|-h)
             cat <<'EOF'
 Usage: tailroute tunnel <command> [args]
+
+A <peer> argument accepts the tunnel's ssh alias as well as its exact
+label (the alias the not-found hint shows). An exact label wins; an
+alias shared by more than one tunnel is refused — name the label.
 
 Commands:
   add <peer> [--port N] [--remote-port N[,N...]]... [--adopt]
