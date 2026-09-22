@@ -39,6 +39,7 @@ _load_tailroute() {
 _setup_proxy_sandbox() {
     PROXY_TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tailroute-proxy-test.XXXXXX")"
     export HOME="$PROXY_TEST_HOME"
+    export PROXY_TEST_HOME   # fixture children record their argv/env under it
     mkdir -p "$PROXY_TEST_HOME/.tailroute/bin" "$PROXY_TEST_HOME/.tailroute/proxy-state"
     PROXY_TEST_PROC="$PROXY_TEST_HOME/proc"
     mkdir -p "$PROXY_TEST_PROC"
@@ -272,4 +273,92 @@ test_start_warns_when_falling_back_to_legacy_system_binary() {
     local out
     out=$(do_proxy_start 2>&1 </dev/null)
     assert_contains "legacy" "$out"
+}
+
+# =============================================================================
+# Auth state surfacing (#42 defect 4)
+# =============================================================================
+
+# Log lines are the exact markers observed on the incident host:
+#   2026/09/23 01:55:26 LocalBackend state is NeedsLogin; running StartLoginInteractive...
+#   2026/09/23 01:55:26 tsnet connected, state: NeedsLogin
+
+test_auth_reports_pending_login_url_from_log() {
+    _setup_proxy_sandbox
+    : > "$PROXY_STATE_DIR/tailscaled.state"
+    printf 'To login, visit: https://login.tailscale.com/a/0123456789abcdef\n' \
+        > "$PROXY_TEST_HOME/.tailroute/proxy.log"
+
+    local out
+    out=$(do_proxy_auth 2>&1 </dev/null)
+    assert_contains "https://login.tailscale.com/a/0123456789abcdef" "$out"
+}
+
+test_auth_detects_needslogin_loop_and_points_at_authkey() {
+    _setup_proxy_sandbox
+    : > "$PROXY_STATE_DIR/tailscaled.state"
+    printf 'tsnet connected, state: NeedsLogin\n' > "$PROXY_TEST_HOME/.tailroute/proxy.log"
+
+    local out rc=0
+    out=$(do_proxy_auth 2>&1 </dev/null) || rc=$?
+    assert_contains "NeedsLogin" "$out"
+    assert_contains "TS_AUTHKEY" "$out"
+    assert_eq "1" "$rc" "NeedsLogin state must not read as success"
+}
+
+test_auth_still_reports_authenticated_without_markers() {
+    _setup_proxy_sandbox
+    : > "$PROXY_STATE_DIR/tailscaled.state"
+    printf 'tsnet connected, state: Running\n' > "$PROXY_TEST_HOME/.tailroute/proxy.log"
+
+    local out
+    out=$(do_proxy_auth 2>&1 </dev/null)
+    assert_contains "already authenticated" "$out"
+}
+
+test_auth_flow_mentions_the_authkey_path_upfront() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\nexit 0\n' > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+
+    local out
+    out=$(do_proxy_auth 2>&1 </dev/null)
+    assert_contains "TS_AUTHKEY" "$out"
+    if grep -q "Open the URL below" <<< "$out"; then
+        _assert_fail "must not promise a URL it never prints"
+    fi
+}
+
+test_start_passes_authkey_by_env_not_argv() {
+    _setup_proxy_sandbox
+    # Fixture records its argv and the TS_AUTHKEY it received.
+    printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$PROXY_TEST_HOME/child-args"\nprintf "%%s" "${TS_AUTHKEY-}" > "$PROXY_TEST_HOME/child-env"\nexit 0\n' > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    TS_AUTHKEY="tskey-auth-test-secret" do_proxy_start > /dev/null 2>&1 </dev/null
+
+    # The spawn is asynchronous — wait for the fixture to record itself
+    # (/bin/sleep, not the mocked sleep).
+    local tries=0
+    while [[ ! -f "$PROXY_TEST_HOME/child-env" && $tries -lt 100 ]]; do
+        /bin/sleep 0.05
+        tries=$((tries + 1))
+    done
+
+    assert_eq "tskey-auth-test-secret" "$(cat "$PROXY_TEST_HOME/child-env")" \
+        "the key must reach the proxy through the environment"
+    if grep -q "auth-key\|tskey" "$PROXY_TEST_HOME/child-args"; then
+        _assert_fail "auth key must not appear in argv (world-readable via ps)"
+    fi
+}
+
+test_status_reports_needslogin_when_running() {
+    _setup_proxy_sandbox
+    echo $$ > "$PROXY_PID_FILE"
+    fake_comm $$ tailroute-proxy
+    printf 'tsnet connected, state: NeedsLogin\n' > "$PROXY_TEST_HOME/.tailroute/proxy.log"
+
+    local out
+    out=$(do_proxy_status 2>&1)
+    assert_contains "Needs login" "$out"
+    assert_contains "proxy auth" "$out"
 }

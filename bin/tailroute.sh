@@ -664,9 +664,46 @@ do_proxy() {
     esac
 }
 
+# The login URL the proxy surfaced, if any. The 0.5.0-beta.1 tsnet proxy
+# never prints one — it loops on NeedsLogin silently (#42 defect 4).
+_proxy_login_url() {
+    grep -m1 -oE 'https://login\.tailscale\.com/[a-zA-Z0-9/._-]+' \
+        "$HOME/.tailroute/proxy.log" 2>/dev/null || true
+}
+
+# True when the last proxy run was stuck unauthenticated (markers verbatim
+# from the incident host's ~/.tailroute/proxy.log).
+_proxy_last_run_needs_login() {
+    grep -q 'NeedsLogin' "$HOME/.tailroute/proxy.log" 2>/dev/null
+}
+
+_proxy_authkey_hint() {
+    echo "Pre-authenticate instead: generate a Tailscale auth key"
+    echo "(admin console → Settings → Keys) and run:"
+    echo ""
+    echo "  TS_AUTHKEY=tskey-auth-... tailroute proxy start"
+}
+
 do_proxy_auth() {
-    # Check if already authenticated
+    # A state file also exists when the proxy is stuck in NeedsLogin —
+    # check what the last run actually said before claiming success.
     if [[ -f "$PROXY_STATE_DIR/tailscaled.state" ]]; then
+        local url
+        url=$(_proxy_login_url)
+        if [[ -n "$url" ]]; then
+            echo "A proxy login is pending — open this URL and approve:"
+            echo ""
+            echo "  $url"
+            echo ""
+            echo "(Pre-auth alternative:)"
+            _proxy_authkey_hint
+            return 0
+        fi
+        if _proxy_last_run_needs_login; then
+            echo "⚠️  Proxy state exists but the last run was not logged in (NeedsLogin)."
+            _proxy_authkey_hint
+            return 1
+        fi
         echo "✓ Proxy already authenticated."
         echo "Start the proxy with: tailroute proxy start"
         return 0
@@ -690,7 +727,11 @@ do_proxy_auth() {
         exit 1
     fi
     
-    echo "Open the URL below to authenticate with your Tailscale account:"
+    echo "Starting the proxy in the foreground for authentication."
+    echo "If it prints a login URL, open it and approve; if it loops on"
+    echo "NeedsLogin without a URL, press Ctrl+C and pre-auth instead:"
+    echo ""
+    _proxy_authkey_hint
     echo ""
     echo "Starting proxy for authentication..."
     echo "(Press Ctrl+C after approving in your browser)"
@@ -847,12 +888,13 @@ do_proxy_start() {
     
     echo "Starting proxy on $PROXY_SOCKS_ADDR..."
     
-    # Start proxy in background (pass TS_AUTHKEY if available)
-    if [[ -n "$TS_AUTHKEY" ]]; then
-        "$PROXY_BIN_PATH" \
+    # Start proxy in background. TS_AUTHKEY goes through the environment
+    # (tsnet reads it natively): --auth-key on argv exposed the key to
+    # every local user via ps (#42 defect 4).
+    if [[ -n "${TS_AUTHKEY:-}" ]]; then
+        TS_AUTHKEY="$TS_AUTHKEY" "$PROXY_BIN_PATH" \
             --socks-addr "$PROXY_SOCKS_ADDR" \
             --state-dir "$PROXY_STATE_DIR" \
-            --auth-key "$TS_AUTHKEY" \
             >"$HOME/.tailroute/proxy.log" 2>&1 &
     else
         "$PROXY_BIN_PATH" \
@@ -938,6 +980,9 @@ do_proxy_status() {
         pid=$(get_proxy_pid)
         echo "Status:   Running (pid $pid)"
         echo "Listen:   $PROXY_SOCKS_ADDR"
+        if _proxy_last_run_needs_login; then
+            echo "Auth:     Needs login — run 'tailroute proxy auth' or pre-auth with TS_AUTHKEY"
+        fi
 
         # Check if port is actually listening
         if nc -z 127.0.0.1 1055 >/dev/null 2>&1; then
