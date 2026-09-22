@@ -548,28 +548,60 @@ is_proxy_installed() {
     [[ -x "$PROXY_BIN_PATH" ]]
 }
 
-is_proxy_running() {
-    if [[ -f "$PROXY_PID_FILE" ]]; then
-        local pid
-        pid=$(cat "$PROXY_PID_FILE" 2>/dev/null)
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            return 0
-        fi
-    fi
-    # Fallback: check by process name
-    pgrep -f "$PROXY_BIN_NAME" >/dev/null 2>&1
+# The pid holding the SOCKS listener, if any. Empty when nothing is listening
+# or lsof is unavailable (the ownership check is then skipped, not failed).
+_socks_listener_pid() {
+    local port="${PROXY_SOCKS_ADDR##*:}"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true
 }
 
-get_proxy_pid() {
+# The process name for a pid, or "unknown" when it cannot be read.
+_proxy_pid_comm() {
+    ps -p "$1" -o comm= 2>/dev/null || echo "unknown"
+}
+
+# True when pid is alive AND is a tailroute-proxy process — a bare kill -0
+# also passes for any recycled pid that happens to be alive (#42 defect 2).
+_proxy_pid_is_ours() {
+    local pid="${1:-}"
+    [[ -n "$pid" ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    _proxy_pid_comm "$pid" | grep -q "$PROXY_BIN_NAME"
+}
+
+# Resolve the live proxy pid against reality, self-healing the registry.
+# Order of trust: the pidfile entry only counts when it is alive, is a
+# tailroute-proxy process, and still owns the SOCKS listener when one exists
+# (2026-09-21 incident: a replaced spawn left the registry pointing at a pid
+# that no longer owned the port, and status repeated the lie for days).
+# A bogus entry is removed; a pgrep-found proxy is written back in.
+resolve_proxy_pid() {
+    local pid listener
+    listener=$(_socks_listener_pid)
     if [[ -f "$PROXY_PID_FILE" ]]; then
-        local pid
         pid=$(cat "$PROXY_PID_FILE" 2>/dev/null)
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        if _proxy_pid_is_ours "$pid" \
+           && { [[ -z "$listener" ]] || [[ "$listener" == "$pid" ]]; }; then
             echo "$pid"
             return 0
         fi
+        rm -f "$PROXY_PID_FILE"
     fi
-    pgrep -f "$PROXY_BIN_NAME" 2>/dev/null | head -1
+    pid=$(pgrep -f "$PROXY_BIN_NAME" 2>/dev/null | head -n 1) || true
+    if _proxy_pid_is_ours "$pid"; then
+        printf '%s\n' "$pid" > "$PROXY_PID_FILE" 2>/dev/null || true
+        echo "$pid"
+        return 0
+    fi
+    return 1
+}
+
+is_proxy_running() {
+    resolve_proxy_pid >/dev/null 2>&1
+}
+
+get_proxy_pid() {
+    resolve_proxy_pid
 }
 
 # =============================================================================
@@ -861,7 +893,7 @@ do_proxy_status() {
         pid=$(get_proxy_pid)
         echo "Status:   Running (pid $pid)"
         echo "Listen:   $PROXY_SOCKS_ADDR"
-        
+
         # Check if port is actually listening
         if nc -z 127.0.0.1 1055 >/dev/null 2>&1; then
             echo "Port:     Open"
@@ -870,6 +902,13 @@ do_proxy_status() {
         fi
     else
         echo "Status:   Stopped"
+        # A non-tailroute listener on the SOCKS port is exactly the "two
+        # truths" situation that made #42 hard to diagnose — say who holds it.
+        local listener
+        listener=$(_socks_listener_pid)
+        if [[ -n "$listener" ]]; then
+            echo "Port:     ${PROXY_SOCKS_ADDR##*:} held by pid $listener ($(_proxy_pid_comm "$listener")) — not tailroute-proxy"
+        fi
     fi
     
     echo ""
