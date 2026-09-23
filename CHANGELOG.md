@@ -2,6 +2,12 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.16] - 2026-09-24
+
+### Fixed
+- **Tunnel hosts mappings land inside the managed block when it already exists** — the existing-block branch of the hosts transform printed the new mapping *after* the `# END tailroute-tunnel` marker, outside the block. Removal only touches lines between the markers while post-write verification greps the whole file, so every peer registered once the block existed — the second peer onward, and every unmanaged-line adoption — ended up with a mapping its own `tunnel remove` could never delete: "ERROR: post-write verification failed (mapping still present)", with a manual hosts edit as the only way out. The mapping is now printed *before* the END line, matching the fresh-block branch and the adoption path's in-block contract. Existing installs that already carry mappings below the block keep working (hosts resolution ignores the markers) but stay unmanaged until moved inside or re-added.
+- Tests: 406 → 408 (the second add must land inside the block; the second-added peer's remove must succeed).
+
 ## [0.8.15] - 2026-09-23
 
 ### Fixed

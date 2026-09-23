@@ -431,6 +431,35 @@ test_hosts_adopt_migrates_unmanaged_line() {
     assert_eq 1 "$count" "exactly one mapping after adoption"
 }
 
+test_hosts_add_into_existing_block_lands_inside() {
+    _tunnel_setup_sandbox
+    # first add creates the block; the second add must land INSIDE it, or a
+    # later remove of that peer fails verification ("mapping still present")
+    tunnel_hosts_apply add alpha.tailnet.ts.net >/dev/null
+    tunnel_hosts_apply add beta.tailnet.ts.net >/dev/null
+    awk -v b="# BEGIN tailroute-tunnel" -v e="# END tailroute-tunnel" '
+        BEGIN { inb = 0; alpha = 0; beta = 0 }
+        $0 == b { inb = 1; next }
+        $0 == e { inb = 0; next }
+        inb && $0 == "127.0.0.1\talpha.tailnet.ts.net" { alpha = 1 }
+        inb && $0 == "127.0.0.1\tbeta.tailnet.ts.net" { beta = 1 }
+        END { exit (alpha && beta) ? 0 : 1 }
+    ' "$TUNNEL_HOSTS_FILE" || { echo "a mapping landed outside the managed block"; return 1; }
+}
+
+test_hosts_remove_second_added_peer() {
+    _tunnel_setup_sandbox
+    # the incident: the second-added peer's mapping sat below the block, so
+    # its remove left the line in place and post-write verification failed
+    tunnel_hosts_apply add alpha.tailnet.ts.net >/dev/null
+    tunnel_hosts_apply add beta.tailnet.ts.net >/dev/null
+    assert_ok tunnel_hosts_apply remove beta.tailnet.ts.net
+    if grep -q "beta.tailnet.ts.net" "$TUNNEL_HOSTS_FILE"; then
+        _assert_fail "beta mapping survived remove"
+    fi
+    grep -q "alpha.tailnet.ts.net" "$TUNNEL_HOSTS_FILE" || { echo "alpha mapping lost"; return 1; }
+}
+
 # =============================================================================
 # Plist generation (T-404.1)
 # =============================================================================

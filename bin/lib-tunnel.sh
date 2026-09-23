@@ -691,8 +691,8 @@ tunnel_hosts_transform() {
         fi
         if [ "$begins" = "1" ]; then
             awk -v h="$hostname" -v end="$TUNNEL_HOSTS_END" '
-                { print }
                 $0 == end { print "127.0.0.1\t" h }
+                { print }
             ' "$file"
         else
             tunnel_hosts_normalize "$file"
