@@ -185,6 +185,39 @@ test_status_reports_the_resolved_pid_not_the_stale_one() {
 }
 
 # =============================================================================
+# Daemon status: installed-but-not-running gets a repair hint (#42 defect 1)
+# =============================================================================
+# `tailroute status` found the daemon via pgrep on the incident host's
+# successor, but when the daemon is genuinely down on an INSTALLED machine
+# (label unloaded, launchd throttling), a bare "Not running" gives no
+# repair path. The plist's presence is the tell.
+
+test_status_hints_bootstrap_when_daemon_installed_but_not_running() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }                    # no user-domain label, pgrep empty
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/daemon.plist"; }
+    : > "$PROXY_TEST_HOME/daemon.plist"          # installed
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "Not running (installed" "$out"
+    assert_contains "launchctl bootstrap system" "$out"
+}
+
+test_status_plain_not_running_when_daemon_not_installed() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "Daemon:         Not running" "$out"
+    if grep -q "bootstrap" <<< "$out"; then
+        _assert_fail "must not suggest bootstrap when the daemon is not installed"
+    fi
+}
+
+# =============================================================================
 # Canonical binary location and version awareness (#42 defect 3)
 # =============================================================================
 

@@ -204,6 +204,10 @@ do_status() {
         daemon_pid=$(pgrep -f "tailroute daemon" 2>/dev/null | head -1) || daemon_pid=""
         if [[ -n "$daemon_pid" ]]; then
             echo "Daemon:         Running (PID $daemon_pid)"
+        elif [[ -f "$(_daemon_plist_path)" ]]; then
+            # Installed but not running: the label may be unloaded or launchd
+            # may be throttling restarts — name the repair, don't just report.
+            echo "Daemon:         Not running (installed — start with: sudo launchctl bootstrap system $(_daemon_plist_path))"
         else
             echo "Daemon:         Not running"
         fi
@@ -540,6 +544,12 @@ _system_proxy_bin() {
 # owns the system proxy location, so there it is canonical, not legacy.
 _script_is_system_install() {
     [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]
+}
+
+# The system-domain daemon plist, when installed. Function, not constant, so
+# tests can point it at a scratch file.
+_daemon_plist_path() {
+    echo "/Library/LaunchDaemons/com.tailroute.daemon.plist"
 }
 
 # Download URL (update for public releases)
