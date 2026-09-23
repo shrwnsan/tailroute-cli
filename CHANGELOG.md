@@ -2,6 +2,16 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.15]
+
+### Fixed
+- **`proxy status`/`is_proxy_running` validate the pid registry against reality and self-heal** (#42) — the pidfile was trusted on a bare `kill -0`, so a recycled or replaced pid read as the proxy: during the 2026-09-21 incident the registry pointed at a pid that no longer owned 1055 and status repeated the lie for days. A registry entry now counts only when it is alive, actually a `tailroute-proxy` process (`ps` comm), and still owns the SOCKS listener when one exists (`lsof`); bogus entries are removed and a pgrep-resolved pid is written back in, so the registry heals in both directions. The startup window (spawned, not yet listening) is exempt from the ownership check, and `proxy status` reports a foreign listener on the port ("held by pid N (…command…) — not tailroute-proxy") instead of a bare "Stopped".
+- **One canonical proxy binary per install, with version awareness** (#42) — `sudo tailroute install` (source checkout) places the proxy at `/usr/local/bin` while `proxy install` manages `~/.tailroute/bin`, and `proxy start` silently fell back between generations (two binaries, dated Mar/Apr, both observed spawning on one host). `proxy install` now checks the binary's `--version` against the CLI version (flagging skew or unversioned pre-0.5 binaries) and retires a leftover system-path binary by renaming it to `tailroute-proxy.retired` (never `rm`) — except when this script itself *is* the `/usr/local/bin` install, whose binary is canonical. `proxy start` warns when it falls back to the legacy path.
+- **`proxy auth` surfaces auth state instead of promising a phantom URL** (#42) — it printed "Open the URL below" with nothing under it, and read a `tailscaled.state` file as "already authenticated" when that file also exists in NeedsLogin state — exactly where the 0.5.0-beta.1 tsnet proxy loops (`tsnet connected, state: NeedsLogin`, no URL ever printed). `proxy auth` now checks the proxy log: surfaces a pending login URL, detects the NeedsLogin loop (exit 1) and points at the working `TS_AUTHKEY` pre-auth path, and only then reports authenticated. `proxy status` shows "Needs login" on a running but unauthenticated proxy.
+- **The Tailscale auth key no longer leaks through argv** — `proxy start` passed `--auth-key "$TS_AUTHKEY"` on the command line, publishing the key to every local user via `ps`; it now travels through the environment (which tsnet reads natively). This also fixes a latent `set -u` crash: a bare `$TS_AUTHKEY` aborted `proxy start` whenever the variable was unset.
+- **`status` names the repair when the daemon is installed but down** — a bare "Daemon: Not running" gave no hint that the plist is present and the label may just be unloaded or throttled; when `/Library/LaunchDaemons/com.tailroute.daemon.plist` exists it now reads "Not running (installed — start with: sudo launchctl bootstrap system …)". (Defect 1 of #42: the literal "Not running while healthy" report did not reproduce on v0.8.14 — the pgrep fallback finds the daemon — but the installed-but-dead state is real and was invisible.)
+- Tests: 383 → 405 (new `tests/test-proxy.sh`: fixture process table, scratch HOME; no live process, port, or binary touched).
+
 ## [0.8.14] - 2026-09-23
 
 ### Added

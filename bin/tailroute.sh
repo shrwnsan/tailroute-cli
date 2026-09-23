@@ -204,6 +204,10 @@ do_status() {
         daemon_pid=$(pgrep -f "tailroute daemon" 2>/dev/null | head -1) || daemon_pid=""
         if [[ -n "$daemon_pid" ]]; then
             echo "Daemon:         Running (PID $daemon_pid)"
+        elif [[ -f "$(_daemon_plist_path)" ]]; then
+            # Installed but not running: the label may be unloaded or launchd
+            # may be throttling restarts — name the repair, don't just report.
+            echo "Daemon:         Not running (installed — start with: sudo launchctl bootstrap system $(_daemon_plist_path))"
         else
             echo "Daemon:         Not running"
         fi
@@ -529,6 +533,25 @@ PROXY_SOCKS_ADDR="127.0.0.1:1055"
 PROXY_PID_FILE="$HOME/.tailroute/proxy.pid"
 PROXY_VERSION="${VERSION}"
 
+# System-wide proxy location used by `sudo tailroute install` (source
+# checkouts). Function, not constant, so tests can redirect the legacy-path
+# logic to a scratch dir (#42 defect 3).
+_system_proxy_bin() {
+    echo "/usr/local/bin/$PROXY_BIN_NAME"
+}
+
+# True when this script itself was installed to /usr/local/bin — that layout
+# owns the system proxy location, so there it is canonical, not legacy.
+_script_is_system_install() {
+    [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]
+}
+
+# The system-domain daemon plist, when installed. Function, not constant, so
+# tests can point it at a scratch file.
+_daemon_plist_path() {
+    echo "/Library/LaunchDaemons/com.tailroute.daemon.plist"
+}
+
 # Download URL (update for public releases)
 # Proxy binaries are released from the tailroute-cli repo (tag-matched)
 PROXY_DOWNLOAD_BASE="https://github.com/shrwnsan/tailroute-cli/releases/download"
@@ -548,28 +571,62 @@ is_proxy_installed() {
     [[ -x "$PROXY_BIN_PATH" ]]
 }
 
-is_proxy_running() {
-    if [[ -f "$PROXY_PID_FILE" ]]; then
-        local pid
-        pid=$(cat "$PROXY_PID_FILE" 2>/dev/null)
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            return 0
-        fi
-    fi
-    # Fallback: check by process name
-    pgrep -f "$PROXY_BIN_NAME" >/dev/null 2>&1
+# The pid holding the SOCKS listener, if any. Empty when nothing is listening
+# or lsof is unavailable (the ownership check is then skipped, not failed).
+_socks_listener_pid() {
+    local port="${PROXY_SOCKS_ADDR##*:}"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true
 }
 
-get_proxy_pid() {
+# The process name for a pid, or "unknown" when it cannot be read.
+_proxy_pid_comm() {
+    ps -p "$1" -o comm= 2>/dev/null || echo "unknown"
+}
+
+# True when pid is alive AND is a tailroute-proxy process — a bare kill -0
+# also passes for any recycled pid that happens to be alive (#42 defect 2).
+# The comm match is anchored (start-of-name or a path separator before it,
+# nothing after) so "something-else-tailroute-proxy-x" cannot pose.
+_proxy_pid_is_ours() {
+    local pid="${1:-}"
+    [[ -n "$pid" ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    _proxy_pid_comm "$pid" | grep -Eq "(^|/)${PROXY_BIN_NAME}$"
+}
+
+# Resolve the live proxy pid against reality, self-healing the registry.
+# Order of trust: the pidfile entry only counts when it is alive, is a
+# tailroute-proxy process, and still owns the SOCKS listener when one exists
+# (2026-09-21 incident: a replaced spawn left the registry pointing at a pid
+# that no longer owned the port, and status repeated the lie for days).
+# A bogus entry is removed; a pgrep-found proxy is written back in.
+resolve_proxy_pid() {
+    local pid listener
+    listener=$(_socks_listener_pid)
     if [[ -f "$PROXY_PID_FILE" ]]; then
-        local pid
         pid=$(cat "$PROXY_PID_FILE" 2>/dev/null)
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        if _proxy_pid_is_ours "$pid" \
+           && { [[ -z "$listener" ]] || [[ "$listener" == "$pid" ]]; }; then
             echo "$pid"
             return 0
         fi
+        rm -f "$PROXY_PID_FILE"
     fi
-    pgrep -f "$PROXY_BIN_NAME" 2>/dev/null | head -1
+    pid=$(pgrep -f "$PROXY_BIN_NAME" 2>/dev/null | head -n 1) || true
+    if _proxy_pid_is_ours "$pid"; then
+        printf '%s\n' "$pid" > "$PROXY_PID_FILE" 2>/dev/null || true
+        echo "$pid"
+        return 0
+    fi
+    return 1
+}
+
+is_proxy_running() {
+    resolve_proxy_pid >/dev/null 2>&1
+}
+
+get_proxy_pid() {
+    resolve_proxy_pid
 }
 
 # =============================================================================
@@ -619,9 +676,46 @@ do_proxy() {
     esac
 }
 
+# The login URL the proxy surfaced, if any. The 0.5.0-beta.1 tsnet proxy
+# never prints one — it loops on NeedsLogin silently (#42 defect 4).
+_proxy_login_url() {
+    grep -m1 -oE 'https://login\.tailscale\.com/[a-zA-Z0-9/._-]+' \
+        "$HOME/.tailroute/proxy.log" 2>/dev/null || true
+}
+
+# True when the last proxy run was stuck unauthenticated (markers verbatim
+# from the incident host's ~/.tailroute/proxy.log).
+_proxy_last_run_needs_login() {
+    grep -q 'NeedsLogin' "$HOME/.tailroute/proxy.log" 2>/dev/null
+}
+
+_proxy_authkey_hint() {
+    echo "Pre-authenticate instead: generate a Tailscale auth key"
+    echo "(admin console → Settings → Keys) and run:"
+    echo ""
+    echo "  TS_AUTHKEY=tskey-auth-... tailroute proxy start"
+}
+
 do_proxy_auth() {
-    # Check if already authenticated
+    # A state file also exists when the proxy is stuck in NeedsLogin —
+    # check what the last run actually said before claiming success.
     if [[ -f "$PROXY_STATE_DIR/tailscaled.state" ]]; then
+        local url
+        url=$(_proxy_login_url)
+        if [[ -n "$url" ]]; then
+            echo "A proxy login is pending — open this URL and approve:"
+            echo ""
+            echo "  $url"
+            echo ""
+            echo "(Pre-auth alternative:)"
+            _proxy_authkey_hint
+            return 0
+        fi
+        if _proxy_last_run_needs_login; then
+            echo "⚠️  Proxy state exists but the last run was not logged in (NeedsLogin)."
+            _proxy_authkey_hint
+            return 1
+        fi
         echo "✓ Proxy already authenticated."
         echo "Start the proxy with: tailroute proxy start"
         return 0
@@ -637,15 +731,19 @@ do_proxy_auth() {
     local bin_path
     if is_proxy_installed; then
         bin_path="$PROXY_BIN_PATH"
-    elif [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-        bin_path="/usr/local/bin/$PROXY_BIN_NAME"
+    elif [[ -x "$(_system_proxy_bin)" ]]; then
+        bin_path=$(_system_proxy_bin)
     else
         echo "ERROR: Proxy binary not installed."
         echo "Run 'tailroute proxy install' first."
         exit 1
     fi
     
-    echo "Open the URL below to authenticate with your Tailscale account:"
+    echo "Starting the proxy in the foreground for authentication."
+    echo "If it prints a login URL, open it and approve; if it loops on"
+    echo "NeedsLogin without a URL, press Ctrl+C and pre-auth instead:"
+    echo ""
+    _proxy_authkey_hint
     echo ""
     echo "Starting proxy for authentication..."
     echo "(Press Ctrl+C after approving in your browser)"
@@ -662,10 +760,40 @@ do_proxy_auth() {
     echo "Start the proxy with: tailroute proxy start"
 }
 
+_check_proxy_binary_version() {
+    local bin="$1" ver
+    ver=$("$bin" --version 2>/dev/null | tail -n 1 | awk '{print $NF}' || true)
+    if [[ -z "$ver" ]]; then
+        echo "⚠️  Binary did not report a version (pre-0.5 generation?) — reinstall to align"
+    elif [[ "$ver" != "$VERSION" ]]; then
+        echo "⚠️  Version skew: binary $ver, CLI v$VERSION — reinstall to align"
+    else
+        echo "Version: $ver (matches CLI)"
+    fi
+}
+
+# Exactly one spawnable proxy per host (#42 defect 3): when the canonical
+# download location is the one this install manages, a leftover binary at
+# the system path is a stale generation — rename it aside (never rm).
+_retire_legacy_system_proxy() {
+    local system_bin retired
+    _script_is_system_install && return 0
+    system_bin=$(_system_proxy_bin)
+    [[ -x "$system_bin" ]] || return 0
+    retired="${system_bin}.retired"
+    if mv -f "$system_bin" "$retired" 2>/dev/null; then
+        echo "Retired legacy proxy: $system_bin → $retired"
+    else
+        echo "⚠️  Legacy proxy at $system_bin could not be retired (permissions)."
+        echo "   Run: sudo mv \"$system_bin\" \"$retired\""
+    fi
+}
+
 do_proxy_install() {
     if is_proxy_installed; then
         echo "Proxy already installed at $PROXY_BIN_PATH"
-        "$PROXY_BIN_PATH" --version 2>/dev/null || true
+        _check_proxy_binary_version "$PROXY_BIN_PATH"
+        _retire_legacy_system_proxy
         return 0
     fi
     
@@ -703,7 +831,8 @@ do_proxy_install() {
     
     chmod +x "$PROXY_BIN_PATH"
     echo "Installed: $PROXY_BIN_PATH"
-    "$PROXY_BIN_PATH" --version 2>/dev/null || true
+    _check_proxy_binary_version "$PROXY_BIN_PATH"
+    _retire_legacy_system_proxy
 }
 
 do_proxy_uninstall() {
@@ -751,8 +880,9 @@ do_proxy_start() {
     # Check if installed, offer to download
     if ! is_proxy_installed; then
         # Check for system-wide install
-        if [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-            PROXY_BIN_PATH="/usr/local/bin/$PROXY_BIN_NAME"
+        if [[ -x "$(_system_proxy_bin)" ]]; then
+            PROXY_BIN_PATH=$(_system_proxy_bin)
+            echo "⚠️  Using legacy proxy at $PROXY_BIN_PATH — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
         else
             echo "Proxy binary not installed."
             read -p "Download tailroute-proxy (~20MB)? [Y/n] " confirm
@@ -770,12 +900,13 @@ do_proxy_start() {
     
     echo "Starting proxy on $PROXY_SOCKS_ADDR..."
     
-    # Start proxy in background (pass TS_AUTHKEY if available)
-    if [[ -n "$TS_AUTHKEY" ]]; then
-        "$PROXY_BIN_PATH" \
+    # Start proxy in background. TS_AUTHKEY goes through the environment
+    # (tsnet reads it natively): --auth-key on argv exposed the key to
+    # every local user via ps (#42 defect 4).
+    if [[ -n "${TS_AUTHKEY:-}" ]]; then
+        TS_AUTHKEY="$TS_AUTHKEY" "$PROXY_BIN_PATH" \
             --socks-addr "$PROXY_SOCKS_ADDR" \
             --state-dir "$PROXY_STATE_DIR" \
-            --auth-key "$TS_AUTHKEY" \
             >"$HOME/.tailroute/proxy.log" 2>&1 &
     else
         "$PROXY_BIN_PATH" \
@@ -847,8 +978,8 @@ do_proxy_status() {
     
     if is_proxy_installed; then
         echo "Binary:   $PROXY_BIN_PATH"
-    elif [[ -x "/usr/local/bin/$PROXY_BIN_NAME" ]]; then
-        echo "Binary:   /usr/local/bin/$PROXY_BIN_NAME (system)"
+    elif [[ -x "$(_system_proxy_bin)" ]]; then
+        echo "Binary:   $(_system_proxy_bin) (system)"
     else
         echo "Binary:   Not installed"
         echo "          Run 'tailroute proxy install' to download"
@@ -861,7 +992,10 @@ do_proxy_status() {
         pid=$(get_proxy_pid)
         echo "Status:   Running (pid $pid)"
         echo "Listen:   $PROXY_SOCKS_ADDR"
-        
+        if _proxy_last_run_needs_login; then
+            echo "Auth:     Needs login — run 'tailroute proxy auth' or pre-auth with TS_AUTHKEY"
+        fi
+
         # Check if port is actually listening
         if nc -z 127.0.0.1 1055 >/dev/null 2>&1; then
             echo "Port:     Open"
@@ -870,6 +1004,13 @@ do_proxy_status() {
         fi
     else
         echo "Status:   Stopped"
+        # A non-tailroute listener on the SOCKS port is exactly the "two
+        # truths" situation that made #42 hard to diagnose — say who holds it.
+        local listener
+        listener=$(_socks_listener_pid)
+        if [[ -n "$listener" ]]; then
+            echo "Port:     ${PROXY_SOCKS_ADDR##*:} held by pid $listener ($(_proxy_pid_comm "$listener")) — not tailroute-proxy"
+        fi
     fi
     
     echo ""
