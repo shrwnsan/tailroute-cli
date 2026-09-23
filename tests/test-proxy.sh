@@ -89,14 +89,18 @@ fake_lsof() {
     else printf '%s\n' "$@" > "$PROXY_TEST_HOME/lsof.out"; fi
 }
 
-_cleanup_proxy_sandbox() {
-    [[ -n "${PROXY_TEST_HOME:-}" && -d "$PROXY_TEST_HOME" ]] && rm -rf "$PROXY_TEST_HOME"
-    return 0
-}
-
 # =============================================================================
 # Registry validation and self-heal (#42 defect 2)
 # =============================================================================
+
+test_missing_pidfile_resolves_live_proxy_and_writes_registry() {
+    _setup_proxy_sandbox
+    fake_pgrep $PPID
+    fake_comm $PPID tailroute-proxy
+
+    assert_eq "$PPID" "$(get_proxy_pid)"
+    assert_eq "$PPID" "$(cat "$PROXY_PID_FILE")" "registry written back from pgrep resolution"
+}
 
 test_registered_live_proxy_pid_is_trusted() {
     _setup_proxy_sandbox

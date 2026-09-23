@@ -585,11 +585,13 @@ _proxy_pid_comm() {
 
 # True when pid is alive AND is a tailroute-proxy process — a bare kill -0
 # also passes for any recycled pid that happens to be alive (#42 defect 2).
+# The comm match is anchored (start-of-name or a path separator before it,
+# nothing after) so "something-else-tailroute-proxy-x" cannot pose.
 _proxy_pid_is_ours() {
     local pid="${1:-}"
     [[ -n "$pid" ]] || return 1
     kill -0 "$pid" 2>/dev/null || return 1
-    _proxy_pid_comm "$pid" | grep -q "$PROXY_BIN_NAME"
+    _proxy_pid_comm "$pid" | grep -Eq "(^|/)${PROXY_BIN_NAME}$"
 }
 
 # Resolve the live proxy pid against reality, self-healing the registry.
