@@ -2,7 +2,7 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
-## [0.8.15]
+## [0.8.15] - 2026-09-23
 
 ### Fixed
 - **`proxy status`/`is_proxy_running` validate the pid registry against reality and self-heal** (#42) — the pidfile was trusted on a bare `kill -0`, so a recycled or replaced pid read as the proxy: during the 2026-09-21 incident the registry pointed at a pid that no longer owned 1055 and status repeated the lie for days. A registry entry now counts only when it is alive, actually a `tailroute-proxy` process (`ps` comm), and still owns the SOCKS listener when one exists (`lsof`); bogus entries are removed and a pgrep-resolved pid is written back in, so the registry heals in both directions. The startup window (spawned, not yet listening) is exempt from the ownership check, and `proxy status` reports a foreign listener on the port ("held by pid N (…command…) — not tailroute-proxy") instead of a bare "Stopped".
