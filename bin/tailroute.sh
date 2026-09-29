@@ -303,6 +303,51 @@ install_lib_files() {
 }
 
 # =============================================================================
+# ensure_log_rotation — Stage the newsyslog config (root daemon, best-effort)
+# =============================================================================
+# do_install copies etc/newsyslog.d/tailroute.conf to /etc/newsyslog.d, but
+# only the standalone `sudo ./install.sh` flow runs it: the brew-installed
+# daemon never executes do_install, and the Homebrew formula stages only the
+# plist into the prefix, so the install-time "copy newsyslog config if it
+# exists" guard silently no-ops (2026-09-24: the plist landed, the conf did
+# not). Without rotation the daemon log grows unbounded — the legacy
+# system-LaunchDaemon sink /var/log/tailroute.log reached 152MB before that
+# daemon was retired. So the daemon stages the config itself at startup.
+# Best-effort by design: a rotation config must never gate routing, so every
+# failure path (and the already-identical path) is a silent return 0.
+ensure_log_rotation() {
+    # Same project_root derivation as do_install (script dir /..), resolved
+    # from BASH_SOURCE so it also works when this file is sourced by tests.
+    local self="${BASH_SOURCE[0]}"
+    local src_dir
+    if [[ "$self" == "/"* ]]; then
+        src_dir="$(dirname "$self")"
+    else
+        src_dir="$(cd "$(dirname "$self")" && pwd)"
+    fi
+    local project_root="$(cd "$src_dir/.." && pwd)"
+
+    local src="${TAILROUTE_NEWSYSLOG_SRC:-$project_root/etc/newsyslog.d/tailroute.conf}"
+    local dest_dir="${TAILROUTE_NEWSYSLOG_DIR:-/etc/newsyslog.d}"
+    local dest="$dest_dir/tailroute.conf"
+
+    # Shipped conf absent (e.g. brew layout before the formula ships it) —
+    # nothing to stage, stay silent.
+    [[ -f "$src" ]] || return 0
+
+    mkdir -p "$dest_dir" 2>/dev/null || return 0
+
+    # Stage only when missing or drifted; rewriting an identical file would
+    # churn mtime/inode for every daemon restart for no benefit.
+    if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
+        cp -f "$src" "$dest" 2>/dev/null || return 0
+        chown root:wheel "$dest" 2>/dev/null || true
+        chmod 0644 "$dest" 2>/dev/null || return 0
+        log_info "action=log_rotation_config note=staged conf=$dest" || true
+    fi
+}
+
+# =============================================================================
 # do_install — Install daemon (requires root)
 # =============================================================================
 # Copies binary and plist to system locations, sets permissions, loads daemon.
@@ -1550,6 +1595,11 @@ main() {
     
     case "$command" in
         daemon)
+            # Stage the newsyslog rotation config before the loop starts.
+            # Root-only here at the call site (non-root stays silent) so the
+            # function itself stays testable; see ensure_log_rotation for why
+            # the brew layout needs this at startup rather than install time.
+            [[ "$(id -u)" -eq 0 ]] && ensure_log_rotation
             do_daemon
             ;;
         status)

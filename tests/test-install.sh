@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test-install.sh — Tests for daemon install file staging (do_install helpers)
+# and the daemon's startup staging of the newsyslog rotation config
 #
 # The CLI is supported from two layouts (see tailroute.sh LIB_DIR resolution):
 #   - source checkout: libs beside bin/tailroute.sh
@@ -79,4 +80,96 @@ test_do_install_stages_libs_via_install_lib_files() {
     local script="$TEST_DIR/../bin/tailroute.sh"
     assert_ok grep -q "install_lib_files /usr/local/bin" "$script" "do_install must call install_lib_files"
     assert_fail grep -q 'for lib in "$script_dir"/lib-.*sh' "$script" "script_dir lib glob must not return"
+}
+
+# =============================================================================
+# ensure_log_rotation tests
+# =============================================================================
+# The brew-installed daemon never runs do_install, so it must stage the
+# newsyslog config itself at startup — otherwise its log sink grows without
+# bound (152MB legacy sink observed; the brew layout silently skipped the
+# copy-the-conf install step on 2026-09-24).
+
+test_ensure_log_rotation_stages_conf_when_missing() {
+    _load_tailroute
+    local src_dir dest_dir
+    src_dir="$(mktemp -d)"
+    dest_dir="$(mktemp -d)"
+    printf 'staged-conf-line\n' > "$src_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_SRC="$src_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_DIR="$dest_dir"
+    chown() { :; }  # staging normally runs as root; tests are non-root
+
+    ensure_log_rotation
+
+    assert_eq "staged-conf-line" "$(cat "$dest_dir/tailroute.conf")" "conf staged into empty destination dir"
+    rm -rf "$src_dir" "$dest_dir"
+}
+
+test_ensure_log_rotation_replaces_stale_conf() {
+    _load_tailroute
+    local src_dir dest_dir
+    src_dir="$(mktemp -d)"
+    dest_dir="$(mktemp -d)"
+    printf 'staged-conf-line\n' > "$src_dir/tailroute.conf"
+    printf 'stale-conf-line\n' > "$dest_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_SRC="$src_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_DIR="$dest_dir"
+    chown() { :; }
+
+    ensure_log_rotation
+
+    assert_eq "staged-conf-line" "$(cat "$dest_dir/tailroute.conf")" "stale conf must be replaced by the shipped one"
+    rm -rf "$src_dir" "$dest_dir"
+}
+
+test_ensure_log_rotation_noop_when_identical() {
+    _load_tailroute
+    local src_dir dest_dir before after
+    src_dir="$(mktemp -d)"
+    dest_dir="$(mktemp -d)"
+    printf 'identical-conf-line\n' > "$src_dir/tailroute.conf"
+    cp "$src_dir/tailroute.conf" "$dest_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_SRC="$src_dir/tailroute.conf"
+    TAILROUTE_NEWSYSLOG_DIR="$dest_dir"
+    chown() { :; }
+    before=$(stat -f %m "$dest_dir/tailroute.conf")
+    /bin/sleep 1
+
+    assert_ok ensure_log_rotation
+
+    after=$(stat -f %m "$dest_dir/tailroute.conf")
+    assert_eq "$before" "$after" "identical conf must not be rewritten (mtime stable)"
+    assert_eq "identical-conf-line" "$(cat "$dest_dir/tailroute.conf")" "content unchanged when identical"
+    rm -rf "$src_dir" "$dest_dir"
+}
+
+# The shipped rotation config must cover every daemon log sink: the brew-prefix
+# daemon log under both Homebrew prefixes (newsyslog skips absent files) and
+# the legacy launchd sink. A missing line means unbounded growth on that layout.
+test_newsyslog_conf_covers_daemon_log_paths() {
+    local conf="$TEST_DIR/../etc/newsyslog.d/tailroute.conf"
+    assert_ok grep -q "/opt/homebrew/var/log/tailroute-daemon.log" "$conf" "brew-prefix (Apple Silicon) daemon log missing"
+    assert_ok grep -q "/usr/local/var/log/tailroute-daemon.log" "$conf" "brew-prefix (Intel) daemon log missing"
+    assert_ok grep -q "/var/log/tailroute.log" "$conf" "legacy launchd sink missing"
+}
+
+# Regression guard: the legacy v0.8.16 line used @midnight as its when-field,
+# which newsyslog rejects at parse time ("malformed 'at' value") and drops —
+# the whole entry silently never rotated. Apple's own convention for midnight
+# is $D0 (rotation fires on size OR daily at midnight).
+test_newsyslog_conf_uses_valid_when_fields() {
+    local conf="$TEST_DIR/../etc/newsyslog.d/tailroute.conf"
+    local path line
+    # Data lines only: the header comment cites the rejected token by name.
+    if grep -v '^#' "$conf" | grep -q '@midnight'; then
+        _assert_fail "@midnight in a data line — not valid newsyslog syntax, entry gets dropped"
+    fi
+    for path in \
+        "/opt/homebrew/var/log/tailroute-daemon.log" \
+        "/usr/local/var/log/tailroute-daemon.log" \
+        "/var/log/tailroute.log"; do
+        line=$(grep -F "$path" "$conf" | head -n 1)
+        assert_contains ' $D0 ' "$line" "when-field for $path must be \$D0"
+    done
 }
