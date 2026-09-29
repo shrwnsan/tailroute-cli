@@ -2,6 +2,12 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [0.8.17] - 2026-09-30
+
+### Fixed
+- **Log rotation now covers the log the daemon actually writes — and the legacy line finally rotates at all** — `etc/newsyslog.d/tailroute.conf` listed only the legacy launchd sink `/var/log/tailroute.log` (which reached 152MB before that daemon was retired), while the current brew-services daemon logs to the Homebrew prefix (`/opt/homebrew/var/log/tailroute-daemon.log`, `/usr/local/var/log/…` on Intel) — unrotated, 2.7MB and growing. The legacy line is now CORRECTED, not just joined by new ones: its `@midnight` when-field is not valid newsyslog syntax (the binary's parser rejects it — "malformed 'at' value" — with no midnight token, and entries with invalid when-fields are dropped at parse time), so `/var/log/tailroute.log` was silently never rotated; all three lines now use Apple's own `$D0` convention (rotation fires when the size limit is exceeded OR daily at midnight). newsyslog silently skips absent files, and no signal number is given: the launchd-held stdout fd keeps writing into the renamed archive until the next daemon restart, so this bounds active-path growth, not the archive. The install gap is fixed where a fix can land today: the standalone `sudo ./install.sh` flow already copied the conf, but the brew layout never runs `do_install` and the formula stages only the plist, so that guard silently no-oped there (observed 2026-09-24: the plist landed, the conf didn't); the root daemon now stages the conf into `/etc/newsyslog.d` at startup — silent no-op when the shipped conf is absent or the destination already matches, one `action=log_rotation_config note=staged` line when it stages or refreshes, and never fatal: a rotation config must not gate routing. **Release-checklist dependency for 0.8.17: on brew-installed daemons this staging is inert until the tap formula ships `etc/newsyslog.d/tailroute.conf` into the prefix (it currently stages only the plist) — ship that formula line in the same release, or brew installs keep their unrotated log growth.**
+- Tests: 408 → 413 (staging: missing / stale / identical; rotation config covers all three log paths and uses valid `$D0` when-fields — `@midnight` guarded against).
+
 ## [0.8.16] - 2026-09-24
 
 ### Fixed
