@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "0.8.16",
+  "build": "255",
+  "url": "https://github.com/shrwnsan/tailroute/releases/download/app-v0.8.16/Tailroute-0.8.16.dmg",
+  "sha256": "c98739b39f20e819855a66915b57f847fa2acbc50717b3099398868e855bfe6e",
+  "size": 277379,
+  "releaseDate": "2026-09-30T01:09:46Z",
+  "releaseNotesUrl": "https://github.com/shrwnsan/tailroute/releases/tag/app-v0.8.16",
+  "minimumSystemVersion": "12.0"
+}
