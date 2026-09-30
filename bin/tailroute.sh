@@ -55,16 +55,63 @@ integrity_fail() {
 
 # verify_checksum_manifest — Refuse to run if any installed file was replaced.
 # Absent manifest (dev checkout or pre-install) means nothing to verify.
+# Missing entries are separated out before shasum runs, because shasum fails
+# identically on them and on real mismatches (#47): the manifest is global,
+# so a Homebrew daemon checks a standalone install's /usr/local/bin paths. A
+# missing FOREIGN-layout entry is not executed by this invocation and is not
+# evidence of tampering with this install, so it is skipped. A missing entry
+# under THIS invocation's $SCRIPT_DIR/$LIB_DIR layout fails closed instead:
+# the library resolution above falls back from $SCRIPT_DIR to $LIB_DIR, so a
+# vanished manifest-listed primary file would silently redirect `source`
+# onto whatever sits in the fallback directory, as root. Content mismatches
+# on files that still exist still refuse to run.
 verify_checksum_manifest() {
     local manifest="$1"
     [[ -r "$manifest" ]] || return 0
 
+    # shasum line: "<64 hex chars>  <path>" — hash, two literal spaces, path
+    local re='^[0-9a-f]{64}  '
+    local line path
+    local kept=()
+    # `|| [[ -n "$line" ]]`: a final line with no trailing newline still counts.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ -z "$line" ]]; then
+            continue
+        fi
+        # Anything that is not a shasum line (torn write, hand edit) fails
+        # closed here rather than on shasum's exit: mixed with valid lines
+        # it only draws a WARNING there, and the run would continue.
+        if [[ ! "$line" =~ $re ]]; then
+            integrity_fail "Malformed line in $manifest - refusing to run as root: $line"
+            return 1
+        fi
+        path="${line#*  }"
+        if [[ -e "$path" ]]; then
+            kept+=("$line")
+        elif [[ "$path" == "$SCRIPT_DIR"/* || "$path" == "$LIB_DIR"/* ]]; then
+            # Gone from the layout this invocation runs — the fallback
+            # attack above. Refuse, never skip.
+            integrity_fail "Manifest-listed file missing from this install's layout: $path"
+            return 1
+        fi
+        # else: a foreign-layout entry whose file is gone — nothing to
+        # verify here (issue #47).
+    done < "$manifest"
+    # Every surviving entry is foreign and gone: nothing verifiable remains,
+    # the same semantics as the absent-manifest short-circuit above. Must
+    # precede the printf: bash 3.2 + set -u errors on empty-array expansion.
+    if [[ ${#kept[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # shasum reads the check list from stdin ("-"), so no temp file is
+    # needed; pipefail is satisfied because only shasum can fail here.
     local output
-    if ! output=$(/usr/bin/shasum -a 256 --check "$manifest" 2>&1); then
+    if ! output=$(printf '%s\n' "${kept[@]}" | /usr/bin/shasum -a 256 --check - 2>&1); then
         integrity_fail "Installed file checksum mismatch - refusing to run as root"
         integrity_fail "Files listed in $manifest do not match their install-time checksums:"
         printf '%s\n' "$output" >&2
-        integrity_fail "Reinstall from a trusted source: sudo tailroute install"
+        integrity_fail "Reinstall the owning install from a trusted source (standalone: sudo tailroute install; Homebrew: brew reinstall tailroute-cli)"
         return 1
     fi
 }

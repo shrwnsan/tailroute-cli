@@ -88,20 +88,112 @@ test_verify_manifest_fails_on_modified_file() {
     rm -rf "$dir"
 }
 
-test_verify_manifest_fails_on_deleted_file() {
+test_verify_manifest_skips_missing_entries() {
+    _load_tailroute
+    local dir
+    dir="$(mktemp -d)"
+    echo "wrapper" > "$dir/tailroute"
+    echo "ghost" > "$dir/ghost"
+    generate_checksum_manifest "$dir/installed.checksums" "$dir/tailroute" "$dir/ghost"
+
+    # A foreign/vestigial-layout entry whose file is gone after install
+    # (issue #47: the standalone install recorded /usr/local/bin/tailroute;
+    # after that layout was retired the BREW daemon crash-looped on the
+    # now-unreadable entry). A missing foreign-layout file is not evidence
+    # of tampering with this install — it is never executed by this
+    # invocation.
+    rm "$dir/ghost"
+
+    # assert_ok, not a bare call: the harness runs test subshells inside an
+    # if-condition where set -e death does not fail a test — only assertions do.
+    assert_ok verify_checksum_manifest "$dir/installed.checksums"
+    rm -rf "$dir"
+}
+
+test_verify_manifest_missing_active_layout_entry_fails_closed() {
+    # SCRIPT_DIR/LIB_DIR come from the sourced script's own location, so pin
+    # the guard on the real resolution path: stage a standalone-style layout
+    # (script + libs beside it) in a scratch dir, source THAT copy, and
+    # record its manifest — then delete the listed wrapper. The entry sits
+    # inside this invocation's layout, so the missing-entry skip must not
+    # apply: the SCRIPT_DIR→LIB_DIR fallback would otherwise silently source
+    # a planted stand-in from the fallback dir as root (#47 review).
+    local dir
+    dir="$(mktemp -d)"
+    cp "$TEST_DIR/../bin/tailroute.sh" "$dir/"
+    cp "$TEST_DIR/../bin/"lib-*.sh "$dir/"
+    # shellcheck source=/dev/null
+    source "$dir/tailroute.sh"
+
+    echo "wrapper" > "$dir/tailroute"
+    generate_checksum_manifest "$dir/installed.checksums" "$dir/tailroute" "$dir/lib-log.sh"
+    rm "$dir/tailroute"
+
+    local output
+    if output=$(verify_checksum_manifest "$dir/installed.checksums" 2>&1); then
+        _assert_fail "verification passed despite deleted active-layout entry"
+    fi
+    assert_contains "CRITICAL" "$output"
+    assert_contains "missing from this install's layout" "$output"
+    rm -rf "$dir"
+}
+
+test_verify_manifest_all_entries_missing_skips() {
     _load_tailroute
     local dir
     dir="$(mktemp -d)"
     echo "wrapper" > "$dir/tailroute"
     echo "lib" > "$dir/lib-x.sh"
     generate_checksum_manifest "$dir/installed.checksums" "$dir/tailroute" "$dir/lib-x.sh"
-    rm "$dir/lib-x.sh"
+
+    # The whole recorded layout retired: no entries remain, so there is
+    # nothing verifiable — the same semantics as an absent manifest (#47).
+    rm "$dir/tailroute" "$dir/lib-x.sh"
+
+    assert_ok verify_checksum_manifest "$dir/installed.checksums"
+    rm -rf "$dir"
+}
+
+test_verify_manifest_missing_entry_does_not_mask_tampering() {
+    _load_tailroute
+    local dir
+    dir="$(mktemp -d)"
+    echo "original" > "$dir/lib-x.sh"
+    echo "wrapper" > "$dir/tailroute"
+    generate_checksum_manifest "$dir/installed.checksums" "$dir/tailroute" "$dir/lib-x.sh"
+    rm "$dir/tailroute"
+    echo "tampered payload" > "$dir/lib-x.sh"
+
+    # The missing-entry skip must not swallow a real mismatch: a manifest
+    # mixing one gone file with one tampered file still refuses to run.
+    local output
+    if output=$(verify_checksum_manifest "$dir/installed.checksums" 2>&1); then
+        _assert_fail "verification passed despite tampered file alongside missing entry"
+    fi
+    assert_contains "CRITICAL" "$output"
+    assert_contains "checksum mismatch" "$output"
+    rm -rf "$dir"
+}
+
+test_verify_manifest_fails_on_malformed_line() {
+    _load_tailroute
+    local dir
+    dir="$(mktemp -d)"
+    echo "wrapper" > "$dir/tailroute"
+    generate_checksum_manifest "$dir/installed.checksums" "$dir/tailroute"
+
+    # A torn write or hand edit: a line without the "<64 hex>  <path>" shape.
+    # macOS shasum exits 0 on MIXED valid+malformed input ("1 line is
+    # improperly formatted"), so the pre-filter must refuse outright —
+    # passing malformed lines through to shasum would silently accept them.
+    printf 'not-a-checksum-line\n' >> "$dir/installed.checksums"
 
     local output
     if output=$(verify_checksum_manifest "$dir/installed.checksums" 2>&1); then
-        _assert_fail "verification passed despite deleted file"
+        _assert_fail "verification passed despite malformed manifest line"
     fi
     assert_contains "CRITICAL" "$output"
+    assert_contains "Malformed line" "$output"
     rm -rf "$dir"
 }
 
