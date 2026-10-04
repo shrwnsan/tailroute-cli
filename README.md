@@ -11,6 +11,14 @@ sudo tailroute install
 
 That's it. The daemon runs automatically in the background.
 
+Or let the installer do both steps for you:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shrwnsan/tailroute-cli/main/install.sh | bash
+```
+
+The script still installs through Homebrew's formula, so checksums stay enforced — it just drives `brew` and the daemon install in one go.
+
 ## What it does
 
 When you have both Tailscale and a VPN (NordVPN, ProtonVPN, etc.) connected:
