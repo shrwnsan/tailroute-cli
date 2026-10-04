@@ -1,0 +1,55 @@
+name: Deploy site
+
+# Builds nothing — the site is static. Mirrors site/ onto the gh-pages branch,
+# which GitHub Pages serves at https://shrwnsan.github.io/tailroute-cli/.
+# app-manifest.json (the macOS app update manifest consumed by the app's
+# update checker) is protected: it is excluded from the sync and can never be
+# deleted by a deploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out site source
+        uses: actions/checkout@v4
+
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Sync site into gh-pages
+        run: |
+          rsync -a --delete \
+            --exclude app-manifest.json \
+            site/ gh-pages/
+          touch gh-pages/.nojekyll
+
+      - name: Commit and push if changed
+        working-directory: gh-pages
+        run: |
+          git config user.name "tailroute site bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No site changes to deploy."
+          else
+            git commit -m "site: deploy ${GITHUB_SHA::7} from main"
+            git push
+          fi

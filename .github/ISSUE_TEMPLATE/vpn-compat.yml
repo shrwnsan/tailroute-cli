@@ -1,0 +1,94 @@
+name: VPN compatibility report
+description: Tell us how your VPN behaves with Tailscale + tailroute (CGNAT / Network Extension behavior)
+title: "VPN compatibility: <vpn>"
+labels: ["vpn-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports like yours feed the compatibility guidance in the README — tested VPNs, protocols, and
+        what blocks what. Fill in what you know; `tailroute --dry-run` shows what the daemon detects
+        without changing anything.
+
+  - type: input
+    id: vpn
+    attributes:
+      label: VPN name and version
+      description: e.g. "Mullvad 2026.8", "NordVPN 9.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol(s) tested
+      multiple: true
+      options:
+        - WireGuard
+        - OpenVPN
+        - NordLynx (NordVPN WireGuard)
+        - NordWhisper
+        - IKEv2 / IPsec
+        - Other (name it in Evidence)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cgnat
+    attributes:
+      label: Is the CGNAT range (100.64/10) blocked while the VPN is active?
+      description: "Test: connect the VPN, then `ping 100.x.y.z` (a peer's Tailscale IP)."
+      options:
+        - "yes — peer IPs unreachable with VPN on"
+        - "no — peer IPs reachable with VPN on"
+        - "partial — works in some conditions (explain in Evidence)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: magicdns
+    attributes:
+      label: Does tailroute keep the internet working (MagicDNS conflict fixed)?
+      options:
+        - "yes — internet stays up through the VPN with Tailscale on"
+        - "no — DNS still breaks with tailroute installed"
+        - "not applicable — tailroute not installed yet"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tailscale
+    attributes:
+      label: Tailscale install type
+      options:
+        - CLI daemon (brew install tailscale)
+        - GUI app (Tailscale.app / brew cask)
+        - Mac App Store
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 15.2 (arm64)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: tailroute version
+      description: Output of `tailroute --version`. Leave empty if tailroute isn't installed yet.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: "`tailroute status` output and the failing command + output. Rough notes are fine."
+      placeholder: |
+        $ tailroute status
+        ...
+
+        $ ping 100.x.y.z
+        ...
