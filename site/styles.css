@@ -124,6 +124,19 @@ code {
   border-radius: 999px;
   padding: 2px 8px;
 }
+.stage-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-line);
+  border-radius: 999px;
+  padding: 2.5px 8px;
+  cursor: help;
+}
 .nav-links {
   display: flex;
   align-items: center;
