@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://shrwnsan.github.io/tailroute-cli/sitemap.xml
