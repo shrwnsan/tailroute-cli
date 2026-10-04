@@ -1,0 +1,19 @@
+# tailroute-cli
+
+> tailroute is a fail-safe macOS daemon that keeps Tailscale and commercial VPNs (NordVPN, Mullvad, corporate VPN apps) working simultaneously. When a VPN connects it disables Tailscale's MagicDNS so internet keeps flowing through the VPN, and serves Tailscale peers through a local SOCKS5 proxy (127.0.0.1:1055) and launchd-managed browser tunnels with valid .ts.net TLS. Apache-2.0, no telemetry, no account.
+
+- Landing page: https://shrwnsan.github.io/tailroute-cli/
+- Manual page: https://shrwnsan.github.io/tailroute-cli/docs/
+- GitHub repository: https://github.com/shrwnsan/tailroute-cli
+- Install: `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install`
+- Changelog: https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md
+- Architecture: https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md
+- Releases: https://github.com/shrwnsan/tailroute-cli/releases
+- Issues: https://github.com/shrwnsan/tailroute-cli/issues
+- License (Apache-2.0): https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE
+
+## Known limitations
+
+- VPN Network Extensions may block Tailscale's CGNAT range (100.64/10) at the packet level; tested blocked: Mullvad (WireGuard), NordVPN (NordLynx, OpenVPN, NordWhisper). The SOCKS5 proxy and browser tunnels are the supported paths when that happens.
+- While the VPN is active, MagicDNS names do not resolve — use 100.x addresses or a browser tunnel.
+- GUI Tailscale.app has limited support; the CLI daemon (`brew install tailscale`) is fully supported. Mac App Store Tailscale is unsupported.

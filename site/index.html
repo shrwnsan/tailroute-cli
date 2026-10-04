@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>tailroute — Tailscale + VPN coexistence for macOS</title>
-  <meta name="description" content="A fail-safe macOS daemon that toggles Tailscale's MagicDNS at exactly the right moment — internet through your VPN, peers through your mesh. Zero manual steps, zero telemetry.">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tailroute — Tailscale + VPN coexistence for macOS</title>
+  <meta name="description" content="A fail-safe macOS daemon that toggles Tailscale's MagicDNS when your VPN connects — internet through the VPN, peers through the mesh. No telemetry. Apache-2.0 CLI.">
   <link rel="canonical" href="https://shrwnsan.github.io/tailroute-cli/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="tailroute">
@@ -14,405 +14,898 @@
   <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0b;
+    --bg2: #121210;
+    --card: #161613;
+    --card2: #1b1b17;
+    --line: #262620;
+    --line2: #38382e;
+    --text: #f0efe8;
+    --dim: #a3a196;
+    --faint: #747267;
+    --lime: #c6f24e;
+    --lime-soft: rgba(198, 242, 78, 0.10);
+    --lime-line: rgba(198, 242, 78, 0.32);
+    --lime-ink: #161a05;
+    --mark: #74a41a;        /* chart marks only — validated for dark surface */
+    --amber: #e8a33d;
+    --amber-soft: rgba(232, 163, 61, 0.09);
+    --amber-line: rgba(232, 163, 61, 0.35);
+    --paper: #f4f2ea;
+    --paper-ink: #15150f;
+    --paper-dim: #5d5c52;
+    --disp: "Bricolage Grotesque", sans-serif;
+    --sans: "Instrument Sans", sans-serif;
+    --mono: "Geist Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16.5px; line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--lime); color: var(--lime-ink); }
+  a { color: var(--lime); }
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--card2); border: 1px solid var(--line); border-radius: 6px; padding: 0.06em 0.4em; white-space: nowrap; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ============ NAV ============ */
+  nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .nav-in { max-width: 1180px; margin: 0 auto; padding: 13px 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+  .brand { font-family: var(--disp); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--text); text-decoration: none; }
+  .brand i { font-style: normal; color: var(--lime); }
+  .brand-wrap { display: flex; align-items: center; gap: 10px; }
+  .stage-pill {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--amber); background: var(--amber-soft);
+    border: 1px solid var(--amber-line); border-radius: 999px;
+    padding: 3px 10px; cursor: help;
+  }
+  .nav-mid { display: flex; gap: 26px; }
+  .nav-mid a { font-family: var(--mono); font-size: 12.5px; color: var(--dim); text-decoration: none; }
+  .nav-mid a:hover { color: var(--text); }
+  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .ver { font-family: var(--mono); font-size: 11px; color: var(--lime); border: 1px solid var(--lime-line); background: var(--lime-soft); border-radius: 999px; padding: 3px 10px; }
+  .gh-btn { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12px; color: var(--text); text-decoration: none; border: 1px solid var(--line2); border-radius: 999px; padding: 6px 14px; transition: border-color 0.15s; }
+  .gh-btn:hover { border-color: var(--lime-line); }
+  .gh-btn svg { width: 15px; height: 15px; fill: currentColor; }
+  .sp-link { font-family: var(--mono); font-size: 12px; color: var(--lime); text-decoration: none; border: 1px solid var(--lime-line); background: var(--lime-soft); border-radius: 999px; padding: 6px 14px; }
+  .sp-link:hover { background: rgba(198,242,78,0.18); }
+
+  /* ============ HERO ============ */
+  .hero { padding: 92px 0 64px; position: relative; }
+  .hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 55% 45% at 70% -5%, rgba(198,242,78,0.075), transparent 70%); pointer-events: none; }
+  .hero-grid { position: relative; display: grid; grid-template-columns: 1.12fr 0.88fr; gap: 56px; align-items: start; }
+  .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+  .eyebrow span { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 5px 12px; }
+  .eyebrow span.hot { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
+  h1 { font-family: var(--disp); font-weight: 800; font-size: clamp(2.8rem, 6vw, 5rem); line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; }
+  h1 em { font-style: normal; color: var(--lime); }
+  .hero-sub { max-width: 620px; color: var(--dim); font-size: 18px; margin: 26px 0 34px; }
+  .hero-sub b { color: var(--text); font-weight: 600; }
+
+  /* install switcher */
+  .switcher { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
+  .sw-tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .sw-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
+  .sw-tab.on { color: var(--text); }
+  .sw-tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
+  .sw-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
+  .sw-body { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+  .sw-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .sw-cmd::-webkit-scrollbar { display: none; }
+  .sw-p { color: var(--lime); margin-right: 4px; }
+  .sw-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); background: var(--lime); color: var(--lime-ink); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
+  .copy:hover { filter: brightness(1.06); }
+  .copy.ok { background: var(--text); }
+  .hero-cta { display: flex; gap: 14px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+  .microcopy { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--faint); margin-top: 14px; }
+  .microcopy i { font-style: normal; color: var(--lime); }
+  .ghost { font-family: var(--mono); font-size: 12.5px; color: var(--dim); text-decoration: none; border-bottom: 1px solid var(--line2); padding-bottom: 2px; }
+  .ghost:hover { color: var(--text); border-color: var(--lime); }
+
+  /* hero product visual */
+  .hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
+  .hcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.4); }
+  .hcard-bar { display: flex; align-items: center; gap: 14px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .hcard-bar .act { color: var(--lime-ink); background: var(--lime); border-radius: 6px; padding: 2px 9px; font-weight: 600; }
+  .hcard-bar .sp { flex: 1; }
+  .hcard-body { padding: 12px 14px; font-family: var(--mono); font-size: 11.5px; }
+  .hrow { display: flex; justify-content: space-between; gap: 14px; padding: 5px 2px; color: var(--dim); }
+  .hrow span:last-child { color: var(--text); }
+  .hrow .ok { color: var(--lime); } .hrow .warnc { color: var(--amber); }
+  .hcard.st { border-top: 2px solid var(--lime-line); }
+  .hcard-st-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding: 10px 14px 0; }
+
+  /* stat band */
+  .band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-top: 56px; }
+  .stat { background: var(--bg2); padding: 20px 22px; }
+  .stat b { font-family: var(--disp); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; display: block; }
+  .stat b i { font-style: normal; color: var(--lime); }
+  .stat span { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+
+  /* ============ SECTION SCAFFOLD ============ */
+  section { padding: 96px 0; }
+  .k { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--lime); margin-bottom: 16px; }
+  h2 { font-family: var(--disp); font-weight: 800; font-size: clamp(2rem, 3.6vw, 2.9rem); letter-spacing: -0.02em; line-height: 1.04; }
+  h2 em { font-style: normal; color: var(--lime); }
+  .lede { max-width: 680px; color: var(--dim); font-size: 17px; margin: 16px 0 44px; }
+
+  /* ============ BENTO ============ */
+  .bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+  .b-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; position: relative; overflow: hidden; transition: border-color 0.2s ease, transform 0.2s ease; }
+  .b-card:hover { border-color: var(--line2); transform: translateY(-2px); }
+  .b-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 200px at 80% -20%, rgba(198,242,78,0.05), transparent 70%); pointer-events: none; }
+  .b7 { grid-column: span 7; } .b5 { grid-column: span 5; }
+  .b4 { grid-column: span 4; } .b8 { grid-column: span 8; } .b12 { grid-column: span 12; }
+  .b-k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
+  .b-card h3 { font-family: var(--disp); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .b-card p { color: var(--dim); font-size: 14.5px; }
+  .b-card p b { color: var(--text); font-weight: 600; }
+
+  .terminal { background: #101010; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; }
+  .term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line2); }
+  .term-bar i:first-child { background: var(--lime); }
+  .term-bar span { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-left: 6px; }
+  .term-body { padding: 16px; min-height: 240px; font-family: var(--mono); font-size: 12.4px; line-height: 1.8; }
+  .tl-cmd { color: var(--text); } .tl-cmd::before { content: "❯ "; color: var(--lime); }
+  .tl-out { color: var(--dim); } .tl-dim { color: var(--faint); }
+  .tl-ok { color: var(--lime); } .tl-warn { color: var(--amber); }
+  .term-foot { display: flex; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .term-foot span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); }
+  .term-foot b { font-weight: 600; margin-left: 4px; }
+  .fon { color: var(--lime); } .foff { color: var(--amber); }
+
+  .mrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .mrow:last-child { border-bottom: none; }
+  .led { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .led-l { background: var(--amber); box-shadow: 0 0 8px rgba(232,163,61,0.5); }
+  .led-m { background: var(--lime); box-shadow: 0 0 8px rgba(198,242,78,0.4); }
+  .led-o { background: var(--line2); }
+  .mrow b { font-weight: 600; font-size: 13.5px; width: 130px; flex-shrink: 0; }
+  .mrow span { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .urlpill { display: inline-block; font-family: var(--mono); font-size: 11.5px; color: var(--text); background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 12px; margin-top: 14px; }
+  .urlpill i { font-style: normal; color: var(--lime); }
+  .vpnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .vpnrow span { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 11px; }
+  .vpnrow span.t { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
+
+  /* problem → response rows */
+  .bento .probband { grid-column: span 12; }
+  .probband { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--card); margin-bottom: 14px; }
+  .prob { background: var(--bg2); padding: 24px 26px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
+  .prob p { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .prob h4 { font-family: var(--disp); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; color: var(--dim); }
+  .resp { padding: 24px 26px; }
+  .resp h3 { font-family: var(--disp); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .resp h3 i { font-style: normal; color: var(--lime); margin-right: 8px; }
+  .resp p { color: var(--dim); font-size: 14.5px; }
+  .resp p b { color: var(--text); font-weight: 600; }
+
+  /* finale CTA band */
+  .finale { background: var(--lime); color: var(--lime-ink); padding: 84px 0; }
+  .finale h2 { color: var(--lime-ink); font-size: clamp(2.2rem, 4.4vw, 3.6rem); }
+  .finale .fin-sub { font-size: 17px; color: rgba(22,26,5,0.72); margin: 14px 0 34px; max-width: 620px; font-weight: 500; }
+  .fin-installs { display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
+  .fin-chip { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.55); border: 2px solid var(--lime-ink); border-radius: 12px; padding: 11px 14px 11px 16px; }
+  .fin-chip .flabel { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; width: 104px; flex-shrink: 0; }
+  .fin-chip .fcmd { font-family: var(--mono); font-size: 13px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .fin-chip .fcmd::-webkit-scrollbar { display: none; }
+  .fin-chip button { font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; background: var(--lime-ink); color: var(--lime); border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; flex-shrink: 0; }
+  .fin-chip button.ok { background: #fffef9; color: var(--lime-ink); }
+  .fin-micro { margin-top: 16px; font-family: var(--mono); font-size: 11px; color: rgba(22,26,5,0.65); }
+
+  /* ============ PROOF / CHART ============ */
+  .proof { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .proof-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: start; }
+  .chart-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 14px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .chart-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+  .chart-hi { font-family: var(--mono); font-size: 11px; color: var(--mark); }
+  .chart-card svg { width: 100%; height: auto; display: block; }
+  .axis { stroke: var(--line); stroke-width: 1; }
+  .axtext { font-family: var(--mono); font-size: 9.5px; fill: var(--faint); }
+  .chart-tip { position: absolute; pointer-events: none; background: #23231e; border: 1px solid var(--line2); border-radius: 8px; padding: 7px 11px; font-family: var(--mono); font-size: 11px; color: var(--text); transform: translate(-50%, -120%); white-space: nowrap; opacity: 0; transition: opacity 0.1s; z-index: 5; }
+  .chart-tip b { color: var(--lime); }
+  details.data { margin-top: 8px; }
+  details.data summary { font-family: var(--mono); font-size: 10.5px; color: var(--faint); cursor: pointer; letter-spacing: 0.06em; }
+  details.data table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 8px; }
+  details.data td, details.data th { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+  .feed { display: flex; flex-direction: column; gap: 0; }
+  .feed-item { display: flex; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .feed-item:first-child { padding-top: 4px; }
+  .feed-v { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--lime); min-width: 64px; flex-shrink: 0; }
+  .feed-t { font-size: 14px; color: var(--dim); }
+  .feed-t b { color: var(--text); font-weight: 600; }
+  .feed-d { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 3px; }
+  .sprint { margin-top: 22px; font-family: var(--mono); font-size: 12px; color: var(--dim); border-left: 3px solid var(--mark); padding-left: 14px; }
+  .sprint b { color: var(--text); }
+
+  .sc-btn { border: none; }
+  .sc .sc-btn.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+  .copy.fail, .fin-chip button.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+
+  /* ============ OPEN CORE SPLIT (paper) ============ */
+  .split { background: var(--paper); color: var(--paper-ink); }
+  .split h2 em { color: #4d7c0f; } /* brand lime fails on paper (~1.5:1); deep lime keeps the family at ~4.5:1 */
+  .split .k { color: #5c7f10; }
+  .split .lede { color: var(--paper-dim); }
+  .split-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .sc { border: 2px solid var(--paper-ink); border-radius: 20px; padding: 30px 30px 26px; background: #fffef9; display: flex; flex-direction: column; }
+  .sc.core { background: var(--paper-ink); color: var(--paper); border-color: var(--paper-ink); }
+  .sc-tag { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 18px; }
+  .sc.core .sc-tag { color: var(--lime); }
+  .sc.app .sc-tag { color: #b04e10; }
+  .sc h3 { font-family: var(--disp); font-weight: 800; font-size: 27px; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .sc .price { font-family: var(--disp); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; margin: 14px 0 4px; }
+  .sc .price small { font-family: var(--mono); font-weight: 400; font-size: 12px; letter-spacing: 0; color: inherit; opacity: 0.65; display: block; margin-top: 2px; }
+  .sc ul { list-style: none; margin: 18px 0 24px; display: flex; flex-direction: column; gap: 9px; }
+  .sc ul li { font-size: 14px; padding-left: 22px; position: relative; }
+  .sc ul li::before { content: "◆"; position: absolute; left: 0; top: 1px; font-size: 9px; }
+  .sc.core ul li::before { color: var(--lime); }
+  .sc.app ul li::before { color: #b04e10; }
+  .sc-core-list li { color: #c9c8bd; }
+  .sc-app-list li { color: var(--paper-dim); }
+  .sc-btn { margin-top: auto; display: block; width: 100%; cursor: pointer; text-align: center; font-family: var(--mono); font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 12px; padding: 14px 18px; }
+  .sc.core .sc-btn { background: var(--lime); color: var(--lime-ink); }
+  .sc.core .sc-btn:hover { filter: brightness(1.05); }
+  .sc.app .sc-btn { background: transparent; color: var(--paper-ink); border: 2px solid var(--paper-ink); }
+  .sc.app .sc-btn:hover { background: var(--paper-ink); color: var(--paper); }
+  .sc-foot { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; text-align: center; color: inherit; opacity: 0.6; }
+
+  /* ============ HONESTY ============ */
+  .honest { border: 1px solid var(--amber-line); background: var(--amber-soft); border-radius: 16px; padding: 28px; }
+  .honest h3 { font-family: var(--disp); font-weight: 700; font-size: 19px; color: var(--amber); margin-bottom: 12px; }
+  .honest p { color: var(--dim); font-size: 14.5px; max-width: 860px; }
+  .honest p b { color: var(--text); }
+  .honest .vpnline { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .honest .vpnline span { font-family: var(--mono); font-size: 11px; color: var(--amber); border: 1px solid var(--amber-line); border-radius: 999px; padding: 4px 11px; }
+
+  /* ============ FAQ ============ */
+  .faq { max-width: 800px; }
+  details.q { border-bottom: 1px solid var(--line); }
+  details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+  details.q summary::-webkit-details-marker { display: none; }
+  details.q summary .pm { font-family: var(--mono); color: var(--lime); font-size: 18px; flex-shrink: 0; }
+  details.q[open] summary .pm { transform: rotate(45deg); }
+  details.q .a { padding: 0 4px 22px; color: var(--dim); font-size: 15px; max-width: 720px; }
+  details.q .a b { color: var(--text); }
+  details.q .a code { color: var(--text); }
+
+  /* ============ SUPPORT ============ */
+  .sup-card { border: 1px solid var(--line2); border-radius: 20px; padding: 40px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; background: linear-gradient(120deg, var(--card), var(--bg2)); }
+  .sup-card h2 { font-size: clamp(1.7rem, 2.8vw, 2.3rem); }
+  .milestone { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .milestone p { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
+  .milestone b { font-size: 15px; font-weight: 600; display: block; margin-bottom: 4px; }
+  .milestone span { font-size: 13px; color: var(--dim); }
+  .sup-actions { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+  .btn-lime { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 13px; font-weight: 600; background: var(--lime); color: var(--lime-ink); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+  .btn-lime:hover { filter: brightness(1.05); }
+  .btn-ghost2 { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 13px; color: var(--text); border: 1px solid var(--line2); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+  .btn-ghost2:hover { border-color: var(--lime-line); }
+
+  /* ============ FOOTER ============ */
+  footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
+  .foot-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 36px; }
+  .foot-brand p { color: var(--faint); font-size: 13.5px; margin-top: 10px; max-width: 300px; }
+  .fcol p { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin-bottom: 12px; }
+  .fcol a { display: block; color: var(--dim); font-size: 13.5px; text-decoration: none; padding: 3.5px 0; }
+  .fcol a:hover { color: var(--text); }
+  .legal { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .legal p { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .legal .exit { color: var(--lime); }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2,0.65,0.3,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.d1 { transition-delay: 0.07s; } .reveal.d2 { transition-delay: 0.15s; } .reveal.d3 { transition-delay: 0.23s; }
+
+  @media (max-width: 1000px) {
+    .b7, .b5, .b8, .b4 { grid-column: span 12; }
+    .proof-grid, .split-cards, .app-grid { grid-template-columns: 1fr; gap: 32px; }
+    .band { grid-template-columns: repeat(2, 1fr); }
+    .foot-grid { grid-template-columns: 1fr 1fr; }
+    .sup-card { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 620px) {
+    .nav-mid { display: none; }
+    .sw-tab .tagx { display: none; }
+    .sw-cmd { font-size: 12px; }
+    .band { grid-template-columns: 1fr 1fr; }
+    .stat b { font-size: 21px; }
+    .sw-body { flex-wrap: wrap; }
+    .sw-cmd { flex-basis: 100%; }
+    .probband { grid-template-columns: 1fr; }
+    .prob { border-right: none; border-bottom: 1px solid var(--line); }
+    .fin-chip { flex-wrap: wrap; }
+    .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--lime-ink); padding-top: 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
 </head>
 <body>
 
-  <!-- ============ NAV ============ -->
-  <header class="nav">
-    <div class="nav-inner">
-      <a class="brand" href="#top" aria-label="tailroute home">
-        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-          <rect width="64" height="64" rx="14" fill="var(--surface)"/>
-          <path d="M15 45 C15 31 26 31 32 31 C39 31 49 31 49 17" stroke="var(--mint)" stroke-width="5" fill="none" stroke-linecap="round"/>
-          <circle cx="15" cy="45" r="5.5" fill="var(--mint)"/>
-          <circle cx="49" cy="17" r="5.5" fill="var(--amber)"/>
-          <circle cx="32" cy="31" r="3.5" fill="var(--text)"/>
-        </svg>
-        <span class="brand-name">tailroute</span>
-        <span class="stage-pill" title="pre-v1.0 software">alpha</span>
-        <span class="brand-version">v0.8.17</span>
+<nav>
+  <div class="nav-in">
+    <div class="brand-wrap">
+      <a class="brand" href="#top">tailroute<i>.</i></a>
+      <span class="stage-pill" title="pre-v1.0 software">alpha</span>
+    </div>
+    <div class="nav-mid">
+      <a href="#features">Features</a>
+      <a href="#proof">Built in the open</a>
+      <a href="#core">Free vs App</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-right">
+      <span class="ver">v0.8.17</span>
+      <a class="gh-btn" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener" aria-label="GitHub repository">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
       </a>
-      <nav class="nav-links" aria-label="Main">
-        <a href="#how">How it works</a>
-        <a href="#tunnels">Tunnels</a>
-        <a href="#app">Menu bar app</a>
-        <a href="#limits">Honest limits</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli" class="nav-github" rel="noopener" target="_blank">GitHub&nbsp;↗</a>
-        <a href="#support" class="nav-cta">Sponsor</a>
-      </nav>
+      <a class="sp-link" href="#support">★ Star</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow reveal">
+            <span class="hot">Open core · Apache-2.0 CLI</span>
+            <span>macOS 12+</span>
+            <span>fail-safe by design</span>
+          </div>
+          <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet up.</h1>
+          <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS at exactly
+            the right moment — <b>internet through the VPN, peers through the mesh.</b> A root daemon that is
+            fail-safe, self-verifying, and entirely local.</p>
+
+          <div class="switcher reveal d3">
+            <div class="sw-tabs" role="tablist" aria-label="Install target">
+              <button class="sw-tab on" id="tab-app" role="tab" aria-selected="true">Menu bar app <span class="tagx">early access · free</span></button>
+              <button class="sw-tab" id="tab-cli" role="tab" aria-selected="false">CLI daemon <span class="tagx">apache-2.0</span></button>
+            </div>
+            <div class="sw-body">
+              <span class="sw-cmd"><span class="sw-p">$</span><span id="sw-text">brew install --cask shrwnsan/tap/tailroute</span></span>
+              <span class="sw-note" id="sw-note">includes the CLI</span>
+              <button class="copy" id="sw-copy" type="button">Copy</button>
+            </div>
+          </div>
+          <p class="microcopy reveal d3">No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
+
+          <div class="hero-cta reveal d3">
+            <a class="ghost" href="#core">Free core vs the app ↓</a>
+            <a class="ghost" href="https://github.com/shrwnsan/tailroute-cli/blob/main/README.md" target="_blank" rel="noopener">Full docs ↗</a>
+          </div>
+        </div>
+
+        <div class="hero-visual reveal d2" aria-hidden="true">
+          <div class="hcard">
+            <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
+            <div class="hcard-body">
+              <div class="hrow"><span>State</span><span class="ok">Coexisting — VPN + Tailscale</span></div>
+              <div class="hrow"><span>MagicDNS</span><span class="warnc">disabled (auto)</span></div>
+              <div class="hrow"><span>Proxy</span><span>127.0.0.1:1055 · running</span></div>
+              <div class="hrow"><span>Tunnels</span><span>2 healthy</span></div>
+            </div>
+          </div>
+          <div class="hcard st">
+            <p class="hcard-st-title">$ tailroute status — sample output</p>
+            <div class="hcard-body">
+              <div class="hrow"><span>daemon</span><span class="ok">running (pid 4821)</span></div>
+              <div class="hrow"><span>tailscale</span><span>utun4 (100.101.12.40)</span></div>
+              <div class="hrow"><span>vpn</span><span>utun3 (default route)</span></div>
+              <div class="hrow"><span>magicdns</span><span class="warnc">disabled (vpn_active)</span></div>
+              <div class="hrow"><span>last check</span><span>12s ago</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="band reveal">
+        <div class="stat"><b><i>31</i></b><span>tagged releases · public since mar ’26</span></div>
+        <div class="stat"><b>417</b><span>shell tests · 348 → 417 in five weeks</span></div>
+        <div class="stat"><b><i>0</i></b><span>telemetry · external calls · accounts</span></div>
+        <div class="stat"><b>1 <i>engine</i></b><span>CLI daemon + menu bar app</span></div>
+      </div>
     </div>
   </header>
 
-  <main id="top">
+  <!-- BENTO FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <p class="k reveal">What it does</p>
+      <h2 class="reveal d1">A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
+      <p class="lede reveal d2">Every routing-table change is classified into one of three states, and the response is deterministic. You do nothing.</p>
 
-    <!-- ============ HERO ============ -->
-    <section class="hero">
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <p class="log-kicker reveal"><span class="k-brace">[</span>daemon<span class="k-brace">]</span> route monitor attached · watching…</p>
-          <h1 class="reveal d1">Your VPN and your tailnet, <em>finally on speaking terms.</em></h1>
-          <p class="hero-sub reveal d2">tailroute is a small, fail&#8209;safe macOS daemon that watches your routing
-            table and toggles Tailscale&rsquo;s MagicDNS at exactly the right moment — so your VPN keeps
-            your internet and your mesh keeps your peers. No manual steps. No daily usage.</p>
-
-          <div class="hero-installs reveal d3">
-            <div class="install-chip" data-copy="brew install --cask shrwnsan/tap/tailroute">
-              <div class="chip-top">
-                <span class="install-label">Menu bar app <span class="tag-early">early access</span></span>
-                <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
-              </div>
-              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
-            </div>
-            <div class="install-chip" data-copy="brew install shrwnsan/tap/tailroute-cli">
-              <div class="chip-top">
-                <span class="install-label">CLI daemon <span class="tag-oss">apache-2.0</span></span>
-                <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
-              </div>
-              <span class="install-cmd"><span class="prompt">$</span> brew install shrwnsan/tap/tailroute-cli</span>
-            </div>
-          </div>
-
-          <ul class="hero-trust reveal d4" aria-label="Trust facts">
-            <li>no telemetry</li>
-            <li>no account</li>
-            <li>no network interception</li>
-            <li>macOS 12+</li>
-            <li>any utun-route VPN</li>
-          </ul>
-        </div>
-
-        <div class="hero-terminal reveal d2">
+      <div class="bento">
+        <div class="b-card b7 reveal d1">
+          <p class="b-k">demo · the decision loop, replayed</p>
           <div class="terminal">
-            <div class="term-titlebar">
-              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-              <span class="term-title">tailroute daemon — live decision loop</span>
+            <div class="term-bar"><i></i><i></i><i></i><span>tailroute daemon — demo loop</span></div>
+            <div class="term-body" id="term-body"></div>
+            <div class="term-foot">
+              <span>MAGICDNS<b id="st-dns" class="foff">off</b></span>
+              <span>PROXY<b id="st-proxy" class="fon">up</b></span>
+              <span>STATE<b id="st-phase">COEXIST</b></span>
             </div>
-            <div class="term-body" id="term-body" aria-live="off"></div>
-            <div class="term-statusline">
-              <span class="stat-chip">MAGICDNS <b id="st-dns" class="st-off">off</b></span>
-              <span class="stat-chip">PROXY <b id="st-proxy" class="st-off">down</b></span>
-              <span class="stat-chip">STATE <b id="st-phase">WATCHING</b></span>
+          </div>
+        </div>
+
+        <div class="b-card b5 reveal d2">
+          <p class="b-k">the matrix</p>
+          <h3>Three states, zero judgment calls</h3>
+          <div style="margin-top:16px">
+            <div class="mrow"><span class="led led-l"></span><b>VPN + Tailscale</b><span>dns off · proxy up</span></div>
+            <div class="mrow"><span class="led led-m"></span><b>Tailscale only</b><span>dns on · proxy down</span></div>
+            <div class="mrow"><span class="led led-o"></span><b>No Tailscale</b><span>watching…</span></div>
+          </div>
+          <p style="margin-top:16px;font-size:13.5px"><b>Ambiguous?</b> Two VPNs at once — it logs a warning and does nothing. Fail-safe first.</p>
+        </div>
+
+        <div class="probband reveal d1">
+          <div class="prob"><p>When the VPN connects — on hotel or café Wi-Fi, this is your Tuesday</p><h4>Every peer times out.</h4></div>
+          <div class="resp"><h3><i>01</i>SOCKS5 mesh proxy</h3>
+            <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
+            the VPN blocks the CGNAT range. <b>Starts and stops with the VPN — never configured by you.</b>
+            Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
+        </div>
+
+        <div class="probband reveal d2">
+          <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
+          <div class="resp"><h3><i>02</i>Browser tunnels</h3>
+            <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry —
+            <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
+            Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
+            <span class="urlpill"><i>→</i> mypeer.yourtailnet.ts.net:8443</span></div>
+        </div>
+
+        <div class="probband reveal d3">
+          <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+          <div class="resp"><h3><i>03</i>Self-verifying install</h3>
+            <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b> — tampered files
+            refuse to start, and say what changed. Strict validation, absolute paths, fail-safe on ambiguity,
+            417 tests and counting.</p></div>
+        </div>
+
+        <div class="b-card b12 reveal d1">
+          <div style="display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap;align-items:center">
+            <div style="max-width:560px">
+              <p class="b-k">compatibility</p>
+              <h3>Works with any utun-route VPN</h3>
+              <p>The daemon classifies routing changes from any VPN that takes the default route — no per-VPN plugins, no allowlists.</p>
+            </div>
+            <div class="vpnrow">
+              <span class="t">Mullvad · tested</span>
+              <span class="t">NordVPN · tested</span>
+              <span>ProtonVPN</span>
+              <span>Surfshark</span>
+              <span>ExpressVPN</span>
+              <span>your VPN ↗</span>
             </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- ============ DECISION MATRIX ============ -->
-    <section class="section" id="how">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>event<span class="k-brace">]</span> route change detected</p>
-      <h2 class="reveal d1">One daemon. <em>Three states.</em> Zero decisions left for you.</h2>
-      <p class="section-sub reveal d2">Every routing-table change is classified into one of three states — and the response is always the same, deterministic move.</p>
+  <!-- PROOF -->
+  <section class="proof" id="proof">
+    <div class="wrap">
+      <p class="k reveal">Built in the open</p>
+      <h2 class="reveal d1">Shipped, not <em>promised.</em></h2>
+      <p class="lede reveal d2">No stars to flex, no fake logos. The repo is six months old and the commit history is the pitch: a slow spring, then a hardening sprint that hasn&rsquo;t stopped.</p>
 
-      <div class="matrix">
-        <article class="matrix-card reveal d1">
-          <div class="matrix-head"><span class="led led-amber"></span><span class="matrix-state">COEXIST</span></div>
-          <h3>Tailscale + VPN active</h3>
-          <p>MagicDNS <b>off</b> · SOCKS5 proxy <b>up</b>. Internet flows through the VPN; peers stay reachable
-             through the mesh proxy on <code>127.0.0.1:1055</code>.</p>
-        </article>
-        <article class="matrix-card reveal d2">
-          <div class="matrix-head"><span class="led led-mint"></span><span class="matrix-state">MESH</span></div>
-          <h3>Tailscale only</h3>
-          <p>MagicDNS <b>on</b> · proxy <b>stopped</b>. Full MagicDNS name resolution and direct mesh access,
-             exactly as Tailscale intended.</p>
-        </article>
-        <article class="matrix-card reveal d3">
-          <div class="matrix-head"><span class="led"></span><span class="matrix-state">IDLE</span></div>
-          <h3>No Tailscale</h3>
-          <p>Nothing happens. The daemon stays quiet, keeps watching, and never touches settings it
-             doesn&rsquo;t own.</p>
-        </article>
-      </div>
-
-      <p class="failsafe-note reveal"><span class="warn-glyph">⚠</span> Ambiguous state — say, two VPNs at once? The daemon logs a warning and does <b>nothing</b>. Fail-safe first, by design.</p>
-    </section>
-
-    <!-- ============ FEATURES ============ -->
-    <section class="section section-tinted">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>info<span class="k-brace">]</span> capabilities</p>
-      <h2 class="reveal d1">More than a DNS toggle</h2>
-      <div class="features">
-        <article class="feature reveal d1">
-          <p class="feature-kicker">watch</p>
-          <h3>Live route watching</h3>
-          <p>Event-driven via <code>route monitor</code>, with a 60-second safety-net re-assert that self-heals
-             out-of-band changes. Toggles are idempotent — no flapping, no redundant writes.</p>
-        </article>
-        <article class="feature reveal d2">
-          <p class="feature-kicker">mesh</p>
-          <h3>SOCKS5 mesh proxy</h3>
-          <p>When a VPN blocks Tailscale&rsquo;s CGNAT range, a tsnet-based proxy on <code>127.0.0.1:1055</code>
-             routes traffic through the mesh anyway. Auto-starts and auto-stops with the VPN.</p>
-        </article>
-        <article class="feature reveal d3">
-          <p class="feature-kicker">browse</p>
-          <h3>Browser tunnels</h3>
-          <p>Open a peer&rsquo;s Tailscale Serve dashboard in Safari, Chrome, or Firefox — with a valid,
-             real <code>.ts.net</code> certificate. No extensions, no cert warnings.</p>
-        </article>
-        <article class="feature reveal d1">
-          <p class="feature-kicker">config</p>
-          <h3>SSH &amp; shell helpers</h3>
-          <p><code>tailroute proxy-config ssh</code> and <code>… shell</code> generate ready-to-paste config —
-             <code>sshproxy mypeer</code> and <code>curlproxy http://…</code> just work.</p>
-        </article>
-        <article class="feature reveal d2">
-          <p class="feature-kicker">integrity</p>
-          <h3>Self-verifying install</h3>
-          <p>A SHA-256 manifest written at install time is verified before any library loads. Tampered
-             files? The daemon refuses to start — and tells you what changed.</p>
-        </article>
-        <article class="feature reveal d3">
-          <p class="feature-kicker">privacy</p>
-          <h3>Private by construction</h3>
-          <p>No telemetry, no external network calls, no account, no traffic inspection or logging.
-             It&rsquo;s your Mac; tailroute just watches the routing table.</p>
-        </article>
-      </div>
-    </section>
-
-    <!-- ============ TUNNELS ============ -->
-    <section class="section" id="tunnels">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>tunnel<span class="k-brace">]</span> add mypeer --port 8443</p>
-      <h2 class="reveal d1">Your peer&rsquo;s dashboard, in any browser, <em>with valid TLS.</em></h2>
-      <p class="section-sub reveal d2">One command registers a launchd-managed tunnel, maps a managed <code>/etc/hosts</code> entry,
-         and hands you a bookmarkable URL. It keeps working whether the VPN is up or not — the path
-         adapts automatically (SOCKS5 when the VPN is active, direct when it isn&rsquo;t).</p>
-
-      <div class="tunnel-grid">
-        <div class="tunnel-copy reveal d1">
-          <div class="terminal term-static">
-<pre><code><span class="t-prompt">$</span> tailroute tunnel add mypeer
-<span class="t-ok">✓</span> ssh auth ok · peer reachable · port free
-<span class="t-ok">✓</span> serve backend accepting · TLS cert valid
-<span class="t-ok">✓</span> /etc/hosts entry + launchd job registered
-<span class="t-dim">→</span> <span class="t-url">https://mypeer.yourtailnet.ts.net:8443</span>
-
-<span class="t-prompt">$</span> tailroute tunnel check mypeer
-<span class="t-ok">✓</span> hosts → listener → TLS → HTTP 200
-<span class="t-dim">  transport: tunnel+tls ok · backend: serve ok</span></code></pre>
+      <div class="proof-grid">
+        <div class="chart-card reveal d1" style="position:relative">
+          <div class="chart-head">
+            <span class="chart-title">Tagged releases — cumulative</span>
+            <span class="chart-hi">29 of 31 releases shipped since Aug 24</span>
           </div>
-          <p class="verb-aphorism">Three read-only verbs, three different questions:
-            <b>status</b> = the inventory · <b>drift</b> = the peer&rsquo;s claim ·
-            <b>check</b> = the browser&rsquo;s truth.</p>
+          <svg viewBox="0 0 640 250" role="img" aria-label="Cumulative tagged releases, March to October 2026: two releases in spring, then 29 more from late August, ending at 31">
+            <line class="axis" x1="46" y1="214" x2="616" y2="214"/>
+            <line class="axis" x1="46" y1="150.1" x2="616" y2="150.1" opacity="0.5"/>
+            <line class="axis" x1="46" y1="86.1" x2="616" y2="86.1" opacity="0.5"/>
+            <line class="axis" x1="46" y1="22.4" x2="616" y2="22.4" opacity="0.5"/>
+            <text class="axtext" x="38" y="217" text-anchor="end">0</text>
+            <text class="axtext" x="38" y="153" text-anchor="end">10</text>
+            <text class="axtext" x="38" y="89" text-anchor="end">20</text>
+            <text class="axtext" x="38" y="25" text-anchor="end">30</text>
+            <text class="axtext" x="46" y="232">Mar</text>
+            <text class="axtext" x="290" y="232" text-anchor="middle">Jun</text>
+            <text class="axtext" x="520" y="232" text-anchor="middle">Sep 1</text>
+            <text class="axtext" x="612" y="232" text-anchor="end">Oct</text>
+            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16 L612.3,214 L46,214 Z" fill="rgba(116,164,26,0.10)" stroke="none"/>
+            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16" fill="none" stroke="var(--mark)" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="612.3" cy="16" r="4.5" fill="var(--mark)" stroke="var(--card)" stroke-width="2"/>
+            <text x="612" y="10" text-anchor="end" style="font-family:var(--mono);font-size:11px;font-weight:600" fill="var(--text)">31</text>
+            <line id="xhair" x1="0" y1="16" x2="0" y2="214" stroke="var(--line2)" stroke-width="1" opacity="0"/>
+            <circle id="hoverdot" r="4" fill="var(--text)" stroke="var(--card)" stroke-width="2" opacity="0"/>
+          </svg>
+          <div class="chart-tip" id="chart-tip"></div>
+          <details class="data">
+            <summary>View data table</summary>
+            <table>
+              <thead><tr><th>Date</th><th>Cumulative tagged releases</th></tr></thead>
+              <tbody>
+                <tr><td>2026-03-27</td><td>1</td></tr>
+                <tr><td>2026-04-09</td><td>2</td></tr>
+                <tr><td>2026-08-24</td><td>3</td></tr>
+                <tr><td>2026-08-31</td><td>4</td></tr>
+                <tr><td>2026-09-01</td><td>11</td></tr>
+                <tr><td>2026-09-02</td><td>23</td></tr>
+                <tr><td>2026-09-03</td><td>26</td></tr>
+                <tr><td>2026-09-11</td><td>27</td></tr>
+                <tr><td>2026-09-22</td><td>28</td></tr>
+                <tr><td>2026-09-23</td><td>29</td></tr>
+                <tr><td>2026-09-24</td><td>30</td></tr>
+                <tr><td>2026-09-30</td><td>31</td></tr>
+              </tbody>
+            </table>
+          </details>
         </div>
-        <ul class="tunnel-points reveal d2">
-          <li><b>Hardened contract.</b> Valid TLS is mandatory at <code>add</code> — a mismatched cert rolls the whole thing back. Every step is journaled before it runs, so a crash can&rsquo;t leave half a tunnel behind.</li>
-          <li><b>Transactional updates.</b> Adding a second <code>--remote-port</code> forward updates the running job in place; on any failure the previous healthy job is restored.</li>
-          <li><b>Per-forward health.</b> <code>tunnel status</code> reports listener, backend, and TLS state for every forward — and a 502 behind a valid certificate is reported as what it is: the peer&rsquo;s service is down, not the tunnel.</li>
-          <li><b>Machine-wide safety.</b> The <code>/etc/hosts</code> edit is serialized with a hosts lock, so two users&rsquo; tunnel operations can never interleave.</li>
-        </ul>
-      </div>
-    </section>
 
-    <!-- ============ QUICKSTART ============ -->
-    <section class="section section-tinted" id="quickstart">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>install<span class="k-brace">]</span> two commands, then never think about it again</p>
-      <h2 class="reveal d1">Up and running in two minutes</h2>
-      <ol class="steps">
-        <li class="reveal d1">
-          <span class="step-num">01</span>
-          <div>
-            <h3>Install</h3>
-            <p>Menu bar app (includes the CLI):</p>
-            <div class="install-chip install-chip-sm" data-copy="brew install --cask shrwnsan/tap/tailroute">
-              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
-              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
-            </div>
-            <p>Or just the CLI daemon:</p>
-            <div class="install-chip install-chip-sm" data-copy="brew install shrwnsan/tap/tailroute-cli">
-              <span class="install-cmd"><span class="prompt">$</span> brew install shrwnsan/tap/tailroute-cli</span>
-              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
-            </div>
+        <div class="reveal d2">
+          <div class="feed">
+            <div class="feed-item"><span class="feed-v">0.8.17</span><div><p class="feed-t"><b>Log rotation actually rotates</b> — staged at daemon startup for every layout; integrity manifest now layout-aware.</p><p class="feed-d">2026-09-30 · tests 408 → 417</p></div></div>
+            <div class="feed-item"><span class="feed-v">0.8.16</span><div><p class="feed-t"><b>Second peers stay removable</b> — hosts mappings land inside the managed block.</p><p class="feed-d">2026-09-24 · tests 406 → 408</p></div></div>
+            <div class="feed-item"><span class="feed-v">0.8.15</span><div><p class="feed-t"><b>Proxy registry self-heals against reality</b> — and the auth key no longer leaks through argv.</p><p class="feed-d">2026-09-23 · tests 383 → 405</p></div></div>
+            <div class="feed-item"><span class="feed-v">0.8.14</span><div><p class="feed-t"><b>Every tunnel verb accepts the ssh alias</b> — no more dead ends on <code>tunnel check prime</code>.</p><p class="feed-d">2026-09-23 · tests 367 → 383</p></div></div>
+            <div class="feed-item" style="border-bottom:none"><span class="feed-v">0.8.11</span><div><p class="feed-t"><b><code>tunnel check</code></b> — the browser&rsquo;s truth: hosts → listener → TLS → HTTP, zero ssh.</p><p class="feed-d">2026-09-03 · read-only by construction</p></div></div>
           </div>
-        </li>
-        <li class="reveal d2">
-          <span class="step-num">02</span>
-          <div>
-            <h3>Start the daemon</h3>
-            <p>One command installs the root launchd service and stages the integrity manifest:</p>
-            <div class="install-chip install-chip-sm" data-copy="sudo tailroute install">
-              <span class="install-cmd"><span class="prompt">$</span> sudo tailroute install</span>
-              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
-            </div>
-            <p>Nervous? Preview every decision first with <code>tailroute --dry-run</code>.</p>
-          </div>
-        </li>
-        <li class="reveal d3">
-          <span class="step-num">03</span>
-          <div>
-            <h3>Forget about it</h3>
-            <p>Connect your VPN. Connect Tailscale. Everything works — internet through the VPN, peers
-               through the mesh. Verify whenever you like:</p>
-            <div class="install-chip install-chip-sm" data-copy="tailroute status">
-              <span class="install-cmd"><span class="prompt">$</span> tailroute status</span>
-              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
-            </div>
-            <p><b>There is no daily usage.</b> That&rsquo;s the whole point.</p>
-          </div>
-        </li>
-      </ol>
-    </section>
-
-    <!-- ============ HONEST LIMITS ============ -->
-    <section class="section section-amber" id="limits">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>warn<span class="k-brace">]</span> ambiguity encountered — reporting honestly</p>
-      <h2 class="reveal d1">What tailroute <em>can&rsquo;t</em> fix</h2>
-      <p class="section-sub reveal d2">We&rsquo;d rather tell you now than have you find out later. Modern macOS VPN apps use Network
-         Extensions that intercept <b>all</b> outbound traffic — including packets destined for Tailscale&rsquo;s
-         CGNAT range (<code>100.64/10</code>). tailroute fixes the DNS conflict; it cannot bypass packet interception.</p>
-
-      <div class="amber-grid">
-        <div class="amber-card reveal d1">
-          <h3>Tested VPNs that block mesh traffic</h3>
-          <table class="vpn-table">
-            <thead><tr><th>VPN</th><th>Protocols tested</th><th>CGNAT blocked</th></tr></thead>
-            <tbody>
-              <tr><td>Mullvad</td><td>WireGuard</td><td class="td-blocked">yes</td></tr>
-              <tr><td>NordVPN</td><td>NordLynx · OpenVPN · NordWhisper</td><td class="td-blocked">yes</td></tr>
-            </tbody>
-          </table>
-          <p class="amber-foot">Some older VPN implementations let mesh traffic through. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" rel="noopener" target="_blank">Report your VPN&rsquo;s behavior ↗</a></p>
+          <p class="sprint"><b>22 releases in 72 hours</b> (Sep 1–3) — the v0.7→v0.8 hardening sprint: a burst of fixes after the 0.8.0 rewrite, each one tagged and tested. Full history: <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md ↗</a></p>
         </div>
-        <div class="amber-card reveal d2">
-          <h3>Known trade-offs</h3>
-          <ul>
-            <li>While the VPN is active, MagicDNS names don&rsquo;t resolve — use <code>100.x</code> IPs, or add a browser tunnel.</li>
-            <li>Firefox with DNS-over-HTTPS bypasses <code>/etc/hosts</code> — Safari and Chrome use the system resolver.</li>
-            <li>Tunnel URLs carry a non-standard port (<code>:8443</code>-style) — port 443 would need root.</li>
-            <li>Won&rsquo;t-fix by research: MagicDNS split-DNS, multi-VPN support, IPv6. The fail-safe is safer.</li>
+      </div>
+    </div>
+  </section>
+
+  <!-- OPEN CORE SPLIT -->
+  <section class="split" id="core">
+    <div class="wrap">
+      <p class="k reveal">The model</p>
+      <h2 class="reveal d1">One engine. <em>Two frontends.</em></h2>
+      <p class="lede reveal d2">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine — free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
+
+      <div class="split-cards">
+        <div class="sc core reveal d1">
+          <p class="sc-tag">The core — CLI daemon</p>
+          <h3>Everything, in your terminal</h3>
+          <p style="color:#c9c8bd;font-size:14.5px">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
+          <p class="price">$0 <small>forever · Apache-2.0 · no account</small></p>
+          <ul class="sc-core-list">
+            <li>Every feature, no gates — proxies, tunnels, helpers</li>
+            <li>Homebrew or source; runs as a root launchd service</li>
+            <li>Your traffic never touches our infrastructure (there isn&rsquo;t any)</li>
           </ul>
+          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-label="brew install shrwnsan/tap/tailroute-cli">brew install shrwnsan/tap/tailroute-cli</button>
+          <p class="sc-foot">star it, fork it, audit it — that&rsquo;s the point</p>
         </div>
-      </div>
-    </section>
 
-    <!-- ============ APP ============ -->
-    <section class="section" id="app">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>app<span class="k-brace">]</span> menu bar: ◆ tailroute</p>
-      <h2 class="reveal d1">Prefer a window to a terminal? <em>There&rsquo;s an app for that.</em></h2>
-      <div class="app-grid">
-        <div class="app-copy reveal d1">
-          <p>The tailroute menu bar app wraps the same engine in a native macOS UI: first-run onboarding,
-             live state at a glance, proxy and tunnel controls, a diagnostic panel, and update alerts
-             that can download the DMG for you.</p>
-          <ul class="app-points">
+        <div class="sc app reveal d2">
+          <p class="sc-tag">The shell — menu bar app</p>
+          <h3>Set it and forget it</h3>
+          <p style="color:var(--paper-dim);font-size:14.5px">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
+          <p class="price">Free <small>during early access · planned one-time license at v1.0 — never a subscription</small></p>
+          <ul class="sc-app-list">
             <li>Menu bar icon with live connection state</li>
-            <li>Start/stop the SOCKS5 proxy without a terminal</li>
-            <li>Per-tunnel health rows and copy-URL actions</li>
-            <li>Brew-aware update checks with DMG download</li>
+            <li>First-run onboarding and a diagnostic panel</li>
+            <li>Brew-aware updates with DMG download</li>
           </ul>
-          <p class="app-pricing"><b>Free during early access.</b> A paid v1.0 is planned — one-time license,
-             no subscription. Everything in 0.x, including the app, stays free for early adopters.</p>
-          <div class="hero-installs app-installs">
-            <div class="install-chip install-chip-sm" data-copy="brew install --cask shrwnsan/tap/tailroute">
-              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
-              <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
-            </div>
-          </div>
-          <p class="app-dmg">Prefer a DMG? <a href="https://github.com/shrwnsan/tailroute-cli/releases" rel="noopener" target="_blank">Grab it from releases ↗</a></p>
-        </div>
-        <div class="app-mock reveal d2" aria-hidden="true">
-          <div class="menubar">
-            <span class="mb-item">⌘ Finder</span><span class="mb-item mb-spacer">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span>
-            <span class="mb-item mb-active">◆ tailroute</span>
-            <span class="mb-item">◈ 09:41</span>
-          </div>
-          <div class="dropdown">
-            <p class="dd-state"><span class="led led-amber"></span> Coexisting — VPN + Tailscale</p>
-            <p class="dd-row">MagicDNS <span class="dd-val">disabled (auto)</span></p>
-            <p class="dd-row">Proxy <span class="dd-val">127.0.0.1:1055 · running</span></p>
-            <p class="dd-row">Tunnels <span class="dd-val">2 healthy</span></p>
-            <div class="dd-sep"></div>
-            <p class="dd-row dd-action">Check for Updates…</p>
-            <p class="dd-row dd-action">Preferences…</p>
-            <p class="dd-row dd-action dd-quit">Quit tailroute</p>
-          </div>
+          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-label="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
+          <p class="sc-foot">early adopters shape the v1.0 roadmap — file issues</p>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- ============ SECURITY ============ -->
-    <section class="section section-tinted" id="security">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>integrity<span class="k-brace">]</span> verifying installed.checksums… ok</p>
-      <h2 class="reveal d1">Runs as root. <em>Acts like it.</em></h2>
-      <p class="section-sub reveal d2">A root daemon earns scrutiny. tailroute is hardened accordingly — and the
-         threat model, audit results, and hardening details are all public.</p>
-      <div class="security-grid">
-        <div class="sec-card reveal d1"><h3>Integrity gate</h3><p>An install-time SHA-256 manifest is verified before any library is sourced. Mismatch means refuse-to-start, not degrade-and-continue.</p></div>
-        <div class="sec-card reveal d2"><h3>Strict validation</h3><p>Interface names must match <code>utun\d+</code>; IPs are CIDR-validated against <code>100.64/10</code>; every system call uses absolute paths.</p></div>
-        <div class="sec-card reveal d3"><h3>Fail-safe defaults</h3><p>When state is ambiguous the daemon does nothing. No guesswork in a tool that flips system DNS settings.</p></div>
-        <div class="sec-card reveal d1"><h3>Minimal surface</h3><p>No traffic interception, no logging of network content, no external calls, no signing up for anything. Ever.</p></div>
+  <!-- HONESTY -->
+  <section id="limits">
+    <div class="wrap">
+      <p class="k reveal" style="color:var(--amber)">Honest limits</p>
+      <h2 class="reveal d1">What it can&rsquo;t fix</h2>
+      <p class="lede reveal d2">Told up front, not discovered later.</p>
+      <div class="honest reveal d2">
+        <h3>Network Extensions can still block the mesh</h3>
+        <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic — including packets to Tailscale&rsquo;s CGNAT range
+           (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
+           bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
+        <div class="vpnline">
+          <span>Mullvad — CGNAT blocked</span>
+          <span>NordVPN — CGNAT blocked</span>
+          <span>older VPNs — often fine</span>
+        </div>
+        <p style="margin-top:14px;font-size:13.5px">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
       </div>
-      <p class="section-link reveal"><a href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">Browse the source — every line is the audit trail ↗</a></p>
-    </section>
+    </div>
+  </section>
 
-    <!-- ============ SUPPORT ============ -->
-    <section class="section section-support" id="support">
-      <p class="log-kicker reveal"><span class="k-brace">[</span>daemon<span class="k-brace">]</span> uptime: healthy · exit 0 pending</p>
-      <h2 class="reveal d1">Built in the open. <em>Kept alive by people like you.</em></h2>
-      <p class="section-sub reveal d2">The CLI is free and open source under Apache-2.0 and will stay that way. If tailroute
-         saved your sanity mid-deadline, starring the repo or sponsoring development both keep the lights on.</p>
-      <div class="support-actions reveal d2">
-        <a class="btn btn-solid" href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          Star on GitHub
-        </a>
-        <!--
-          TODO(shrwnsan): enable a sponsorship channel and uncomment ONE of these.
-          GitHub Sponsors is not enabled yet (github.com/sponsors/shrwnsan currently
-          redirects to the profile). Ko-fi / Buy Me a Coffee snippets below are ready
-          to paste your handle into.
+  <!-- FAQ -->
+  <section id="faq" style="padding-top:0">
+    <div class="wrap">
+      <p class="k reveal">FAQ</p>
+      <h2 class="reveal d1">Asked, answered</h2>
+      <div class="faq" style="margin-top:36px">
+        <details class="q reveal d1">
+          <summary>Does it work with Mullvad or NordVPN? <span class="pm">+</span></summary>
+          <div class="a">The <b>DNS fix works</b> — internet stays up through the VPN with Tailscale connected. But both VPNs block
+            direct traffic to Tailscale&rsquo;s CGNAT range at the Network-Extension layer, so <b>direct peer connections fail</b>;
+            use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes.</div>
+        </details>
+        <details class="q reveal d1">
+          <summary>Which Tailscale install does it need? <span class="pm">+</span></summary>
+          <div class="a">The <b>CLI daemon</b> (<code>brew install tailscale</code>) is fully supported — tailroute toggles DNS over its unix socket.
+            The GUI app works with limitations (fall-back MagicDNS detection), and the Mac App Store version is not supported.</div>
+        </details>
+        <details class="q reveal d1">
+          <summary>Does it phone home? <span class="pm">+</span></summary>
+          <div class="a">No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network
+            activity is the proxy and tunnels you configure, pointing at your own tailnet.</div>
+        </details>
+        <details class="q reveal d1">
+          <summary>It runs as root — why should I trust it? <span class="pm">+</span></summary>
+            <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
+            strict input validation, absolute paths only, fail-safe on ambiguous state, and a public threat model.
+            The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read <a href="docs/">tailroute(8)</a> — the full man page, shipped with this site.</div>
+        </details>
+        <details class="q reveal d2">
+          <summary>What happens when I quit the VPN or uninstall? <span class="pm">+</span></summary>
+          <div class="a">VPN disconnects → MagicDNS is restored automatically (within ~60s, event-driven). Uninstall restores MagicDNS
+            state, removes the daemon, tunnels, and hosts entries — and preserves logs for review.</div>
+        </details>
+      </div>
+    </div>
+  </section>
 
-        <a class="btn btn-outline" href="https://github.com/sponsors/shrwnsan" rel="noopener" target="_blank">♥ GitHub Sponsors</a>
-        <a class="btn btn-outline" href="https://www.ko-fi.com/YOUR_HANDLE" rel="noopener" target="_blank">Ko-fi</a>
-        <a class="btn btn-outline" href="https://www.buymeacoffee.com/YOUR_HANDLE" rel="noopener" target="_blank">Buy Me a Coffee</a>
-        -->
+  <!-- SUPPORT -->
+  <section id="support" style="padding-top:0">
+    <div class="wrap">
+      <div class="sup-card reveal">
+        <div>
+          <p class="k">Support the work</p>
+          <h2>Open source isn&rsquo;t <em>free to build.</em></h2>
+          <p style="color:var(--dim);margin-top:14px;max-width:480px">The CLI stays free and open source. If tailroute saved your sanity mid-deadline, a star or a sponsorship keeps the hardening sprint going.</p>
+          <div class="sup-actions">
+            <a class="btn-lime" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">★ Star on GitHub</a>
+            <!-- TODO: uncomment once a channel is live
+            <a class="btn-ghost2" href="https://github.com/sponsors/shrwnsan" target="_blank" rel="noopener">♥ GitHub Sponsors</a>
+            <a class="btn-ghost2" href="https://www.ko-fi.com/YOUR_HANDLE" target="_blank" rel="noopener">Ko-fi</a>
+            -->
+          </div>
+        </div>
+        <div class="milestone">
+          <p>Next milestone</p>
+          <b>Notarized, Gatekeeper-clean builds</b>
+          <span>Apple Developer ID ($99/yr) unlocks signed + notarized DMGs — no more right-click-to-open for new users. Sponsorship goes here first.</span>
+        </div>
       </div>
-      <p class="support-note reveal d3">Roadmap: notarized v1.0 of the menu bar app · Paddle checkout · more tunnel hardening.
-         Feature requests live in <a href="https://github.com/shrwnsan/tailroute-cli/issues" rel="noopener" target="_blank">GitHub issues ↗</a>.</p>
-    </section>
+    </div>
+  </section>
+</main>
 
-  </main>
+<!-- FINALE CTA -->
+<section class="finale">
+  <div class="wrap">
+    <h2 class="reveal">Two minutes. Then never<br>think about it again.</h2>
+    <p class="fin-sub reveal d1">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage — that&rsquo;s the whole point.</p>
+    <div class="fin-installs reveal d2">
+      <div class="fin-chip" data-copy="brew install --cask shrwnsan/tap/tailroute">
+        <span class="flabel">Menu bar app</span>
+        <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
+        <button type="button">copy</button>
+      </div>
+      <div class="fin-chip" data-copy="brew install shrwnsan/tap/tailroute-cli">
+        <span class="flabel">CLI daemon</span>
+        <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
+        <button type="button">copy</button>
+      </div>
+    </div>
+    <p class="fin-micro reveal d3">no account · no telemetry · uninstall restores everything</p>
+  </div>
+</section>
 
-  <!-- ============ FOOTER ============ -->
-  <footer class="footer">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <p class="brand-name">tailroute</p>
-        <p>Tailscale + VPN coexistence for macOS.<br>Internet through the VPN. Peers through the mesh.</p>
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand-wrap">
+      <a class="brand" href="#top">tailroute<i>.</i></a>
+      <span class="stage-pill" title="pre-v1.0 software">alpha</span>
+    </div>
+        <p>Tailscale + VPN coexistence for macOS. Internet through the VPN. Peers through the mesh. One fail-safe daemon.</p>
       </div>
-      <div class="footer-col">
-        <p class="footer-head">Product</p>
-        <a href="#quickstart">Install</a>
-        <a href="#tunnels">Browser tunnels</a>
-        <a href="#app">Menu bar app</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli/releases" rel="noopener" target="_blank">Releases</a>
+      <div class="fcol">
+        <p>Product</p>
+        <a href="#features">Features</a>
+        <a href="#core">Free vs App</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/releases" target="_blank" rel="noopener">Releases</a>
       </div>
-      <div class="footer-col">
-        <p class="footer-head">Project</p>
-        <a href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">GitHub</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" rel="noopener" target="_blank">Changelog</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md" rel="noopener" target="_blank">Architecture</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli/issues" rel="noopener" target="_blank">Issues</a>
+      <div class="fcol">
+        <p>Project</p>
+        <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md" target="_blank" rel="noopener">Architecture</a>
       </div>
-      <div class="footer-col">
-        <p class="footer-head">Trust</p>
+      <div class="fcol">
+        <p>Trust</p>
         <a href="#limits">Honest limits</a>
-        <a href="#security">Security</a>
-        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE" rel="noopener" target="_blank">License</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
       </div>
     </div>
-    <div class="footer-legal">
-      <p><span class="log-line">[shutdown] state clean · magicdns restored · exit 0</span></p>
-      <p>CLI: Apache-2.0 · macOS app: proprietary — © 2026 shrwnsan. Not affiliated with or endorsed by Tailscale Inc. Tailscale is a trademark of Tailscale Inc.</p>
+    <div class="legal">
+      <p>[shutdown] state clean · magicdns restored · <span class="exit">exit 0</span></p>
+      <p>CLI: Apache-2.0 · App: proprietary · © 2026 shrwnsan · not affiliated with Tailscale Inc.</p>
     </div>
-  </footer>
+  </div>
+</footer>
 
-  <script src="script.js"></script>
+<script>
+(function () {
+  "use strict";
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- install switcher ---- */
+  var CMDS = {
+    app: { cmd: "brew install --cask shrwnsan/tap/tailroute", note: "includes the CLI" },
+    cli: { cmd: "brew install shrwnsan/tap/tailroute-cli", note: "then: sudo tailroute install" }
+  };
+  var current = "app";
+  var tabApp = document.getElementById("tab-app"), tabCli = document.getElementById("tab-cli");
+  var swText = document.getElementById("sw-text"), swNote = document.getElementById("sw-note");
+  function pick(which) {
+    current = which;
+    tabApp.classList.toggle("on", which === "app"); tabApp.setAttribute("aria-selected", which === "app");
+    tabCli.classList.toggle("on", which === "cli"); tabCli.setAttribute("aria-selected", which === "cli");
+    swText.textContent = CMDS[which].cmd; swNote.textContent = CMDS[which].note;
+  }
+  tabApp.addEventListener("click", function () { pick("app"); });
+  tabCli.addEventListener("click", function () { pick("cli"); });
+  function honestCopy(text, btn, okLabel, resetLabel, okClass, failLabel) {
+    function ok() { btn.textContent = okLabel; btn.classList.add(okClass); setTimeout(function () { btn.textContent = resetLabel; btn.classList.remove(okClass); }, 1600); }
+    function fail() { btn.textContent = failLabel; btn.classList.add("fail"); setTimeout(function () { btn.textContent = resetLabel; btn.classList.remove("fail"); }, 2400); }
+    function fallback() {
+      var ta = document.createElement("textarea"); ta.value = text;
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      var did = false; try { did = document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+      if (did) ok(); else fail();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, fallback);
+    else fallback();
+  }
+  document.getElementById("sw-copy").addEventListener("click", function () {
+    honestCopy(CMDS[current].cmd, this, "Copied ✓", "Copy", "ok", "copy failed");
+  });
+
+  /* ---- terminal decision loop ---- */
+  var termBody = document.getElementById("term-body");
+  var stDns = document.getElementById("st-dns"), stProxy = document.getElementById("st-proxy"), stPhase = document.getElementById("st-phase");
+  var SCRIPT = [
+    { cls: "cmd",  text: "route monitor: default → utun3 (vpn up)" },
+    { cls: "dim",  text: "tailscale: utun4 active · vpn: utun3 active" },
+    { cls: "warn", text: "both active → magicdns off, proxy up" },
+    { state: { dns: "off", proxy: "up", phase: "COEXIST" } },
+    { cls: "ok",   text: "✓ tailscale set --accept-dns=false" },
+    { cls: "ok",   text: "✓ socks5 listening on 127.0.0.1:1055" },
+    { cls: "dim",  text: "internet: via vpn ✓ · peers: via proxy ✓" },
+    { pause: 2600 },
+    { cls: "cmd",  text: "route monitor: utun3 removed (vpn down)" },
+    { cls: "warn", text: "tailscale only → magicdns on, proxy down" },
+    { state: { dns: "on", proxy: "down", phase: "MESH" } },
+    { cls: "ok",   text: "✓ tailscale set --accept-dns=true" },
+    { cls: "ok",   text: "✓ proxy stopped" },
+    { cls: "dim",  text: "names: *.ts.net resolving again ✓" },
+    { pause: 2600 },
+    { cls: "cmd",  text: "route monitor: utun4 removed (tailscale down)" },
+    { cls: "dim",  text: "no tailscale → nothing to do" },
+    { state: { dns: "—", proxy: "—", phase: "IDLE" } },
+    { cls: "dim",  text: "watching…" },
+    { pause: 3400, clear: true }
+  ];
+  function setState(s) {
+    stDns.textContent = s.dns; stDns.className = s.dns === "on" ? "fon" : s.dns === "off" ? "foff" : "";
+    stProxy.textContent = s.proxy; stProxy.className = s.proxy === "up" ? "fon" : s.proxy === "down" ? "foff" : "";
+    stPhase.textContent = s.phase;
+  }
+  function makeLine(cls) {
+    var div = document.createElement("div"); div.className = "tl-" + cls; termBody.appendChild(div);
+    while (termBody.children.length > 10) termBody.removeChild(termBody.firstChild);
+    return div;
+  }
+  function runTerminal() {
+    if (reduced) {
+      SCRIPT.forEach(function (s) {
+        if (s.state) setState(s.state);
+        if (s.cls) makeLine(s.cls).textContent = s.text;
+      });
+      return;
+    }
+    var i = 0;
+    function next() {
+      if (i >= SCRIPT.length) { i = 0; termBody.innerHTML = ""; }
+      var step = SCRIPT[i++];
+      if (step.clear) { termBody.innerHTML = ""; setTimeout(next, 400); return; }
+      if (step.pause) { setTimeout(next, step.pause); return; }
+      if (step.state) { setState(step.state); setTimeout(next, 250); return; }
+      var el = makeLine(step.cls); typeInto(el, step.text, 0);
+    }
+    function typeInto(el, text, pos) {
+      if (pos >= text.length) { setTimeout(next, text.indexOf("route monitor") === 0 ? 500 : 330); return; }
+      el.textContent = text.slice(0, pos + 1);
+      setTimeout(function () { typeInto(el, text, pos + 1); }, 11 + Math.random() * 14);
+    }
+    next();
+  }
+
+  /* ---- chart hover ---- */
+  var PTS = [
+    { x: 46, y: 207.6, d: "2026-03-27", v: 1 }, { x: 84.8, y: 201.2, d: "2026-04-09", v: 2 },
+    { x: 493.6, y: 194.8, d: "2026-08-24", v: 3 }, { x: 514.5, y: 188.4, d: "2026-08-31", v: 4 },
+    { x: 520.2, y: 143.8, d: "2026-09-01", v: 11 }, { x: 525.9, y: 67.1, d: "2026-09-02", v: 23 },
+    { x: 531.6, y: 47.9, d: "2026-09-03", v: 26 }, { x: 555.5, y: 41.5, d: "2026-09-11", v: 27 },
+    { x: 588.3, y: 35.1, d: "2026-09-22", v: 28 }, { x: 591.4, y: 28.7, d: "2026-09-23", v: 29 },
+    { x: 594.4, y: 22.4, d: "2026-09-24", v: 30 }, { x: 612.3, y: 16, d: "2026-09-30", v: 31 }
+  ];
+  var svg = document.querySelector(".chart-card svg");
+  var tip = document.getElementById("chart-tip"), xh = document.getElementById("xhair"), hd = document.getElementById("hoverdot");
+  if (svg) {
+    svg.addEventListener("mousemove", function (ev) {
+      var r = svg.getBoundingClientRect();
+      var sx = (ev.clientX - r.left) * (640 / r.width);
+      var best = PTS[0], bd = Math.abs(sx - PTS[0].x);
+      for (var i = 1; i < PTS.length; i++) { var d = Math.abs(sx - PTS[i].x); if (d < bd) { bd = d; best = PTS[i]; } }
+      xh.setAttribute("x1", best.x); xh.setAttribute("x2", best.x); xh.setAttribute("opacity", "1");
+      hd.setAttribute("cx", best.x); hd.setAttribute("cy", best.y); hd.setAttribute("opacity", "1");
+      tip.innerHTML = best.d + " · <b>" + best.v + "</b> release" + (best.v > 1 ? "s" : "");
+      tip.style.left = (best.x / 640 * r.width) + "px";
+      tip.style.top = (best.y / 250 * r.height) + "px";
+      tip.style.opacity = "1";
+    });
+    svg.addEventListener("mouseleave", function () {
+      xh.setAttribute("opacity", "0"); hd.setAttribute("opacity", "0"); tip.style.opacity = "0";
+    });
+  }
+
+  /* ---- open-core pricing cards: copy, don't teleport ---- */
+  document.querySelectorAll(".sc-btn[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      honestCopy(btn.getAttribute("data-copy"), btn, "✓ copied — paste into Terminal", btn.getAttribute("data-label"), "ok", "copy failed — select the command");
+    });
+  });
+
+  /* ---- finale copy chips ---- */
+  document.querySelectorAll(".fin-chip[data-copy]").forEach(function (chip) {
+    var btn = chip.querySelector("button");
+    btn.addEventListener("click", function () {
+      honestCopy(chip.getAttribute("data-copy"), btn, "copied ✓", "copy", "ok", "copy failed");
+    });
+  });
+
+  /* ---- reveals ---- */
+  var els = document.querySelectorAll(".reveal");
+  if (reduced || !("IntersectionObserver" in window)) { els.forEach(function (e) { e.classList.add("in"); }); }
+  else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+    els.forEach(function (el) { io.observe(el); });
+  }
+
+  runTerminal();
+})();
+</script>
 </body>
 </html>
