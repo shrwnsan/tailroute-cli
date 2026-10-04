@@ -1,6 +1,6 @@
 # tailroute
 
-Automatic Tailscale + VPN coexistence for macOS.
+**tailroute-cli** — Automatic Tailscale + VPN coexistence for macOS.
 
 ## Install
 
@@ -10,6 +10,14 @@ sudo tailroute install
 ```
 
 That's it. The daemon runs automatically in the background.
+
+Or let the installer do both steps for you:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shrwnsan/tailroute-cli/main/install.sh | bash
+```
+
+The script still installs through Homebrew's formula, so checksums stay enforced — it just drives `brew` and the daemon install in one go.
 
 ## What it does
 
@@ -47,9 +55,14 @@ tailroute proxy-config ssh     # Generate SSH config helpers
 
 ## Docs
 
-- [Homepage](https://shrwnsan.github.io/tailroute-cli/) — product overview & install guide
+- [Homepage](https://shrwnsan.github.io/tailroute-cli/) — install, security, limitations
+- [tailroute(8) manual](https://shrwnsan.github.io/tailroute-cli/docs/) — the full man page
 - [BUILD.md](BUILD.md) — Build from source
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development guidelines
+
+## A note on the name
+
+"tailroute" is a more popular name than expected — a few unrelated projects answer to it, and none of them is this one. This is the macOS daemon that keeps your VPN and your Tailscale mesh out of each other's way. If `brew install shrwnsan/tap/tailroute-cli` brought you here, you're in the right place — and this project is not affiliated with any of the others.
 
 ## License
 
