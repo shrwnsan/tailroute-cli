@@ -47,6 +47,7 @@ tailroute proxy-config ssh     # Generate SSH config helpers
 
 ## Docs
 
+- [Homepage](https://shrwnsan.github.io/tailroute-cli/) — product overview & install guide
 - [BUILD.md](BUILD.md) — Build from source
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development guidelines
 

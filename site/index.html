@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tailroute — Tailscale + VPN coexistence for macOS</title>
+  <meta name="description" content="A fail-safe macOS daemon that toggles Tailscale's MagicDNS at exactly the right moment — internet through your VPN, peers through your mesh. Zero manual steps, zero telemetry.">
+  <link rel="canonical" href="https://shrwnsan.github.io/tailroute-cli/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="tailroute">
+  <meta property="og:title" content="tailroute — Tailscale + VPN coexistence for macOS">
+  <meta property="og:description" content="Internet through your VPN. Peers through your mesh. One fail-safe daemon toggles MagicDNS at exactly the right moment.">
+  <meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/">
+  <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ============ NAV ============ -->
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="tailroute home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="14" fill="var(--surface)"/>
+          <path d="M15 45 C15 31 26 31 32 31 C39 31 49 31 49 17" stroke="var(--mint)" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <circle cx="15" cy="45" r="5.5" fill="var(--mint)"/>
+          <circle cx="49" cy="17" r="5.5" fill="var(--amber)"/>
+          <circle cx="32" cy="31" r="3.5" fill="var(--text)"/>
+        </svg>
+        <span class="brand-name">tailroute</span>
+        <span class="brand-version">v0.8.17</span>
+      </a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#tunnels">Tunnels</a>
+        <a href="#app">Menu bar app</a>
+        <a href="#limits">Honest limits</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli" class="nav-github" rel="noopener" target="_blank">GitHub&nbsp;↗</a>
+        <a href="#support" class="nav-cta">Sponsor</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="log-kicker reveal"><span class="k-brace">[</span>daemon<span class="k-brace">]</span> route monitor attached · watching…</p>
+          <h1 class="reveal d1">Your VPN and your tailnet, <em>finally on speaking terms.</em></h1>
+          <p class="hero-sub reveal d2">tailroute is a small, fail&#8209;safe macOS daemon that watches your routing
+            table and toggles Tailscale&rsquo;s MagicDNS at exactly the right moment — so your VPN keeps
+            your internet and your mesh keeps your peers. No manual steps. No daily usage.</p>
+
+          <div class="hero-installs reveal d3">
+            <div class="install-chip" data-copy="brew install --cask shrwnsan/tap/tailroute">
+              <div class="chip-top">
+                <span class="install-label">Menu bar app <span class="tag-early">early access</span></span>
+                <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
+              </div>
+              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
+            </div>
+            <div class="install-chip" data-copy="brew install shrwnsan/tap/tailroute-cli">
+              <div class="chip-top">
+                <span class="install-label">CLI daemon <span class="tag-oss">apache-2.0</span></span>
+                <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
+              </div>
+              <span class="install-cmd"><span class="prompt">$</span> brew install shrwnsan/tap/tailroute-cli</span>
+            </div>
+          </div>
+
+          <ul class="hero-trust reveal d4" aria-label="Trust facts">
+            <li>no telemetry</li>
+            <li>no account</li>
+            <li>no network interception</li>
+            <li>macOS 12+</li>
+            <li>any utun-route VPN</li>
+          </ul>
+        </div>
+
+        <div class="hero-terminal reveal d2">
+          <div class="terminal">
+            <div class="term-titlebar">
+              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+              <span class="term-title">tailroute daemon — live decision loop</span>
+            </div>
+            <div class="term-body" id="term-body" aria-live="off"></div>
+            <div class="term-statusline">
+              <span class="stat-chip">MAGICDNS <b id="st-dns" class="st-off">off</b></span>
+              <span class="stat-chip">PROXY <b id="st-proxy" class="st-off">down</b></span>
+              <span class="stat-chip">STATE <b id="st-phase">WATCHING</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DECISION MATRIX ============ -->
+    <section class="section" id="how">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>event<span class="k-brace">]</span> route change detected</p>
+      <h2 class="reveal d1">One daemon. <em>Three states.</em> Zero decisions left for you.</h2>
+      <p class="section-sub reveal d2">Every routing-table change is classified into one of three states — and the response is always the same, deterministic move.</p>
+
+      <div class="matrix">
+        <article class="matrix-card reveal d1">
+          <div class="matrix-head"><span class="led led-amber"></span><span class="matrix-state">COEXIST</span></div>
+          <h3>Tailscale + VPN active</h3>
+          <p>MagicDNS <b>off</b> · SOCKS5 proxy <b>up</b>. Internet flows through the VPN; peers stay reachable
+             through the mesh proxy on <code>127.0.0.1:1055</code>.</p>
+        </article>
+        <article class="matrix-card reveal d2">
+          <div class="matrix-head"><span class="led led-mint"></span><span class="matrix-state">MESH</span></div>
+          <h3>Tailscale only</h3>
+          <p>MagicDNS <b>on</b> · proxy <b>stopped</b>. Full MagicDNS name resolution and direct mesh access,
+             exactly as Tailscale intended.</p>
+        </article>
+        <article class="matrix-card reveal d3">
+          <div class="matrix-head"><span class="led"></span><span class="matrix-state">IDLE</span></div>
+          <h3>No Tailscale</h3>
+          <p>Nothing happens. The daemon stays quiet, keeps watching, and never touches settings it
+             doesn&rsquo;t own.</p>
+        </article>
+      </div>
+
+      <p class="failsafe-note reveal"><span class="warn-glyph">⚠</span> Ambiguous state — say, two VPNs at once? The daemon logs a warning and does <b>nothing</b>. Fail-safe first, by design.</p>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section class="section section-tinted">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>info<span class="k-brace">]</span> capabilities</p>
+      <h2 class="reveal d1">More than a DNS toggle</h2>
+      <div class="features">
+        <article class="feature reveal d1">
+          <p class="feature-kicker">watch</p>
+          <h3>Live route watching</h3>
+          <p>Event-driven via <code>route monitor</code>, with a 60-second safety-net re-assert that self-heals
+             out-of-band changes. Toggles are idempotent — no flapping, no redundant writes.</p>
+        </article>
+        <article class="feature reveal d2">
+          <p class="feature-kicker">mesh</p>
+          <h3>SOCKS5 mesh proxy</h3>
+          <p>When a VPN blocks Tailscale&rsquo;s CGNAT range, a tsnet-based proxy on <code>127.0.0.1:1055</code>
+             routes traffic through the mesh anyway. Auto-starts and auto-stops with the VPN.</p>
+        </article>
+        <article class="feature reveal d3">
+          <p class="feature-kicker">browse</p>
+          <h3>Browser tunnels</h3>
+          <p>Open a peer&rsquo;s Tailscale Serve dashboard in Safari, Chrome, or Firefox — with a valid,
+             real <code>.ts.net</code> certificate. No extensions, no cert warnings.</p>
+        </article>
+        <article class="feature reveal d1">
+          <p class="feature-kicker">config</p>
+          <h3>SSH &amp; shell helpers</h3>
+          <p><code>tailroute proxy-config ssh</code> and <code>… shell</code> generate ready-to-paste config —
+             <code>sshproxy mypeer</code> and <code>curlproxy http://…</code> just work.</p>
+        </article>
+        <article class="feature reveal d2">
+          <p class="feature-kicker">integrity</p>
+          <h3>Self-verifying install</h3>
+          <p>A SHA-256 manifest written at install time is verified before any library loads. Tampered
+             files? The daemon refuses to start — and tells you what changed.</p>
+        </article>
+        <article class="feature reveal d3">
+          <p class="feature-kicker">privacy</p>
+          <h3>Private by construction</h3>
+          <p>No telemetry, no external network calls, no account, no traffic inspection or logging.
+             It&rsquo;s your Mac; tailroute just watches the routing table.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ TUNNELS ============ -->
+    <section class="section" id="tunnels">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>tunnel<span class="k-brace">]</span> add mypeer --port 8443</p>
+      <h2 class="reveal d1">Your peer&rsquo;s dashboard, in any browser, <em>with valid TLS.</em></h2>
+      <p class="section-sub reveal d2">One command registers a launchd-managed tunnel, maps a managed <code>/etc/hosts</code> entry,
+         and hands you a bookmarkable URL. It keeps working whether the VPN is up or not — the path
+         adapts automatically (SOCKS5 when the VPN is active, direct when it isn&rsquo;t).</p>
+
+      <div class="tunnel-grid">
+        <div class="tunnel-copy reveal d1">
+          <div class="terminal term-static">
+<pre><code><span class="t-prompt">$</span> tailroute tunnel add mypeer
+<span class="t-ok">✓</span> ssh auth ok · peer reachable · port free
+<span class="t-ok">✓</span> serve backend accepting · TLS cert valid
+<span class="t-ok">✓</span> /etc/hosts entry + launchd job registered
+<span class="t-dim">→</span> <span class="t-url">https://mypeer.yourtailnet.ts.net:8443</span>
+
+<span class="t-prompt">$</span> tailroute tunnel check mypeer
+<span class="t-ok">✓</span> hosts → listener → TLS → HTTP 200
+<span class="t-dim">  transport: tunnel+tls ok · backend: serve ok</span></code></pre>
+          </div>
+          <p class="verb-aphorism">Three read-only verbs, three different questions:
+            <b>status</b> = the inventory · <b>drift</b> = the peer&rsquo;s claim ·
+            <b>check</b> = the browser&rsquo;s truth.</p>
+        </div>
+        <ul class="tunnel-points reveal d2">
+          <li><b>Hardened contract.</b> Valid TLS is mandatory at <code>add</code> — a mismatched cert rolls the whole thing back. Every step is journaled before it runs, so a crash can&rsquo;t leave half a tunnel behind.</li>
+          <li><b>Transactional updates.</b> Adding a second <code>--remote-port</code> forward updates the running job in place; on any failure the previous healthy job is restored.</li>
+          <li><b>Per-forward health.</b> <code>tunnel status</code> reports listener, backend, and TLS state for every forward — and a 502 behind a valid certificate is reported as what it is: the peer&rsquo;s service is down, not the tunnel.</li>
+          <li><b>Machine-wide safety.</b> The <code>/etc/hosts</code> edit is serialized with a hosts lock, so two users&rsquo; tunnel operations can never interleave.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ QUICKSTART ============ -->
+    <section class="section section-tinted" id="quickstart">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>install<span class="k-brace">]</span> two commands, then never think about it again</p>
+      <h2 class="reveal d1">Up and running in two minutes</h2>
+      <ol class="steps">
+        <li class="reveal d1">
+          <span class="step-num">01</span>
+          <div>
+            <h3>Install</h3>
+            <p>Menu bar app (includes the CLI):</p>
+            <div class="install-chip install-chip-sm" data-copy="brew install --cask shrwnsan/tap/tailroute">
+              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
+              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
+            </div>
+            <p>Or just the CLI daemon:</p>
+            <div class="install-chip install-chip-sm" data-copy="brew install shrwnsan/tap/tailroute-cli">
+              <span class="install-cmd"><span class="prompt">$</span> brew install shrwnsan/tap/tailroute-cli</span>
+              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
+            </div>
+          </div>
+        </li>
+        <li class="reveal d2">
+          <span class="step-num">02</span>
+          <div>
+            <h3>Start the daemon</h3>
+            <p>One command installs the root launchd service and stages the integrity manifest:</p>
+            <div class="install-chip install-chip-sm" data-copy="sudo tailroute install">
+              <span class="install-cmd"><span class="prompt">$</span> sudo tailroute install</span>
+              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
+            </div>
+            <p>Nervous? Preview every decision first with <code>tailroute --dry-run</code>.</p>
+          </div>
+        </li>
+        <li class="reveal d3">
+          <span class="step-num">03</span>
+          <div>
+            <h3>Forget about it</h3>
+            <p>Connect your VPN. Connect Tailscale. Everything works — internet through the VPN, peers
+               through the mesh. Verify whenever you like:</p>
+            <div class="install-chip install-chip-sm" data-copy="tailroute status">
+              <span class="install-cmd"><span class="prompt">$</span> tailroute status</span>
+              <button class="copy-btn" type="button" aria-label="Copy command">copy</button>
+            </div>
+            <p><b>There is no daily usage.</b> That&rsquo;s the whole point.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ============ HONEST LIMITS ============ -->
+    <section class="section section-amber" id="limits">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>warn<span class="k-brace">]</span> ambiguity encountered — reporting honestly</p>
+      <h2 class="reveal d1">What tailroute <em>can&rsquo;t</em> fix</h2>
+      <p class="section-sub reveal d2">We&rsquo;d rather tell you now than have you find out later. Modern macOS VPN apps use Network
+         Extensions that intercept <b>all</b> outbound traffic — including packets destined for Tailscale&rsquo;s
+         CGNAT range (<code>100.64/10</code>). tailroute fixes the DNS conflict; it cannot bypass packet interception.</p>
+
+      <div class="amber-grid">
+        <div class="amber-card reveal d1">
+          <h3>Tested VPNs that block mesh traffic</h3>
+          <table class="vpn-table">
+            <thead><tr><th>VPN</th><th>Protocols tested</th><th>CGNAT blocked</th></tr></thead>
+            <tbody>
+              <tr><td>Mullvad</td><td>WireGuard</td><td class="td-blocked">yes</td></tr>
+              <tr><td>NordVPN</td><td>NordLynx · OpenVPN · NordWhisper</td><td class="td-blocked">yes</td></tr>
+            </tbody>
+          </table>
+          <p class="amber-foot">Some older VPN implementations let mesh traffic through. <a href="https://github.com/shrwnsan/tailroute-cli/issues" rel="noopener" target="_blank">Report your VPN&rsquo;s behavior ↗</a></p>
+        </div>
+        <div class="amber-card reveal d2">
+          <h3>Known trade-offs</h3>
+          <ul>
+            <li>While the VPN is active, MagicDNS names don&rsquo;t resolve — use <code>100.x</code> IPs, or add a browser tunnel.</li>
+            <li>Firefox with DNS-over-HTTPS bypasses <code>/etc/hosts</code> — Safari and Chrome use the system resolver.</li>
+            <li>Tunnel URLs carry a non-standard port (<code>:8443</code>-style) — port 443 would need root.</li>
+            <li>Won&rsquo;t-fix by research: MagicDNS split-DNS, multi-VPN support, IPv6. The fail-safe is safer.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ APP ============ -->
+    <section class="section" id="app">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>app<span class="k-brace">]</span> menu bar: ◆ tailroute</p>
+      <h2 class="reveal d1">Prefer a window to a terminal? <em>There&rsquo;s an app for that.</em></h2>
+      <div class="app-grid">
+        <div class="app-copy reveal d1">
+          <p>The tailroute menu bar app wraps the same engine in a native macOS UI: first-run onboarding,
+             live state at a glance, proxy and tunnel controls, a diagnostic panel, and update alerts
+             that can download the DMG for you.</p>
+          <ul class="app-points">
+            <li>Menu bar icon with live connection state</li>
+            <li>Start/stop the SOCKS5 proxy without a terminal</li>
+            <li>Per-tunnel health rows and copy-URL actions</li>
+            <li>Brew-aware update checks with DMG download</li>
+          </ul>
+          <p class="app-pricing"><b>Free during early access.</b> A paid v1.0 is planned — one-time license,
+             no subscription. Everything in 0.x, including the app, stays free for early adopters.</p>
+          <div class="hero-installs app-installs">
+            <div class="install-chip install-chip-sm" data-copy="brew install --cask shrwnsan/tap/tailroute">
+              <span class="install-cmd"><span class="prompt">$</span> brew install --cask shrwnsan/tap/tailroute</span>
+              <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
+            </div>
+          </div>
+          <p class="app-dmg">Prefer a DMG? <a href="https://github.com/shrwnsan/tailroute-cli/releases" rel="noopener" target="_blank">Grab it from releases ↗</a></p>
+        </div>
+        <div class="app-mock reveal d2" aria-hidden="true">
+          <div class="menubar">
+            <span class="mb-item">⌘ Finder</span><span class="mb-item mb-spacer">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span>
+            <span class="mb-item mb-active">◆ tailroute</span>
+            <span class="mb-item">◈ 09:41</span>
+          </div>
+          <div class="dropdown">
+            <p class="dd-state"><span class="led led-amber"></span> Coexisting — VPN + Tailscale</p>
+            <p class="dd-row">MagicDNS <span class="dd-val">disabled (auto)</span></p>
+            <p class="dd-row">Proxy <span class="dd-val">127.0.0.1:1055 · running</span></p>
+            <p class="dd-row">Tunnels <span class="dd-val">2 healthy</span></p>
+            <div class="dd-sep"></div>
+            <p class="dd-row dd-action">Check for Updates…</p>
+            <p class="dd-row dd-action">Preferences…</p>
+            <p class="dd-row dd-action dd-quit">Quit tailroute</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECURITY ============ -->
+    <section class="section section-tinted" id="security">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>integrity<span class="k-brace">]</span> verifying installed.checksums… ok</p>
+      <h2 class="reveal d1">Runs as root. <em>Acts like it.</em></h2>
+      <p class="section-sub reveal d2">A root daemon earns scrutiny. tailroute is hardened accordingly — and the
+         threat model, audit results, and hardening details are all public.</p>
+      <div class="security-grid">
+        <div class="sec-card reveal d1"><h3>Integrity gate</h3><p>An install-time SHA-256 manifest is verified before any library is sourced. Mismatch means refuse-to-start, not degrade-and-continue.</p></div>
+        <div class="sec-card reveal d2"><h3>Strict validation</h3><p>Interface names must match <code>utun\d+</code>; IPs are CIDR-validated against <code>100.64/10</code>; every system call uses absolute paths.</p></div>
+        <div class="sec-card reveal d3"><h3>Fail-safe defaults</h3><p>When state is ambiguous the daemon does nothing. No guesswork in a tool that flips system DNS settings.</p></div>
+        <div class="sec-card reveal d1"><h3>Minimal surface</h3><p>No traffic interception, no logging of network content, no external calls, no signing up for anything. Ever.</p></div>
+      </div>
+      <p class="section-link reveal"><a href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">Browse the source — every line is the audit trail ↗</a></p>
+    </section>
+
+    <!-- ============ SUPPORT ============ -->
+    <section class="section section-support" id="support">
+      <p class="log-kicker reveal"><span class="k-brace">[</span>daemon<span class="k-brace">]</span> uptime: healthy · exit 0 pending</p>
+      <h2 class="reveal d1">Built in the open. <em>Kept alive by people like you.</em></h2>
+      <p class="section-sub reveal d2">The CLI is free and open source under Apache-2.0 and will stay that way. If tailroute
+         saved your sanity mid-deadline, starring the repo or sponsoring development both keep the lights on.</p>
+      <div class="support-actions reveal d2">
+        <a class="btn btn-solid" href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          Star on GitHub
+        </a>
+        <!--
+          TODO(shrwnsan): enable a sponsorship channel and uncomment ONE of these.
+          GitHub Sponsors is not enabled yet (github.com/sponsors/shrwnsan currently
+          redirects to the profile). Ko-fi / Buy Me a Coffee snippets below are ready
+          to paste your handle into.
+
+        <a class="btn btn-outline" href="https://github.com/sponsors/shrwnsan" rel="noopener" target="_blank">♥ GitHub Sponsors</a>
+        <a class="btn btn-outline" href="https://www.ko-fi.com/YOUR_HANDLE" rel="noopener" target="_blank">Ko-fi</a>
+        <a class="btn btn-outline" href="https://www.buymeacoffee.com/YOUR_HANDLE" rel="noopener" target="_blank">Buy Me a Coffee</a>
+        -->
+      </div>
+      <p class="support-note reveal d3">Roadmap: notarized v1.0 of the menu bar app · Paddle checkout · more tunnel hardening.
+         Feature requests live in <a href="https://github.com/shrwnsan/tailroute-cli/issues" rel="noopener" target="_blank">GitHub issues ↗</a>.</p>
+    </section>
+
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <p class="brand-name">tailroute</p>
+        <p>Tailscale + VPN coexistence for macOS.<br>Internet through the VPN. Peers through the mesh.</p>
+      </div>
+      <div class="footer-col">
+        <p class="footer-head">Product</p>
+        <a href="#quickstart">Install</a>
+        <a href="#tunnels">Browser tunnels</a>
+        <a href="#app">Menu bar app</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/releases" rel="noopener" target="_blank">Releases</a>
+      </div>
+      <div class="footer-col">
+        <p class="footer-head">Project</p>
+        <a href="https://github.com/shrwnsan/tailroute-cli" rel="noopener" target="_blank">GitHub</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" rel="noopener" target="_blank">Changelog</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md" rel="noopener" target="_blank">Architecture</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/issues" rel="noopener" target="_blank">Issues</a>
+      </div>
+      <div class="footer-col">
+        <p class="footer-head">Trust</p>
+        <a href="#limits">Honest limits</a>
+        <a href="#security">Security</a>
+        <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE" rel="noopener" target="_blank">License</a>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <p><span class="log-line">[shutdown] state clean · magicdns restored · exit 0</span></p>
+      <p>CLI: Apache-2.0 · macOS app: proprietary — © 2026 shrwnsan. Not affiliated with or endorsed by Tailscale Inc. Tailscale is a trademark of Tailscale Inc.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
