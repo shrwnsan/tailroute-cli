@@ -9,10 +9,14 @@ set -euo pipefail
 # Source logging and state libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Presentation helpers (ui_warn below) — guarded against re-sourcing
+# shellcheck source=lib-ui.sh
+source "$SCRIPT_DIR/lib-ui.sh"
+
 # Validate SCRIPT_DIR is in expected location (security hardening)
 # Libs live in a bin/ dir (source checkout) or a lib/ dir (Homebrew)
 if [[ ! "$SCRIPT_DIR" =~ ^(/usr/local/(bin|lib)|/opt/.*/(bin|lib)|.*tailroute/(bin|lib))$ ]]; then
-    echo "WARNING: Script loaded from unexpected location: $SCRIPT_DIR" >&2
+    ui_warn "Script loaded from unexpected location: $SCRIPT_DIR"
 fi
 
 # shellcheck source=lib-log.sh
