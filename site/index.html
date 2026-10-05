@@ -95,6 +95,7 @@
   ul { padding-left: 22px; }
   a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
   a:hover { text-decoration-color: var(--ink); }
+  p, li, td { overflow-wrap: anywhere; }
   code { background: var(--green-bg); padding: 1px 5px; border-radius: 3px; }
   .badge {
     font-size: 10.5px;
@@ -125,6 +126,14 @@
   table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
   th, td { border: 1px solid var(--rule); padding: 7px 10px; text-align: left; vertical-align: top; }
   th { background: var(--green-bg); font-weight: 700; }
+  /* mobile: state table reflows into stacked cards */
+  @media (max-width: 607px) {
+    table.states thead { display: none; }
+    table.states tr { display: block; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px 8px; margin-bottom: 10px; }
+    table.states td { display: flex; justify-content: space-between; gap: 14px; border: none; padding: 3px 0; }
+    table.states td::before { content: attr(data-l); color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    table.states td[data-l="Condition"] { font-weight: 700; border-bottom: 1px solid var(--rule); margin-bottom: 4px; padding-bottom: 6px; }
+  }
   .ok { color: var(--green); font-weight: 700; }
   .no { color: var(--red); font-weight: 700; }
   .note { color: var(--dim); font-size: 13px; }
@@ -231,11 +240,13 @@
      (e.g. two VPNs active), it logs a warning and changes nothing.</p>
 
   <h2>States</h2>
-  <table>
-    <tr><th>Condition</th><th>MagicDNS</th><th>SOCKS5 proxy</th><th>Else</th></tr>
-    <tr><td>Tailscale + VPN active</td><td class="no">off</td><td class="ok">up (127.0.0.1:1055)</td><td>—</td></tr>
-    <tr><td>Tailscale only</td><td class="ok">on</td><td class="no">stopped</td><td>—</td></tr>
-    <tr><td>No Tailscale</td><td>—</td><td>—</td><td>keeps watching</td></tr>
+  <table class="states">
+    <thead><tr><th>Condition</th><th>MagicDNS</th><th>SOCKS5 proxy</th><th>Else</th></tr></thead>
+    <tbody>
+      <tr><td data-l="Condition">Tailscale + VPN active</td><td data-l="MagicDNS" class="no">off</td><td data-l="Proxy" class="ok">up (127.0.0.1:1055)</td><td data-l="Else">—</td></tr>
+      <tr><td data-l="Condition">Tailscale only</td><td data-l="MagicDNS" class="ok">on</td><td data-l="Proxy" class="no">stopped</td><td data-l="Else">—</td></tr>
+      <tr><td data-l="Condition">No Tailscale</td><td data-l="MagicDNS">—</td><td data-l="Proxy">—</td><td data-l="Else">keeps watching</td></tr>
+    </tbody>
   </table>
 
   <h2>Browser tunnels</h2>
