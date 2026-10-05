@@ -29,6 +29,13 @@ readonly _TUNNEL_SOURCED=1
 
 set -euo pipefail
 
+# Presentation helpers (ui_warn etc.). lib-tunnel.sh is sourced standalone by
+# tests and sibling libs, so it carries its own lib-ui dependency (lib-ui.sh
+# guards against re-sourcing).
+_TUNNEL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-ui.sh disable=SC1091
+source "$_TUNNEL_LIB_DIR/lib-ui.sh"
+
 # -----------------------------------------------------------------------------
 # Paths and commands — overridable for tests
 # -----------------------------------------------------------------------------
@@ -1250,7 +1257,7 @@ EOF
         return 2
     fi
     if ! grep -q "tailroute-proxy.sh" "$TUNNEL_SSH_CONFIG" 2>/dev/null; then
-        echo "WARN: ssh config does not use the adaptive wrapper — run 'tailroute proxy-config ssh'" >&2
+        ui_warn "ssh config does not use the adaptive wrapper — run 'tailroute proxy-config ssh'"
     fi
 
     local pf_err changed_key=0
@@ -1288,7 +1295,7 @@ EOF
     # here but kills the tunnel job later - warn with the fix up front.
     if [ -n "${SSH_AUTH_SOCK:-}" ]; then
         if ! env -u SSH_AUTH_SOCK "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
-            echo "WARN: auth for proxy-$ssh_alias depends on the ssh-agent (SSH_AUTH_SOCK)," >&2
+            ui_warn "auth for proxy-$ssh_alias depends on the ssh-agent (SSH_AUTH_SOCK),"
             echo "      but the launchd tunnel job runs without it and will fail to connect." >&2
             echo "      Fix: run 'ssh-add --apple-use-keychain' and add 'UseKeychain yes'" >&2
             echo "           to the Host proxy-$ssh_alias block in ~/.ssh/config," >&2
@@ -1297,7 +1304,7 @@ EOF
     fi
 
     if ! tunnel_port_in_use 1055; then
-        echo "WARN: SOCKS5 proxy not running — tunnel will use the direct branch (fine when VPN is off or router-side)" >&2
+        ui_warn "SOCKS5 proxy not running — tunnel will use the direct branch (fine when VPN is off or router-side)"
     fi
     return 0
 }
@@ -1350,11 +1357,11 @@ _tun_tls_verify() { # <hostname> <port>
         2>/dev/null </dev/null)" || true
 
     if ! printf '%s' "$cert_out" | grep -q '^-----BEGIN CERTIFICATE-----$'; then
-        echo "WARN: TLS handshake failed on 127.0.0.1:$port for $hostname" >&2
+        ui_warn "TLS handshake failed on 127.0.0.1:$port for $hostname"
         return 1
     fi
     if ! printf '%s' "$cert_out" | grep -q 'Verify return code: 0 (ok)'; then
-        echo "WARN: TLS verification failed on 127.0.0.1:$port for $hostname (untrusted or expired certificate)" >&2
+        ui_warn "TLS verification failed on 127.0.0.1:$port for $hostname (untrusted or expired certificate)"
         return 1
     fi
 
@@ -1374,7 +1381,7 @@ _tun_tls_verify() { # <hostname> <port>
     fi
 
     if [ -z "$cert_hostname" ]; then
-        echo "WARN: no hostname found in TLS certificate on 127.0.0.1:$port" >&2
+        ui_warn "no hostname found in TLS certificate on 127.0.0.1:$port"
         return 1
     fi
 
@@ -1391,13 +1398,13 @@ _tun_tls_verify() { # <hostname> <port>
             esac ;;
     esac
 
-    echo "WARN: TLS certificate hostname mismatch: expected '$hostname', got '$cert_hostname'" >&2
+    ui_warn "TLS certificate hostname mismatch: expected '$hostname', got '$cert_hostname'"
     return 1
 }
 
 tunnel_tls_verify_or_skip() { # <hostname> <port> <allow_unverified>
     if [ "${3:-no}" = "yes" ]; then
-        echo "WARN: --allow-unverified-tls: skipping TLS identity verification" >&2
+        ui_warn "--allow-unverified-tls: skipping TLS identity verification"
         return 0
     fi
     _tun_tls_verify "$1" "$2"
@@ -2280,7 +2287,7 @@ print(json.dumps(e, sort_keys=True))
     local lp
     for lp in $added_lports; do
         tunnel_wait_for_port "$lp" || \
-            echo "WARN: job loaded but 127.0.0.1:$lp is not listening yet — check: tail -f $log_path" >&2
+            ui_warn "job loaded but 127.0.0.1:$lp is not listening yet — check: tail -f $log_path"
         if ! tunnel_tls_verify_or_skip "$hostname" "$lp" "$allow_tls"; then
             echo "ROLLED BACK: TLS identity verification failed on 127.0.0.1:$lp — previous job restored" >&2
             tunnel_job_bootout "$label" >/dev/null 2>&1 || true
@@ -2521,8 +2528,8 @@ tunnel_do_add() {
     tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip" || backend_rc=$?
     case "$backend_rc" in
         0) ;;
-        2) echo "WARN: could not check remote port $rport on $peer — ssh to the peer failed, so the backend state is unknown" >&2 ;;
-        *) echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2 ;;
+        2) ui_warn "could not check remote port $rport on $peer — ssh to the peer failed, so the backend state is unknown" ;;
+        *) ui_warn "remote port $rport not accepting on $peer — Serve may not be configured there" ;;
     esac
     echo "NOTE: the /etc/hosts mapping is system-wide — it affects every user of this Mac." >&2
 
@@ -2610,7 +2617,7 @@ tunnel_do_add() {
     tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
 
     if ! tunnel_wait_for_port "$lport"; then
-        echo "WARN: job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path" >&2
+        ui_warn "job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path"
     fi
 
     # Step 5: TLS identity verification (T-430)
@@ -2631,10 +2638,10 @@ tunnel_do_add() {
     tunnel_lock_release
     echo ""
     echo "Tunnel added: $peer"
-    echo "  URL:      https://$full_hostname:$lport"
-    [ "$rport" != "443" ] && echo "  (forwards to remote port $rport)"
-    echo "  Registry: $TUNNEL_REGISTRY"
-    echo "  Log:      $log_path"
+    echo "  URL:      $(ui_url "https://$full_hostname:$lport")"
+    [ "$rport" != "443" ] && ui_dim "  (forwards to remote port $rport)"
+    ui_dim "  Registry: $TUNNEL_REGISTRY"
+    ui_dim "  Log:      $log_path"
     return 0
 }
 
@@ -2684,7 +2691,7 @@ tunnel_do_remove() {
     # must not bootstrap into a disabled label. A failed clear is only a
     # warning: add enables before bootstrap too.
     if ! tunnel_job_enable "$label"; then
-        echo "WARN: could not clear the disable flag for $label (${TUNNEL_LAUNCHCTL_ERR:-launchctl failed})" >&2
+        ui_warn "could not clear the disable flag for $label (${TUNNEL_LAUNCHCTL_ERR:-launchctl failed})"
     fi
     _tun_journal_write remove "$peer" "$remove_steps" '["bootout"]' || true
 
@@ -2694,7 +2701,7 @@ tunnel_do_remove() {
 
     # Step 3: hosts (under machine-wide lock)
     tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" || {
-        echo "WARN: hosts lock busy — skipping hosts removal; remove '$hostname' manually from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        ui_warn "hosts lock busy — skipping hosts removal; remove '$hostname' manually from $TUNNEL_HOSTS_FILE (sudo)"
         failed="hosts"
     }
     if [ -z "$failed" ]; then
@@ -3019,7 +3026,7 @@ _t810_stop_one() { # <peer> <store>
     fi
 
     if [ "$missing" = "yes" ]; then
-        echo "WARN: plist missing at $plist — repair: tailroute tunnel repair $peer" >&2
+        ui_warn "plist missing at $plist — repair: tailroute tunnel repair $peer"
         return 1
     fi
 
@@ -3106,7 +3113,7 @@ _t811_start_one() { # <peer>
     label="$(tunnel_label_for_peer "$peer")"
     plist="$(tunnel_plist_path_for_peer "$peer")"
     if [ ! -f "$plist" ]; then
-        echo "WARN: plist missing at $plist — repair: tailroute tunnel repair $peer" >&2
+        ui_warn "plist missing at $plist — repair: tailroute tunnel repair $peer"
         return 1
     fi
 
@@ -3138,7 +3145,7 @@ _t811_start_one() { # <peer>
         # shellcheck disable=SC2086  # $lports intentionally word-splits
         for lport in $lports; do
             if ! tunnel_wait_for_port "$lport"; then
-                echo "WARN: job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path, or: tailroute tunnel check $peer" >&2
+                ui_warn "job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path, or: tailroute tunnel check $peer"
             fi
         done
     fi
@@ -3529,7 +3536,7 @@ _tun_entry_is_unverified() { # <entry-json>
 }
 
 _tun_warn_unverified() { # <hostname>
-    echo "WARN: $1 has no certificate identity check (added with --allow-unverified-tls); re-add without the flag to verify it" >&2
+    ui_warn "$1 has no certificate identity check (added with --allow-unverified-tls); re-add without the flag to verify it"
 }
 
 # The registry rows stay on stdout untouched (machine-readable); warnings go to stderr.
@@ -3600,7 +3607,7 @@ tunnel_do_open() { # <peer>
         echo "ERROR: could not open $url in a browser" >&2
         return 1
     fi
-    echo "Opened $url"
+    echo "Opened $(ui_url "$url")"
     return 0
 }
 
