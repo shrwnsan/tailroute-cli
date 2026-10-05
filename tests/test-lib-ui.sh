@@ -130,6 +130,45 @@ test_ui_warn_multi_word_message() {
 }
 
 # =============================================================================
+# ui_fail — stream and marker
+# =============================================================================
+
+test_ui_fail_writes_to_stderr() {
+    local out err
+    out="$(NO_COLOR=1 ui_fail "TLS certificate mismatch" 2>/dev/null)"
+    err="$(NO_COLOR=1 ui_fail "TLS certificate mismatch" 2>&1 >/dev/null)"
+    assert_eq "" "$out"
+    assert_eq "✗ TLS certificate mismatch" "$err"
+}
+
+test_ui_fail_plain_has_no_escape_byte() {
+    local err
+    err="$(NO_COLOR=1 ui_fail "TLS certificate mismatch" 2>&1 >/dev/null)"
+    assert_eq "✗ TLS certificate mismatch" "$err"
+    if [[ "$err" == *"$ESC"* ]]; then
+        _assert_fail "NO_COLOR stderr must not contain an escape byte: $err"
+    fi
+}
+
+test_ui_fail_colored_mark_only_on_stderr() {
+    local err
+    err="$(CLICOLOR_FORCE=1 ui_fail "body stays plain" 2>&1 >/dev/null)"
+    assert_contains "$(printf '\033[31m✗\033[0m body stays plain')" "$err"
+}
+
+test_ui_fail_multi_word_message() {
+    local err
+    err="$(NO_COLOR=1 ui_fail "a" "b" "c" 2>&1 >/dev/null)"
+    assert_eq "✗ a b c" "$err"
+}
+
+test_ui_fail_message_not_format_interpreted() {
+    local err
+    err="$(NO_COLOR=1 ui_fail "100% of %s attempts \n" 2>&1 >/dev/null)"
+    assert_eq "✗ 100% of %s attempts \\n" "$err"
+}
+
+# =============================================================================
 # ui_dim — hint lines
 # =============================================================================
 
@@ -183,6 +222,7 @@ test_ui_helpers_never_fail_under_strict_mode() {
         set -euo pipefail
         NO_COLOR=1 ui_ok "strict" >/dev/null
         NO_COLOR=1 ui_warn "strict" 2>/dev/null
+        NO_COLOR=1 ui_fail "strict" 2>/dev/null
         NO_COLOR=1 ui_dim "strict" >/dev/null
         NO_COLOR=1 ui_url "https://x.test" >/dev/null
     ) || rc=$?

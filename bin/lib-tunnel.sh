@@ -1129,7 +1129,7 @@ EOF
     local pf_err
     pf_err="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true 2>&1 >/dev/null)"
     if ! "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
-        echo "ERROR: ssh proxy-$ssh_alias failed (auth or host-key not trusted)." >&2
+        ui_fail "ssh auth failed for proxy-$ssh_alias"
         [ -n "$pf_err" ] && echo "  ssh said: $pf_err" >&2
         case "$pf_err" in
             *"tailnet policy"*)
@@ -1714,7 +1714,7 @@ else:
 print("  Registry forwards:")
 if registered:
     for local, remote in forwards:
-        print("    127.0.0.1:%s -> remote %s   https://%s:%s" % (local, remote, hostname, local))
+        print("    127.0.0.1:%s → remote %s   https://%s:%s" % (local, remote, hostname, local))
 else:
     print("    (none — this peer is not registered)")
 
@@ -1949,62 +1949,111 @@ tunnel_do_check() {
 
     echo "$peer: probing the browser path for $hostname (read-only — nothing is applied, the peer is not contacted)"
     local failed="" pair lport rport http_code
+    # Emits one forward's section: the chain verdict on top, then the detail
+    # rows captured while probing. chain/detail/fwd_failed are the loop's
+    # locals — dynamic scope reaches them here.
+    _check_emit_section() {
+        echo ""
+        if [ "$fwd_failed" -eq 0 ]; then ui_ok "$chain"; else ui_fail "$chain"; fi
+        printf '%s' "$detail"
+    }
     # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pairs
     for pair in $pairs; do
         lport="${pair%%:*}"; rport="${pair##*:}"
-        echo ""
-        echo "  127.0.0.1:$lport -> remote $rport   https://$hostname:$lport"
+        # The chain line is the glanceable verdict per forward, so each
+        # section is assembled while probing and emitted with the chain on
+        # top: layers that ran are named in order, "—" marks each layer a
+        # breakage skipped, and the HTTP code appears once that probe ran.
+        # Rows are built with `printf -v` (bash 3.2+) — `$(printf …)` would
+        # strip each row's trailing newline and glue the section into one line.
+        local detail="" chain="" fwd_failed=0 row=""
+        printf -v row '  127.0.0.1:%s → remote %s · %s\n' "$lport" "$rport" "$(ui_url "https://$hostname:$lport")"
+        detail="$row"
         if tunnel_hosts_has_mapping "$hostname"; then
-            echo "    hosts:    $hostname -> 127.0.0.1 ($TUNNEL_HOSTS_FILE)"
+            chain="hosts"
+            printf -v row '    hosts:    %s → 127.0.0.1 (%s)\n' "$hostname" "$TUNNEL_HOSTS_FILE"
+            detail="$detail$row"
         else
-            echo "    hosts:    MISSING for $hostname in $TUNNEL_HOSTS_FILE"
-            echo "              repair: tailroute tunnel remove $peer && tailroute tunnel add $peer"
+            chain="hosts — — —"
+            printf -v row '    hosts:    MISSING for %s in %s\n' "$hostname" "$TUNNEL_HOSTS_FILE"
+            detail="$detail$row"
+            printf -v row '              repair: tailroute tunnel remove %s && tailroute tunnel add %s\n' "$peer" "$peer"
+            detail="$detail$row"
             failed="hosts entry missing for $hostname"
+            fwd_failed=1
+            _check_emit_section
             continue
         fi
         if tunnel_port_in_use "$lport"; then
-            echo "    listener: 127.0.0.1:$lport accepting"
+            chain="$chain → listener"
+            printf -v row '    listener: 127.0.0.1:%s accepting\n' "$lport"
+            detail="$detail$row"
         else
-            echo "    listener: 127.0.0.1:$lport closed — the tunnel job is down"
-            echo "              repair: tailroute tunnel restart $peer"
+            chain="$chain → listener — —"
+            printf -v row '    listener: 127.0.0.1:%s closed — the tunnel job is down\n' "$lport"
+            detail="$detail$row"
+            printf -v row '              repair: tailroute tunnel restart %s\n' "$peer"
+            detail="$detail$row"
             failed="listener closed on 127.0.0.1:$lport"
+            fwd_failed=1
+            _check_emit_section
             continue
         fi
         if _tun_tls_verify "$hostname" "$lport"; then
-            echo "    tls:      certificate verifies for $hostname"
+            chain="$chain → TLS"
+            printf -v row '    tls:      certificate verifies for %s\n' "$hostname"
+            detail="$detail$row"
         else
-            echo "    tls:      certificate problem for $hostname — compare with the peer's claim: tailroute tunnel drift $peer"
+            chain="$chain → TLS —"
+            printf -v row "    tls:      certificate problem for %s — compare with the peer's claim: tailroute tunnel drift %s\n" "$hostname" "$peer"
+            detail="$detail$row"
             failed="TLS does not verify for $hostname"
+            fwd_failed=1
+            _check_emit_section
             continue
         fi
         http_code="$(tunnel_check_http_code "$hostname" "$lport")"
+        local code_label="$http_code"
+        if [ -z "$code_label" ]; then code_label="—"; fi
+        chain="$chain → HTTP $code_label"
         case "$http_code" in
             2??|3??)
-                echo "    http:     HTTP $http_code from the peer's Serve"
+                printf -v row "    http:     HTTP %s from the peer's Serve\n" "$http_code"
+                detail="$detail$row"
                 ;;
             502|503|504)
-                echo "    http:     HTTP $http_code — the peer's Serve upstream reports $http_code"
-                echo "              fix the service on the peer (the tunnel itself delivered it)"
+                printf -v row "    http:     HTTP %s — the peer's Serve upstream reports %s\n" "$http_code" "$http_code"
+                detail="$detail$row"
+                printf -v row '              fix the service on the peer (the tunnel itself delivered it)\n'
+                detail="$detail$row"
                 failed="the peer's Serve upstream reports $http_code on 127.0.0.1:$lport"
+                fwd_failed=1
                 ;;
             ""|000)
                 # The registry stores no scheme, so this is open between a
                 # target that does not speak TLS/HTTP on this port and a
                 # broken transport — it must not assert one over the other.
-                echo "    http:     no HTTP answer — the target may not speak TLS/HTTP on this port, or the transport broke"
-                echo "              inspect the service on the peer, or: tailroute tunnel restart $peer, then re-check"
+                printf -v row '    http:     no HTTP answer — the target may not speak TLS/HTTP on this port, or the transport broke\n'
+                detail="$detail$row"
+                printf -v row '              inspect the service on the peer, or: tailroute tunnel restart %s, then re-check\n' "$peer"
+                detail="$detail$row"
                 failed="no HTTP answer on 127.0.0.1:$lport"
+                fwd_failed=1
                 ;;
             *)
                 # Anything else is the peer's app answering after the tunnel
                 # delivered the request: all four layers are proven, so it is
                 # information, never a path failure (same discipline as
                 # drift/status — app behaviour does not flip path health).
-                echo "    http:     HTTP $http_code — the tunnel delivered the request; the peer's app answered"
-                echo "              the path is proven end to end — what the app says is the peer's business"
+                printf -v row '    http:     HTTP %s — the tunnel delivered the request; the peer%s app answered\n' "$http_code" "'s"
+                detail="$detail$row"
+                printf -v row "              the path is proven end to end — what the app says is the peer's business\n"
+                detail="$detail$row"
                 ;;
         esac
-        echo "    path:     $branch (informational — the ssh wrapper picks per connection)"
+        printf -v row '    path:     %s (informational — the ssh wrapper picks per connection)\n' "$branch"
+        detail="$detail$row"
+        _check_emit_section
     done
 
     echo ""
@@ -2131,11 +2180,13 @@ print(json.dumps(e, sort_keys=True))
         tunnel_wait_for_port "$lp" || \
             ui_warn "job loaded but 127.0.0.1:$lp is not listening yet — check: tail -f $log_path"
         if ! tunnel_tls_verify_or_skip "$hostname" "$lp" "$allow_tls"; then
-            echo "ROLLED BACK: TLS identity verification failed on 127.0.0.1:$lp — previous job restored" >&2
+            ui_fail "TLS identity verification failed on 127.0.0.1:$lp"
+            echo "→ rolling back…" >&2
             tunnel_job_bootout "$label" >/dev/null 2>&1 || true
             if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; fi
             [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
             tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
+            echo "✓ rolled back · previous job restored" >&2
             _tun_journal_clear
             return 1
         fi
@@ -2256,6 +2307,10 @@ tunnel_do_add() {
         tunnel_lock_release; return 1
     fi
 
+    # Ledger step 1 — the ssh trust preflight passed just above (fresh adds
+    # only: the incremental-add path returned before this point).
+    ui_ok "ssh auth ok · peer reachable"
+
     # sudo up front so a mid-transaction expiry can't strand a rollback -
     # and before any hosts work (v0.7.4: hosts-adopt precedes the transaction
     # and needs cached sudo for its privileged steps).
@@ -2353,11 +2408,19 @@ tunnel_do_add() {
     lport="${pair%%:*}"
     rport="${pair##*:}"
 
-    tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip" || \
+    # v0.7.8 remote backend soft check — the result only rewords ledger step 2
+    # (the probe is advisory; the TLS identity gate below is the hard check).
+    local backend_ok="yes"
+    if ! tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip"; then
+        backend_ok="no"
         ui_warn "remote port $rport not accepting on $peer — Serve may not be configured there"
-    echo "NOTE: the /etc/hosts mapping is system-wide — it affects every user of this Mac." >&2
+    fi
 
-    # --- Transaction: registry → hosts → plist (+lint) → bootstrap → TLS verify ---
+    # --- Transaction: plist (+lint) → bootstrap → TLS verify → hosts → registry ---
+    # Output-grammar reorder: TLS identity is verified BEFORE the system-wide
+    # /etc/hosts write and the registry commit, so a certificate mismatch rolls
+    # back only the launchd job and its plist — it can no longer strand a hosts
+    # mapping or a registry entry. Journal undo lists mirror the new stage order.
     # Lock ordering: per-user (already held) → machine-wide hosts lock
     # Release in reverse: hosts lock → per-user
 
@@ -2374,94 +2437,148 @@ tunnel_do_add() {
         fi
     fi
 
-    local add_steps='["registry","hosts","plist","bootstrap","tls"]'
-    local entry rolled_back=""
+    local add_steps='["plist","bootstrap","hosts","registry"]'
+    local entry rolled_back="" undone
     entry="$(tunnel_build_entry_json "$peer" "$ip" "$full_hostname" "$suffix" "$forwards" "${ssh_alias:-$peer}" "$allow_unverified_tls")" || {
         tunnel_lock_release; return 1; }
 
-    # Step 1: registry
+    # Step 1: plist (+lint) — no system-wide state exists yet, so a failure
+    # here only discards the draft file
     _tun_journal_write add "$peer" "$add_steps" '[]' || true
-    if ! tunnel_registry_add "$peer" "$entry"; then
-        _tun_journal_clear
-        tunnel_lock_release; return 1
-    fi
-    _tun_journal_write add "$peer" "$add_steps" '["registry"]' || true
-
-    # Step 2: hosts (under machine-wide lock)
-    tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" || {
-        echo "ROLLED BACK: registry entry (hosts lock busy)" >&2
-        tunnel_registry_remove "$peer" >/dev/null 2>&1
-        _tun_journal_clear
-        tunnel_lock_release; return 1
-    }
-    if ! tunnel_hosts_apply add "$full_hostname"; then
-        echo "ROLLED BACK: registry entry" >&2
-        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
-        tunnel_registry_remove "$peer" >/dev/null 2>&1
-        _tun_journal_clear
-        tunnel_lock_release; return 1
-    fi
-    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts"]' || true
-
-    # Step 3: plist
     mkdir -p "$TUNNEL_LOG_DIR"; chmod 0700 "$TUNNEL_LOG_DIR" 2>/dev/null || true
     local log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
     # shellcheck disable=SC2086  # $forwards intentionally word-splits into l:r pair args
     if ! tunnel_generate_plist "$peer" "$ip" "$log_path" "${ssh_alias:-$peer}" $forwards > "$plist" || ! tunnel_plist_lint "$plist"; then
-        echo "ROLLED BACK: hosts entry, registry entry" >&2
+        ui_fail "launchd job draft failed lint"
+        echo "→ rolling back…" >&2
         rm -f "$plist"
-        tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || rolled_back="hosts"
-        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
-        tunnel_registry_remove "$peer" >/dev/null 2>&1
-        [ -n "$rolled_back" ] && echo "  MANUAL REVERT NEEDED: remove '$full_hostname' from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        echo "✓ rolled back · plist draft removed" >&2
         _tun_journal_clear
         tunnel_lock_release; return 1
     fi
     chmod 0644 "$plist"
-    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist"]' || true
+    _tun_journal_write add "$peer" "$add_steps" '["plist"]' || true
 
-    # Step 4: bootstrap
+    # Step 2: bootstrap
     if ! tunnel_job_bootstrap "$plist"; then
-        echo "ROLLED BACK: plist, hosts entry, registry entry" >&2
+        ui_fail "launchd job bootstrap failed"
+        echo "→ rolling back…" >&2
         rm -f "$plist"
-        tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || rolled_back="hosts"
-        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
-        tunnel_registry_remove "$peer" >/dev/null 2>&1
-        [ -n "$rolled_back" ] && echo "  MANUAL REVERT NEEDED: remove '$full_hostname' from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        echo "✓ rolled back · plist" >&2
         _tun_journal_clear
         tunnel_lock_release; return 1
     fi
-    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist","bootstrap"]' || true
-
-    # Release hosts lock — no more /etc/hosts mutations in add
-    tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+    _tun_journal_write add "$peer" "$add_steps" '["plist","bootstrap"]' || true
 
     if ! tunnel_wait_for_port "$lport"; then
         ui_warn "job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path"
     fi
 
-    # Step 5: TLS identity verification (T-430)
+    # Step 3: TLS identity verification (T-430) — runs BEFORE the /etc/hosts
+    # and registry writes, so a certificate mismatch rolls back only the job
+    # and its plist and can never strand system-wide state
     if ! tunnel_tls_verify_or_skip "$full_hostname" "$lport" "$allow_unverified_tls"; then
-        echo "ROLLED BACK: TLS identity verification failed — certificate does not match '$full_hostname'" >&2
+        ui_fail "TLS certificate does not match '$full_hostname'"
+        echo "→ rolling back…" >&2
         tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
         rm -f "$plist"
-        tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1 || true
-        tunnel_registry_remove "$peer" >/dev/null 2>&1
+        echo "✓ rolled back · job unloaded" >&2
         _tun_journal_clear
         tunnel_lock_release; return 1
     fi
 
+    # Ledger step 2 — wording stays truthful about the advisory backend probe
+    if [ "$allow_unverified_tls" = "yes" ]; then
+        ui_ok "TLS verification skipped (--allow-unverified-tls)"
+    elif [ "$backend_ok" = "yes" ]; then
+        ui_ok "serve accepting on $rport · TLS cert valid"
+    else
+        ui_ok "TLS cert valid (serve probe failed — see warning above)"
+    fi
+
+    # Step 4: hosts — the first system-wide write, now under the machine-wide
+    # hosts lock and only after TLS identity passed. The lock is held through
+    # the registry commit (step 5) so the hosts-undo on a registry failure
+    # cannot be blocked by a competing transaction.
+    tunnel_hosts_lock_acquire "$TUNNEL_HOSTS_LOCK_DIR" || {
+        ui_fail "hosts lock busy — another tailroute operation is modifying $TUNNEL_HOSTS_FILE"
+        echo "→ rolling back…" >&2
+        tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
+        rm -f "$plist"
+        echo "✓ rolled back · job unloaded · plist" >&2
+        _tun_journal_clear
+        tunnel_lock_release; return 1
+    }
+    if ! tunnel_hosts_apply add "$full_hostname"; then
+        ui_fail "/etc/hosts entry failed"
+        echo "→ rolling back…" >&2
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+        tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
+        rm -f "$plist"
+        echo "✓ rolled back · job unloaded · plist" >&2
+        _tun_journal_clear
+        tunnel_lock_release; return 1
+    fi
+    _tun_journal_write add "$peer" "$add_steps" '["plist","bootstrap","hosts"]' || true
+
+    # Step 5: registry — the commit point; a failure here unwinds hosts first
+    if ! tunnel_registry_add "$peer" "$entry"; then
+        ui_fail "registry write failed"
+        echo "→ rolling back…" >&2
+        undone="job unloaded · plist"
+        if tunnel_hosts_apply remove "$full_hostname" >/dev/null 2>&1; then
+            undone="hosts entry · $undone"
+        else
+            rolled_back="hosts"
+        fi
+        tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+        tunnel_job_bootout "$(tunnel_label_for_peer "$peer")" || true
+        rm -f "$plist"
+        echo "✓ rolled back · $undone" >&2
+        if [ -n "$rolled_back" ]; then
+            echo "  MANUAL REVERT NEEDED: remove '$full_hostname' from $TUNNEL_HOSTS_FILE (sudo)" >&2
+        fi
+        _tun_journal_clear
+        tunnel_lock_release; return 1
+    fi
+    tunnel_hosts_lock_release "$TUNNEL_HOSTS_LOCK_DIR"
+
+    # Ledger step 3 — the writes are on disk
+    ui_ok "/etc/hosts entry · registry updated"
+
     # Transaction complete — clear journal
-    _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist","bootstrap","tls"]' || true
+    _tun_journal_write add "$peer" "$add_steps" '["plist","bootstrap","hosts","registry"]' || true
     _tun_journal_clear
 
     tunnel_lock_release
+
+    # Payoff: dim arrow, underlined URL, dim forwards note (non-default ports)
+    local url="https://$full_hostname:$lport"
+    if _ui_gate_out; then
+        if [ "$rport" != "443" ]; then
+            printf '%s→ %s%s%s%s (forwards to remote %s)%s\n' \
+                "$_UI_SGR_DIM" "$_UI_SGR_UNDERLINE" "$url" "$_UI_SGR_RESET" "$_UI_SGR_DIM" "$rport" "$_UI_SGR_RESET"
+        else
+            printf '%s→ %s%s%s\n' "$_UI_SGR_DIM" "$_UI_SGR_UNDERLINE" "$url" "$_UI_SGR_RESET"
+        fi
+    else
+        if [ "$rport" != "443" ]; then
+            printf '→ %s (forwards to remote %s)\n' "$url" "$rport"
+        else
+            printf '→ %s\n' "$url"
+        fi
+    fi
     echo ""
-    echo "Tunnel added: $peer"
-    echo "  URL:      $(ui_url "https://$full_hostname:$lport")"
-    [ "$rport" != "443" ] && ui_dim "  (forwards to remote port $rport)"
-    ui_dim "  Registry: $TUNNEL_REGISTRY"
-    ui_dim "  Log:      $log_path"
+    # The system-wide note keeps today's stream choice (stderr) — ui_dim only
+    # writes stdout, so the dim styling is applied inline against the stderr
+    # gate; the registry/log line below is stdout data.
+    if _ui_gate_err; then
+        printf '%s  note: the /etc/hosts entry is system-wide — every user of this Mac%s\n' \
+            "$_UI_SGR_DIM" "$_UI_SGR_RESET" >&2
+    else
+        printf '  note: the /etc/hosts entry is system-wide — every user of this Mac\n' >&2
+    fi
+    ui_dim "  registry: $TUNNEL_REGISTRY · log: $log_path"
     return 0
 }
 
@@ -2880,7 +2997,7 @@ sys.exit(1 if degraded else 0)
                 [ -n "$notes" ] && echo "  Notes:    $notes"
                 prev_peer="$p"
             fi
-            echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
+            echo "    127.0.0.1:$lport → remote $rport  $listener, $tls, backend $backend"
             if [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
                 worst=1
             fi
