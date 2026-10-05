@@ -102,6 +102,10 @@
   .copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); background: var(--lime); color: var(--lime-ink); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
   .copy:hover { filter: brightness(1.06); }
   .copy.ok { background: var(--text); }
+  .sw-dmg { display: none; padding: 9px 16px 11px 18px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 10.5px; line-height: 1.7; color: var(--faint); }
+  .sw-dmg.on { display: block; }
+  .sw-dmg a { color: var(--dim); text-decoration: none; border-bottom: 1px solid var(--line2); padding-bottom: 1px; }
+  .sw-dmg a:hover { color: var(--text); border-color: var(--lime-line); }
   .hero-cta { display: flex; gap: 14px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
   .microcopy { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--faint); margin-top: 14px; }
   .microcopy i { font-style: normal; color: var(--lime); }
@@ -375,7 +379,7 @@
         <div>
           <div class="eyebrow reveal">
             <span class="hot">Open core · Apache-2.0 CLI</span>
-            <span>macOS 12+</span>
+            <span>macOS 15+ (app) · 12+ (CLI)</span>
             <span>fail-safe by design</span>
           </div>
           <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet up.</h1>
@@ -393,19 +397,13 @@
               <span class="sw-note" id="sw-note">includes the CLI</span>
               <button class="copy" id="sw-copy" type="button">Copy</button>
             </div>
+            <div class="sw-dmg on" id="sw-dmg">No Homebrew? <a href="https://github.com/shrwnsan/tailroute-cli/releases/latest" target="_blank" rel="noopener">Download the DMG ↗</a> · sha256 published on the release · unsigned — macOS will ask you to approve the first launch</div>
           </div>
           <p class="microcopy reveal d3">No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
 
           <div class="hero-cta reveal d3">
             <a class="ghost" href="#core">Free core vs the app ↓</a>
             <a class="ghost" href="https://github.com/shrwnsan/tailroute-cli/blob/main/README.md" target="_blank" rel="noopener">Full docs ↗</a>
-            <!-- DMG direct download: uncomment only once builds are notarized (v0.3.0). Two blockers on record:
-                 (1) a raw DMG link is a non-brew fetch path — it contradicts the standing supply-chain claim
-                 "no non-brew fetch path" (research-002 prop.4, gtm-001 §5) until the claim is amended;
-                 (2) the DMG is ad-hoc signed, so browser downloads trip macOS 15+ "Apple could not verify".
-                 Flip together with a gtm-001 amendment.
-            <a class="ghost" href="https://github.com/shrwnsan/tailroute-cli/releases/latest" target="_blank" rel="noopener">Download the DMG ↓</a>
-            -->
           </div>
         </div>
 
@@ -621,6 +619,7 @@
             <li>Menu bar icon with live connection state</li>
             <li>First-run onboarding and a diagnostic panel</li>
             <li>Brew-aware updates with DMG download</li>
+            <li>Requires macOS 15+ — every version Apple still patches</li>
           </ul>
           <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-label="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
           <p class="sc-foot">early adopters shape the v1.0 roadmap — file issues</p>
@@ -783,11 +782,13 @@
   var current = "app";
   var tabApp = document.getElementById("tab-app"), tabCli = document.getElementById("tab-cli");
   var swText = document.getElementById("sw-text"), swNote = document.getElementById("sw-note");
+  var swDmg = document.getElementById("sw-dmg");
   function pick(which) {
     current = which;
     tabApp.classList.toggle("on", which === "app"); tabApp.setAttribute("aria-selected", which === "app");
     tabCli.classList.toggle("on", which === "cli"); tabCli.setAttribute("aria-selected", which === "cli");
     swText.textContent = CMDS[which].cmd; swNote.textContent = CMDS[which].note;
+    swDmg.classList.toggle("on", which === "app");
   }
   tabApp.addEventListener("click", function () { pick("app"); });
   tabCli.addEventListener("click", function () { pick("cli"); });
