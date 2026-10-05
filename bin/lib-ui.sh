@@ -8,7 +8,9 @@
 # and only the escape sequences disappear. ANSI output never reaches pipes or
 # log files because the gate defaults to "is the target stream a TTY?", and
 # TAILROUTE_COLOR / NO_COLOR / CLICOLOR_FORCE / FORCE_COLOR / TERM=dumb give
-# users and scripts explicit control.
+# users and scripts explicit control. ui_url can additionally wrap a URL in an
+# OSC 8 hyperlink when the terminal is known to render them (TAILROUTE_LINKS
+# overrides); the visible bytes are identical either way.
 #
 # Bash 3.2 compatible: LaunchAgents resolve `env bash` to /bin/bash under
 # launchd. No mapfile, no declare -A, no ${var,,}.
@@ -32,6 +34,14 @@ readonly _UI_SGR_RED=$'\033[31m'
 readonly _UI_SGR_DIM=$'\033[2m'
 readonly _UI_SGR_UNDERLINE=$'\033[4m'
 readonly _UI_SGR_RESET=$'\033[0m'
+
+# OSC 8 hyperlink escapes (ANSI-C quoting, bash 3.2 safe). A hyperlink opens
+# with `ESC ] 8 ; ; <URL> ESC \` and closes with the same form around an empty
+# URL. URLs are only ever passed as printf '%s' arguments, so their bytes are
+# never read as a format string.
+readonly _UI_OSC8_OPEN_PREFIX=$'\033]8;;'
+readonly _UI_OSC8_ST=$'\033\\'
+readonly _UI_OSC8_CLOSE=$'\033]8;;\033\\'
 
 # -----------------------------------------------------------------------------
 # _ui_color_enabled — Decide whether the given stream may carry SGR codes
@@ -72,6 +82,34 @@ _ui_gate_out() {
 # Resolve the stderr gate for this call.
 _ui_gate_err() {
     _ui_color_enabled 2
+}
+
+# -----------------------------------------------------------------------------
+# _ui_links_supported — Decide whether the terminal may carry OSC 8 hyperlinks
+# -----------------------------------------------------------------------------
+# Precedence (first match wins):
+#   1. TAILROUTE_LINKS=never → off; TAILROUTE_LINKS=always → on;
+#      auto/unset (or any other value) → keep deciding
+#   2. auto: match $TERM_PROGRAM against terminals known to render OSC 8.
+#      There is no OSC 8 feature-detection query a one-shot CLI could make —
+#      this $TERM_PROGRAM heuristic is the accepted practice, with the accepted
+#      limits: supported terminals are enumerated by hand, and anything else
+#      (e.g. Terminal.app, which does not speak OSC 8) falls back to the plain
+#      SGR-4 underline rather than risking raw escapes on screen.
+# Only ever called with the color gate already ON, so links can never appear
+# where SGR codes may not (pipes, logs, NO_COLOR).
+# -----------------------------------------------------------------------------
+_ui_links_supported() {
+    case "${TAILROUTE_LINKS:-auto}" in
+        never)  return 1 ;;
+        always) return 0 ;;
+    esac
+    local tp="${TERM_PROGRAM:-}"
+    tp="${tp%%:*}"   # tolerate a ":version" suffix some terminals append
+    case "$tp" in
+        iTerm.app|vscode|ghostty|WezTerm) return 0 ;;
+    esac
+    return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -133,10 +171,21 @@ ui_dim() {
 # ui_url — Print a URL to stdout, underlined when color is on
 # -----------------------------------------------------------------------------
 # Underline (SGR 4) only, deliberately no color: links stay theme-safe.
+# When the color gate is ON and the terminal advertises OSC 8 support (see
+# _ui_links_supported), the URL is additionally wrapped in an OSC 8 hyperlink
+# so terminals make it clickable. The label IS the URL — the visible bytes
+# stay copy-paste-identical to the plain form in every variant.
 # -----------------------------------------------------------------------------
 ui_url() {
     if _ui_gate_out; then
-        printf '%s%s%s\n' "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET"
+        if _ui_links_supported; then
+            printf '%s%s%s%s%s%s%s\n' \
+                "$_UI_OSC8_OPEN_PREFIX" "$*" "$_UI_OSC8_ST" \
+                "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET" \
+                "$_UI_OSC8_CLOSE"
+        else
+            printf '%s%s%s\n' "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET"
+        fi
     else
         printf '%s\n' "$*"
     fi
