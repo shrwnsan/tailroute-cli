@@ -71,19 +71,18 @@
   }
   main { max-width: 78ch; margin: 0 auto; }
   h1 {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.01em;
     margin: 0 0 8px;
   }
-  h1 .sect { color: var(--faint); font-weight: 400; }
   .meta {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    font-size: 12px; color: var(--dim);
+    font-size: 13px; color: var(--dim);
     margin-bottom: 20px;
   }
   h2 {
-    font-size: 12.5px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -98,7 +97,7 @@
   p, li, td { overflow-wrap: anywhere; }
   code { background: var(--green-bg); padding: 1px 5px; border-radius: 3px; }
   .badge {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.12em;
     color: var(--amber);
@@ -123,7 +122,7 @@
     color: var(--dim); padding: 1px 8px; cursor: pointer;
   }
   .synopsis button:hover { border-color: var(--ink); color: var(--ink); }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13px; }
   th, td { border: 1px solid var(--rule); padding: 7px 10px; text-align: left; vertical-align: top; }
   th { background: var(--green-bg); font-weight: 700; }
   /* mobile: state table reflows into stacked cards */
@@ -131,7 +130,7 @@
     table.states thead { display: none; }
     table.states tr { display: block; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px 8px; margin-bottom: 10px; }
     table.states td { display: flex; justify-content: space-between; gap: 14px; border: none; padding: 3px 0; }
-    table.states td::before { content: attr(data-l); color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    table.states td::before { content: attr(data-l); color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
     table.states td[data-l="Condition"] { font-weight: 700; border-bottom: 1px solid var(--rule); margin-bottom: 4px; padding-bottom: 6px; }
   }
   .ok { color: var(--green); font-weight: 700; }
@@ -143,7 +142,7 @@
     border-top: 1px solid var(--rule); padding-top: 16px;
   }
   footer .colophon { color: var(--dim); font-size: 13px; margin-bottom: 6px; }
-  footer .legal { color: var(--faint); font-size: 12px; }
+  footer .legal { color: var(--faint); font-size: 11px; }
 
   /* state diagram */
   .figwrap { margin: 18px 0 8px; overflow-x: auto; }
@@ -158,11 +157,11 @@
   .snode rect { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; transition: fill 0.25s; }
   .snode.active rect { fill: var(--green-bg); stroke-width: 2.5; }
   .sname { font-size: 13px; font-weight: 700; fill: var(--ink); }
-  .ssub { font-size: 10.5px; fill: var(--dim); }
+  .ssub { font-size: 11px; fill: var(--dim); }
   .sedge { stroke: var(--faint); stroke-width: 1.5; fill: none; }
   .sedge.hot { stroke: var(--green); stroke-width: 2.5; stroke-dasharray: 6 4; animation: figflow 0.8s linear infinite; }
   .mk { fill: var(--faint); } .mkk { fill: var(--green); }
-  .slabel { font-size: 10.5px; fill: var(--dim); font-family: inherit; }
+  .slabel { font-size: 11px; fill: var(--dim); font-family: inherit; }
   .figcap { font-size: 11px; color: var(--faint); margin-top: 6px; }
   @keyframes figflow { to { stroke-dashoffset: -10; } }
   @media (prefers-reduced-motion: reduce) { .sedge.hot { animation: none; } }
