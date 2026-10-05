@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # lib-ui.sh — Paint-only presentation helpers for tailroute CLI output
 #
-# Design: a TTY-aware color gate plus four one-line printers (ui_ok, ui_warn,
-# ui_dim, ui_url). Every glyph carries redundant, non-color meaning — the ✓
-# mark, the WARN: token, dimming of hint lines, underlining of URLs — so text
-# stays fully readable when SGR codes are stripped: glyphs are retained and
-# only the escape sequences disappear. ANSI output never reaches pipes or log
-# files because the gate defaults to "is the target stream a TTY?", and
+# Design: a TTY-aware color gate plus five one-line printers (ui_ok, ui_warn,
+# ui_fail, ui_dim, ui_url). Every glyph carries redundant, non-color meaning —
+# the ✓/✗ marks, the WARN: token, dimming of hint lines, underlining of URLs —
+# so text stays fully readable when SGR codes are stripped: glyphs are retained
+# and only the escape sequences disappear. ANSI output never reaches pipes or
+# log files because the gate defaults to "is the target stream a TTY?", and
 # TAILROUTE_COLOR / NO_COLOR / CLICOLOR_FORCE / FORCE_COLOR / TERM=dumb give
 # users and scripts explicit control.
 #
@@ -28,6 +28,7 @@ set -euo pipefail
 # SGR sequences (ANSI-C quoting is bash 2.0+; safe for bash 3.2)
 readonly _UI_SGR_GREEN=$'\033[32m'
 readonly _UI_SGR_YELLOW=$'\033[33m'
+readonly _UI_SGR_RED=$'\033[31m'
 readonly _UI_SGR_DIM=$'\033[2m'
 readonly _UI_SGR_UNDERLINE=$'\033[4m'
 readonly _UI_SGR_RESET=$'\033[0m'
@@ -99,6 +100,21 @@ ui_warn() {
         printf '%sWARN:%s %s\n' "$_UI_SGR_YELLOW" "$_UI_SGR_RESET" "$*" >&2
     else
         printf 'WARN: %s\n' "$*" >&2
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_fail — Print a failure line to stderr
+# -----------------------------------------------------------------------------
+# The ✗ mark is red; the message body stays uncolored so it survives
+# copy/paste cleanly. This is the single failure spelling for CLI output —
+# the stderr counterpart of ui_ok (which marks success on stdout).
+# -----------------------------------------------------------------------------
+ui_fail() {
+    if _ui_gate_err; then
+        printf '%s✗%s %s\n' "$_UI_SGR_RED" "$_UI_SGR_RESET" "$*" >&2
+    else
+        printf '✗ %s\n' "$*" >&2
     fi
 }
 

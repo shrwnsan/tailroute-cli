@@ -737,6 +737,41 @@ test_add_creates_full_state() {
     grep -qx "com.tailroute.tunnel.prime" "$LAUNCHCTL_STATE" || { echo "job not bootstrapped"; return 1; }
 }
 
+# Output-grammar contract: the happy path reads as a ✓ ledger of the
+# transaction steps with the deliverable URL as the payoff — no heading.
+test_add_ledger_happy_path_output() {
+    _tunnel_setup_sandbox
+    local out err
+    out="$(tunnel_do_add prime --yes 2>"$TUNNEL_SANDBOX/add-err.log")" || { echo "add failed: $out"; return 1; }
+    err="$(cat "$TUNNEL_SANDBOX/add-err.log")"
+    # the step ledger, one ✓ per completed stage, in execution order
+    assert_contains "✓ ssh auth ok · peer reachable" "$out"
+    assert_contains "✓ serve accepting on 443 · TLS cert valid" "$out"
+    assert_contains "✓ /etc/hosts entry · registry updated" "$out"
+    # payoff: dim arrow + URL — no parenthetical for the default remote 443
+    assert_contains "→ https://prime.tailnet.ts.net:8443" "$out"
+    if printf '%s' "$out" | grep -q "forwards to remote"; then
+        _assert_fail "default remote 443 must not carry the forwards note: $out"
+    fi
+    # the old label block is replaced by a dim footer on one line
+    assert_contains "registry: $TUNNEL_REGISTRY · log: $TUNNEL_LOG_DIR/tunnel-prime.log" "$out"
+    if printf '%s' "$out" | grep -q "Tunnel added:"; then
+        _assert_fail "the 'Tunnel added' heading is replaced by the ledger: $out"
+    fi
+    # stream split preserved: the system-wide note is stderr, data is stdout
+    assert_contains "note: the /etc/hosts entry is system-wide — every user of this Mac" "$err"
+    if printf '%s' "$out" | grep -q "note: the /etc/hosts entry"; then
+        _assert_fail "the system-wide note must stay on stderr: $out"
+    fi
+}
+
+test_add_ledger_payoff_names_nondefault_remote() {
+    _tunnel_setup_sandbox
+    local out
+    out="$(tunnel_do_add prime --remote-port 8080 --yes 2>/dev/null)" || { echo "add failed: $out"; return 1; }
+    assert_contains "→ https://prime.tailnet.ts.net:8443 (forwards to remote 8080)" "$out"
+}
+
 test_add_existing_peer_refuses() {
     _tunnel_setup_sandbox
     FAKE_NC_OPEN="8443"
@@ -749,9 +784,17 @@ test_add_existing_peer_refuses() {
 test_add_rollback_on_bootstrap_failure() {
     _tunnel_setup_sandbox
     FAIL_BOOTSTRAP=1
-    local rc=0
-    tunnel_do_add prime --yes >/dev/null 2>&1 || rc=$?
+    local rc=0 out
+    out="$(tunnel_do_add prime --yes 2>&1 >/dev/null)" || rc=$?
     assert_eq 1 "$rc"
+    # Ledger narration: what failed and what the unwind removed — hosts and
+    # registry are never written before TLS passes, so no manual revert
+    assert_contains "✗ launchd job bootstrap failed" "$out"
+    assert_contains "→ rolling back…" "$out"
+    assert_contains "✓ rolled back · plist" "$out"
+    if printf '%s' "$out" | grep -q "MANUAL REVERT"; then
+        _assert_fail "no hosts write happened before bootstrap — no manual revert may be suggested: $out"
+    fi
     # Full unwind: no registry entry, no hosts mapping, no plist
     assert_fail tunnel_registry_get prime
     if grep -q "prime.tailnet.ts.net" "$TUNNEL_HOSTS_FILE"; then
@@ -1023,9 +1066,18 @@ test_preflight_warns_when_auth_depends_on_agent() {
 test_add_rollback_on_tls_failure() {
     _tunnel_setup_sandbox
     export FAKE_TLS_HOSTNAME="wrong-host"
-    local rc=0
-    tunnel_do_add prime --yes >/dev/null 2>&1 || rc=$?
+    local rc=0 out
+    out="$(tunnel_do_add prime --yes 2>&1 >/dev/null)" || rc=$?
     assert_eq 1 "$rc"
+    # Ledger narration — and the reorder contract: TLS runs BEFORE the hosts
+    # and registry writes, so the unwind covers only the job and its plist.
+    # No "ROLLED BACK" of hosts/registry, no manual revert suggestion.
+    assert_contains "✗ TLS certificate does not match 'prime.tailnet.ts.net'" "$out"
+    assert_contains "→ rolling back…" "$out"
+    assert_contains "✓ rolled back · job unloaded" "$out"
+    if printf '%s' "$out" | grep -Eq "hosts|registry|MANUAL REVERT"; then
+        _assert_fail "TLS mismatch must not narrate hosts/registry undo: $out"
+    fi
     # Full rollback: no registry, no hosts mapping, no plist
     assert_fail tunnel_registry_get prime
     if grep -q "prime.tailnet.ts.net" "$TUNNEL_HOSTS_FILE"; then
@@ -1040,7 +1092,9 @@ test_add_with_allow_unverified_tls_flag() {
     local out
     out="$(tunnel_do_add prime --allow-unverified-tls --yes 2>&1)" || { echo "add with --allow-unverified-tls failed: $out"; return 1; }
     assert_contains "skipping TLS identity verification" "$out"
-    assert_contains "Tunnel added: prime" "$out"
+    assert_contains "TLS verification skipped (--allow-unverified-tls)" "$out"
+    assert_contains "✓ /etc/hosts entry · registry updated" "$out"
+    assert_contains "→ https://prime.tailnet.ts.net:8443" "$out"
 }
 
 # =============================================================================
@@ -1137,7 +1191,7 @@ test_add_with_allow_unverified_tls_persists() {
     export FAKE_TLS_HOSTNAME="wrong-host"
     local out
     out="$(tunnel_do_add prime --allow-unverified-tls --yes 2>&1)" || { echo "add failed: $out"; return 1; }
-    assert_contains "Tunnel added: prime" "$out"
+    assert_contains "✓ ssh auth ok · peer reachable" "$out"
     # Verify the registry persists the flag
     assert_contains '"allowUnverifiedTLS": true' "$(tunnel_registry_get prime)"
 }
@@ -1442,7 +1496,8 @@ test_t436_update_rollback_on_tls_failure_restores_previous_job() {
     local rc=0 out
     out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
     assert_eq 1 "$rc" "update should fail on TLS identity mismatch"
-    assert_contains "ROLLED BACK" "$out"
+    assert_contains "✗ TLS identity verification failed on 127.0.0.1:8444" "$out"
+    assert_contains "✓ rolled back · previous job restored" "$out"
     local n
     n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
     assert_eq 1 "$n" "registry should be rolled back to one forward"
@@ -1476,8 +1531,8 @@ test_t436_status_lists_every_forward() {
     tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
     local out
     out="$(tunnel_do_status --skip-remote-check 2>&1)"
-    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
-    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
+    assert_contains "127.0.0.1:8443 → remote 443" "$out"
+    assert_contains "127.0.0.1:8444 → remote 8080" "$out"
 }
 
 test_status_shows_every_peer_not_just_the_first() {
@@ -1604,6 +1659,8 @@ test_probe_backend_warns_when_target_refuses() {
     local out
     out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || { echo "add failed: $out"; return 1; }
     assert_contains "WARN: remote port 443 not accepting on $FX_PEER" "$out"
+    # ledger step 2 must stay truthful about the advisory probe failing
+    assert_contains "✓ TLS cert valid (serve probe failed — see warning above)" "$out"
 }
 
 test_status_backend_probe_targets_peer_ts_ip() {
@@ -1806,6 +1863,7 @@ test_preflight_surfaces_policy_denial_and_full_rerun() {
     local out rc=0
     out="$(tunnel_preflight "$FX_PEER" "$lookup" shorty 2>&1)" || rc=$?
     assert_eq 1 "$rc" "preflight should fail on policy denial"
+    assert_contains "✗ ssh auth failed for proxy-shorty" "$out"
     assert_contains "ssh said: $FAKE_SSH_STDERR" "$out"
     assert_contains "Tailscale SSH enabled" "$out"
     assert_contains "tailroute tunnel add $FX_PEER --ssh-alias shorty" "$out"
@@ -1833,7 +1891,9 @@ test_t413_add_falls_back_silently_without_serve() {
     local fwd
     fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
     assert_eq "8443:443" "$fwd" "locked-down peer falls back to 443"
-    if printf '%s' "$out" | grep -qi "serve"; then
+    # The fallback itself must be silent (the ✓ ledger may name the forward
+    # that was actually created — the guard is about serve-detection noise).
+    if printf '%s' "$out" | grep -Eqi "serve (status|config|may not)|autodetect|not accepting"; then
         _assert_fail "fallback should be silent, got: $out"
     fi
 }
@@ -2132,7 +2192,7 @@ test_t439_registered_peer_no_drift() {
     out="$(_t439_drift_inert "$FX_PEER" 0)"
     assert_contains "no drift" "$out"
     assert_contains "https://$FX_HOSTNAME:8443" "$out" "the full current forward set + URL must be shown"
-    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8443 → remote 443" "$out"
     assert_contains "applies nothing" "$out" "inertness is stated as policy, not implied"
 }
 
@@ -2448,6 +2508,22 @@ _tunnel_check_inert() { # <peer> <expected-rc>
     printf '%s\n' "$out"
 }
 
+test_check_mapping_row_uses_unicode_arrows_and_underlined_url() {
+    _tunnel_setup_sandbox
+    _t439_register_prime "8443:443"
+    _tunnel_check_add_hosts_mapping
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    _tunnel_check_set_http 200
+    local out
+    out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    # data positions carry → arrows; the URL rides through ui_url
+    assert_contains "127.0.0.1:8443 → remote 443 · https://$FX_HOSTNAME:8443" "$out"
+    assert_contains "hosts:    $FX_HOSTNAME → 127.0.0.1" "$out"
+    if printf '%s' "$out" | grep -q -- ' -> '; then
+        _assert_fail "check must not print ASCII arrows: $out"
+    fi
+}
+
 test_check_unregistered_peer_errors_like_status() {
     _tunnel_setup_sandbox
     # a machine that never created a config dir: the error path must not
@@ -2465,6 +2541,7 @@ test_check_hosts_missing_names_the_repair() {
     _tunnel_check_set_http 200            # would be green — hosts is what breaks
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "✗ hosts — — —" "$out" "the chain line marks every layer the breakage skipped"
     assert_contains "hosts:" "$out"
     assert_contains "MISSING" "$out"
     assert_contains "tailroute tunnel remove $FX_PEER && tailroute tunnel add $FX_PEER" "$out" \
@@ -2481,6 +2558,7 @@ test_check_listener_closed_suggests_restart() {
     _tunnel_check_set_http 200            # would be green — the listener is what breaks
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 1)"
+    assert_contains "✗ hosts → listener — —" "$out" "the chain line names the layers that ran, then the skips"
     assert_contains "listener:" "$out"
     assert_contains "closed" "$out"
     assert_contains "tailroute tunnel restart $FX_PEER" "$out"
@@ -2527,6 +2605,7 @@ test_check_healthy_all_layers_green() {
     _tunnel_check_set_http 200
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 0)"
+    assert_contains "✓ hosts → listener → TLS → HTTP 200" "$out" "the chain line is the glanceable per-forward verdict"
     assert_contains "healthy" "$out"
     assert_contains "hosts:" "$out"
     assert_contains "listener:" "$out"
@@ -2647,8 +2726,8 @@ test_check_reports_each_forward_of_a_multi_forward_tunnel() {
     _tunnel_check_set_http 200
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 0)"
-    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
-    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
+    assert_contains "127.0.0.1:8443 → remote 443" "$out"
+    assert_contains "127.0.0.1:8444 → remote 8080" "$out"
     assert_eq 2 "$(printf '%s\n' "$out" | grep -c '    http:')" "every forward gets its own HTTP probe"
 }
 
