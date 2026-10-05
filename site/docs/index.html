@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>tailroute(8) — Tailscale + VPN coexistence daemon for macOS</title>
+<title>tailroute-cli — Tailscale + VPN coexistence daemon for macOS</title>
 <meta name="description" content="tailroute-cli manual: a fail-safe macOS launchd daemon that toggles Tailscale MagicDNS when a VPN connects — internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
 <link rel="canonical" href="https://shrwnsan.github.io/tailroute-cli/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="tailroute-cli">
-<meta property="og:title" content="tailroute(8) — Tailscale + VPN coexistence for macOS">
+<meta property="og:title" content="tailroute-cli — Tailscale + VPN coexistence for macOS">
 <meta property="og:description" content="A fail-safe launchd daemon toggles MagicDNS when your VPN connects — internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
 <meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/">
 <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
@@ -138,7 +138,14 @@
 
   /* state diagram */
   .figwrap { margin: 18px 0 8px; overflow-x: auto; }
-  .figwrap svg { min-width: 560px; width: 100%; height: auto; display: block; }
+  .figwrap svg { width: 100%; height: auto; display: block; }
+  .fig-wide svg { min-width: 560px; }
+  svg.fig-wide { display: block; }
+  svg.fig-narrow { display: none; }
+  @media (max-width: 607px) {
+    svg.fig-wide { display: none; }
+    svg.fig-narrow { display: block; }
+  }
   .snode rect { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; transition: fill 0.25s; }
   .snode.active rect { fill: var(--green-bg); stroke-width: 2.5; }
   .sname { font-size: 13px; font-weight: 700; fill: var(--ink); }
@@ -155,7 +162,7 @@
 <body>
 <main>
 
-  <h1>tailroute<span class="sect">(8)</span></h1>
+  <h1>tailroute</h1>
   <p class="meta"><span class="badge">alpha</span> <span class="badge free">v0.8.17</span> <span>tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</span></p>
 
   <h2>Name</h2>
@@ -172,19 +179,33 @@
      the same call a careful admin would make, every time:</p>
 
   <div class="figwrap">
-  <svg viewBox="0 0 760 260" role="img" aria-label="State diagram: IDLE, MESH and COEXIST with transitions driven by route-monitor events">
+  <svg class="fig-wide" id="fig-wide" viewBox="0 0 760 260" role="img" aria-label="State diagram: IDLE, MESH and COEXIST with transitions driven by route-monitor events">
     <defs>
-      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
-      <marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mkk"/></marker>
+      <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+      <marker id="ahh1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mkk"/></marker>
     </defs>
-    <g class="snode" id="n-mesh"><rect x="80" y="52" width="180" height="64" rx="4"/><text class="sname" x="170" y="78" text-anchor="middle">MESH</text><text class="ssub" x="170" y="97" text-anchor="middle">dns on · proxy off</text></g>
-    <g class="snode" id="n-coexist"><rect x="400" y="52" width="210" height="64" rx="4"/><text class="sname" x="505" y="78" text-anchor="middle">COEXIST</text><text class="ssub" x="505" y="97" text-anchor="middle">dns off · proxy :1055</text></g>
-    <g class="snode" id="n-idle"><rect x="280" y="186" width="200" height="58" rx="4"/><text class="sname" x="380" y="210" text-anchor="middle">IDLE</text><text class="ssub" x="380" y="228" text-anchor="middle">watches · changes nothing</text></g>
-    <path class="sedge" id="e-vpnup" d="M260,72 L400,72" marker-end="url(#ah)"/><text class="slabel" x="330" y="60" text-anchor="middle">vpn connects</text>
-    <path class="sedge" id="e-vpndown" d="M400,100 L260,100" marker-end="url(#ah)"/><text class="slabel" x="330" y="122" text-anchor="middle">vpn disconnects</text>
-    <path class="sedge" id="e-quit" d="M330,130 L330,180" marker-end="url(#ah)"/><text class="slabel" x="342" y="158">tailscale quits</text>
-    <path class="sedge" id="e-startoff" d="M295,184 C245,168 212,146 192,118" marker-end="url(#ah)"/><text class="slabel" x="182" y="152" text-anchor="end">starts · no vpn</text>
-    <path class="sedge" id="e-starton" d="M365,184 C420,168 462,146 492,118" marker-end="url(#ah)"/><text class="slabel" x="500" y="152">starts · vpn on</text>
+    <g class="snode" id="n1-mesh"><rect x="80" y="52" width="180" height="64" rx="4"/><text class="sname" x="170" y="78" text-anchor="middle">MESH</text><text class="ssub" x="170" y="97" text-anchor="middle">dns on · proxy off</text></g>
+    <g class="snode" id="n1-coexist"><rect x="400" y="52" width="210" height="64" rx="4"/><text class="sname" x="505" y="78" text-anchor="middle">COEXIST</text><text class="ssub" x="505" y="97" text-anchor="middle">dns off · proxy :1055</text></g>
+    <g class="snode" id="n1-idle"><rect x="280" y="186" width="200" height="58" rx="4"/><text class="sname" x="380" y="210" text-anchor="middle">IDLE</text><text class="ssub" x="380" y="228" text-anchor="middle">watches · changes nothing</text></g>
+    <path class="sedge" id="e1-vpnup" d="M260,72 L400,72" marker-end="url(#ah1)"/><text class="slabel" x="330" y="60" text-anchor="middle">vpn connects</text>
+    <path class="sedge" id="e1-vpndown" d="M400,100 L260,100" marker-end="url(#ah1)"/><text class="slabel" x="330" y="122" text-anchor="middle">vpn disconnects</text>
+    <path class="sedge" id="e1-quit" d="M330,130 L330,180" marker-end="url(#ah1)"/><text class="slabel" x="342" y="158">tailscale quits</text>
+    <path class="sedge" id="e1-startoff" d="M295,184 C245,168 212,146 192,118" marker-end="url(#ah1)"/><text class="slabel" x="182" y="152" text-anchor="end">starts · no vpn</text>
+    <path class="sedge" id="e1-starton" d="M365,184 C420,168 462,146 492,118" marker-end="url(#ah1)"/><text class="slabel" x="500" y="152">starts · vpn on</text>
+  </svg>
+  <svg class="fig-narrow" id="fig-narrow" viewBox="0 0 380 334" role="img" aria-label="State diagram, compact layout: IDLE, MESH and COEXIST with transitions driven by route-monitor events">
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+      <marker id="ahh2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mkk"/></marker>
+    </defs>
+    <g class="snode" id="n2-mesh"><rect x="96" y="40" width="188" height="56" rx="4"/><text class="sname" x="190" y="64" text-anchor="middle">MESH</text><text class="ssub" x="190" y="83" text-anchor="middle">dns on · proxy off</text></g>
+    <g class="snode" id="n2-coexist"><rect x="96" y="150" width="188" height="56" rx="4"/><text class="sname" x="190" y="174" text-anchor="middle">COEXIST</text><text class="ssub" x="190" y="193" text-anchor="middle">dns off · proxy :1055</text></g>
+    <g class="snode" id="n2-idle"><rect x="96" y="268" width="188" height="56" rx="4"/><text class="sname" x="190" y="292" text-anchor="middle">IDLE</text><text class="ssub" x="190" y="311" text-anchor="middle">watches · changes nothing</text></g>
+    <path class="sedge" id="e2-vpnup" d="M140,96 L140,146" marker-end="url(#ah2)"/><text class="slabel" x="148" y="126">vpn connects</text>
+    <path class="sedge" id="e2-vpndown" d="M240,146 L240,96" marker-end="url(#ah2)"/><text class="slabel" x="248" y="126">vpn disconnects</text>
+    <path class="sedge" id="e2-quit" d="M190,206 L190,264" marker-end="url(#ah2)"/><text class="slabel" x="198" y="240">tailscale quits</text>
+    <path class="sedge" id="e2-startoff" d="M108,268 C58,240 58,136 92,70" marker-end="url(#ah2)"/><text class="slabel" x="4" y="172">starts ·</text><text class="slabel" x="4" y="186">no vpn</text>
+    <path class="sedge" id="e2-starton" d="M272,268 C322,240 322,136 288,70" marker-end="url(#ah2)"/><text class="slabel" x="328" y="172">starts ·</text><text class="slabel" x="328" y="186">vpn on</text>
   </svg>
   <p class="figcap">fig. 1 — the decision state machine; route-monitor events replayed below</p>
   <p class="note" id="fig-caption">…</p>
@@ -288,36 +309,38 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
 (function () {
   var caption = document.getElementById("fig-caption");
   if (!caption) return;
-  var NODES = { mesh: "n-mesh", coexist: "n-coexist", idle: "n-idle" };
   var STEPS = [
-    { node: "mesh",    edge: null,         cap: "tailscale up, no vpn \u2192 MESH (dns on \u00b7 proxy off)" },
-    { node: "coexist", edge: "e-vpnup",    cap: "route monitor: default \u2192 utun3 (vpn up) \u2192 COEXIST" },
-    { node: "mesh",    edge: "e-vpndown",  cap: "route monitor: utun3 removed (vpn down) \u2192 MESH" },
-    { node: "idle",    edge: "e-quit",     cap: "route monitor: utun4 removed \u2192 IDLE (nothing to do)" },
-    { node: "coexist", edge: "e-starton",  cap: "tailscale starts, vpn already on \u2192 COEXIST" },
-    { node: "idle",    edge: "e-quit",     cap: "tailscale quits \u2192 IDLE (changes nothing)" },
-    { node: "mesh",    edge: "e-startoff", cap: "tailscale starts \u2192 MESH (dns on \u00b7 proxy off)" }
+    { node: "mesh",    edge: null,       cap: "tailscale up, no vpn \u2192 MESH (dns on \u00b7 proxy off)" },
+    { node: "coexist", edge: "vpnup",    cap: "route monitor: default \u2192 utun3 (vpn up) \u2192 COEXIST" },
+    { node: "mesh",    edge: "vpndown",  cap: "route monitor: utun3 removed (vpn down) \u2192 MESH" },
+    { node: "idle",    edge: "quit",     cap: "route monitor: utun4 removed \u2192 IDLE (nothing to do)" },
+    { node: "coexist", edge: "starton",  cap: "tailscale starts, vpn already on \u2192 COEXIST" },
+    { node: "idle",    edge: "quit",     cap: "tailscale quits \u2192 IDLE (changes nothing)" },
+    { node: "mesh",    edge: "startoff", cap: "tailscale starts \u2192 MESH (dns on \u00b7 proxy off)" }
   ];
-  var i = -1, prevNode = null, prevEdge = null;
+  function narrow() { return window.matchMedia("(max-width: 607px)").matches; }
+  var i = -1, last = { node: null, edge: null };
+  function clearLayout(d) {
+    if (last.node) { var n = document.getElementById("n" + d + "-" + last.node); if (n) n.classList.remove("active"); }
+    if (last.edge) { var e = document.getElementById("e" + d + "-" + last.edge); if (e) { e.classList.remove("hot"); e.setAttribute("marker-end", "url(#ah" + d + ")"); } }
+  }
   function show(step) {
-    if (prevNode) document.getElementById(NODES[prevNode]).classList.remove("active");
-    if (prevEdge) {
-      var p = document.getElementById(prevEdge);
-      p.classList.remove("hot");
-      p.setAttribute("marker-end", "url(#ah)");
-    }
-    document.getElementById(NODES[step.node]).classList.add("active");
+    var d = narrow() ? "2" : "1";
+    clearLayout("1"); clearLayout("2");
+    document.getElementById("n" + d + "-" + step.node).classList.add("active");
     if (step.edge) {
-      var e = document.getElementById(step.edge);
+      var e = document.getElementById("e" + d + "-" + step.edge);
       e.classList.add("hot");
-      e.setAttribute("marker-end", "url(#ahh)");
-      prevEdge = step.edge;
-    } else { prevEdge = null; }
-    prevNode = step.node;
+      e.setAttribute("marker-end", "url(#ahh" + d + ")");
+    }
+    last = { node: step.node, edge: step.edge };
     caption.textContent = "$ " + step.cap;
   }
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    show(STEPS[1]); // static: show the coexistence state, no cycling
+    ["1", "2"].forEach(function (d) {
+      document.getElementById("n" + d + "-coexist").classList.add("active");
+    });
+    caption.textContent = "$ " + STEPS[1].cap; // static: coexistence state, no cycling
     return;
   }
   setInterval(function () { i = (i + 1) % STEPS.length; show(STEPS[i]); }, 2600);
