@@ -753,6 +753,8 @@ test_add_ledger_happy_path_output() {
     if printf '%s' "$out" | grep -q "forwards to remote"; then
         _assert_fail "default remote 443 must not carry the forwards note: $out"
     fi
+    # the next-step hint rides between payoff and footer
+    assert_contains "next: tailroute tunnel check prime · tailroute tunnel open prime" "$out"
     # the old label block is replaced by a dim footer on one line
     assert_contains "registry: $TUNNEL_REGISTRY · log: $TUNNEL_LOG_DIR/tunnel-prime.log" "$out"
     if printf '%s' "$out" | grep -q "Tunnel added:"; then
@@ -770,6 +772,25 @@ test_add_ledger_payoff_names_nondefault_remote() {
     local out
     out="$(tunnel_do_add prime --remote-port 8080 --yes 2>/dev/null)" || { echo "add failed: $out"; return 1; }
     assert_contains "→ https://prime.tailnet.ts.net:8443 (forwards to remote 8080)" "$out"
+    assert_contains "next: tailroute tunnel check prime · tailroute tunnel open prime" "$out"
+}
+
+# The hint answers "what do I do next" — it must sit between the payoff and
+# the footer, never before the deliverable and never after the bookkeeping.
+test_add_ledger_next_step_hint_sits_between_payoff_and_footer() {
+    _tunnel_setup_sandbox
+    local out payoff hint footer
+    out="$(tunnel_do_add prime --yes 2>/dev/null)" || { echo "add failed: $out"; return 1; }
+    payoff="$(printf '%s\n' "$out" | grep -n '^→ https://' | cut -d: -f1)"
+    hint="$(printf '%s\n' "$out" | grep -n 'next: tailroute tunnel check' | cut -d: -f1)"
+    footer="$(printf '%s\n' "$out" | grep -n 'registry:' | cut -d: -f1)"
+    if [ -z "$payoff" ] || [ -z "$hint" ] || [ -z "$footer" ]; then
+        _assert_fail "payoff/hint/footer missing from add output: $out"
+    fi
+    if [ "$payoff" -lt "$hint" ] && [ "$hint" -lt "$footer" ]; then
+        return 0
+    fi
+    _assert_fail "hint must sit between the payoff and the footer (payoff=$payoff hint=$hint footer=$footer)"
 }
 
 test_add_existing_peer_refuses() {
@@ -1515,7 +1536,13 @@ test_t436_update_rollback_on_bootstrap_failure() {
     local rc=0 out
     out="$(tunnel_do_add "$FX_PEER" --remote-port 8080 --yes 2>&1)" || rc=$?
     assert_eq 1 "$rc" "update should fail when bootstrap fails"
-    assert_contains "ROLLED BACK" "$out"
+    # rollback narration uses the shared ✗ / → / ✓ grammar, not ROLLED BACK
+    assert_contains "✗ job bootstrap failed" "$out"
+    assert_contains "→ rolling back…" "$out"
+    assert_contains "✓ rolled back · registry · previous job restored" "$out"
+    if printf '%s' "$out" | grep -q "ROLLED BACK"; then
+        _assert_fail "the ROLLED BACK spelling must be gone from the update path: $out"
+    fi
     local n
     n="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(len(json.load(sys.stdin)["forwards"]))')"
     assert_eq 1 "$n" "registry should be rolled back"
@@ -2546,6 +2573,10 @@ test_check_hosts_missing_names_the_repair() {
     assert_contains "MISSING" "$out"
     assert_contains "tailroute tunnel remove $FX_PEER && tailroute tunnel add $FX_PEER" "$out" \
         "the repair artifact must be a full command"
+    # verdict block answers what/next (hosts needs no why line)
+    assert_contains "$FX_PEER: check FAILED — the /etc/hosts mapping is missing or stale" "$out"
+    assert_contains "next: tailroute tunnel remove $FX_PEER && tailroute tunnel add $FX_PEER, then re-run:" "$out"
+    assert_contains "tailroute tunnel check $FX_PEER" "$out" "the re-run command closes the verdict"
     if printf '%s' "$out" | grep -q "http:"; then
         _assert_fail "a missing hosts entry must short-circuit the probe chain: $out"
     fi
@@ -2562,6 +2593,11 @@ test_check_listener_closed_suggests_restart() {
     assert_contains "listener:" "$out"
     assert_contains "closed" "$out"
     assert_contains "tailroute tunnel restart $FX_PEER" "$out"
+    # verdict block answers what/why/next
+    assert_contains "$FX_PEER: check FAILED — the local forward is not listening" "$out"
+    assert_contains "the launchd tunnel job is not accepting on 127.0.0.1:8443" "$out"
+    assert_contains "next: tailroute tunnel restart $FX_PEER, then re-run:" "$out"
+    assert_contains "tailroute tunnel check $FX_PEER" "$out"
     if printf '%s' "$out" | grep -q "tls:"; then
         _assert_fail "a closed listener must short-circuit the probe chain: $out"
     fi
@@ -2577,6 +2613,11 @@ test_check_tls_failure_reports_certificate_problem() {
     out="$(_tunnel_check_inert "$FX_PEER" 1)"
     assert_contains "tls:" "$out"
     assert_contains "certificate" "$out"
+    # verdict block answers what/why/next
+    assert_contains "$FX_PEER: check FAILED — the certificate does not verify for $FX_HOSTNAME" "$out"
+    assert_contains "the served certificate's identity doesn't match the managed hostname" "$out"
+    assert_contains "tailroute tunnel drift $FX_PEER" "$out" "the existing drift guidance is the way to compare claims"
+    assert_contains "tailroute tunnel check $FX_PEER" "$out"
     if printf '%s' "$out" | grep -q "healthy"; then
         _assert_fail "a certificate problem must not read as healthy: $out"
     fi
@@ -2595,6 +2636,15 @@ test_check_http_502_names_the_peer_upstream() {
     assert_contains "fix the service on the peer" "$out" \
         "the kill-feature verdict must say which side to fix"
     assert_contains "listener" "$out" "the transport layers that did pass must still be reported"
+    # verdict block answers what/why/next: the landing-page moment — a 502
+    # behind a valid cert is reported as what it is
+    assert_contains "$FX_PEER: check FAILED — the peer's service is down, not the tunnel" "$out"
+    assert_contains "TLS is valid and the port accepts — the tunnel did its job" "$out"
+    assert_contains "fix on the peer: restart the Serve backend, then re-run:" "$out"
+    assert_contains "tailroute tunnel check $FX_PEER" "$out"
+    if printf '%s' "$out" | grep -q "the certificate does not verify"; then
+        _assert_fail "a 502 must not be misreported as a TLS failure: $out"
+    fi
 }
 
 test_check_healthy_all_layers_green() {
@@ -2632,6 +2682,12 @@ test_check_curl_transport_failure_is_distinct_from_502() {
     assert_contains "may not speak TLS/HTTP" "$out"
     assert_contains "transport" "$out"
     assert_contains "tailroute tunnel restart $FX_PEER" "$out" "the local path is one of the named remedies"
+    # no truthful why line exists here (non-HTTP target vs broken transport is
+    # open) — the verdict keeps the plain failure wording, never a false claim
+    assert_contains "$FX_PEER: check FAILED — no HTTP answer on 127.0.0.1:8443" "$out"
+    if printf '%s' "$out" | grep -q "the tunnel did its job"; then
+        _assert_fail "a missing HTTP answer must not claim the tunnel did its job: $out"
+    fi
     if printf '%s' "$out" | grep -q "upstream"; then
         _assert_fail "a missing HTTP answer must not read as an upstream error: $out"
     fi

@@ -1948,7 +1948,7 @@ tunnel_do_check() {
     fi
 
     echo "$peer: probing the browser path for $hostname (read-only — nothing is applied, the peer is not contacted)"
-    local failed="" pair lport rport http_code
+    local failed="" failed_layer="" failed_lport="" pair lport rport http_code
     # Emits one forward's section: the chain verdict on top, then the detail
     # rows captured while probing. chain/detail/fwd_failed are the loop's
     # locals — dynamic scope reaches them here.
@@ -1980,6 +1980,7 @@ tunnel_do_check() {
             printf -v row '              repair: tailroute tunnel remove %s && tailroute tunnel add %s\n' "$peer" "$peer"
             detail="$detail$row"
             failed="hosts entry missing for $hostname"
+            failed_layer="hosts"
             fwd_failed=1
             _check_emit_section
             continue
@@ -1995,6 +1996,8 @@ tunnel_do_check() {
             printf -v row '              repair: tailroute tunnel restart %s\n' "$peer"
             detail="$detail$row"
             failed="listener closed on 127.0.0.1:$lport"
+            failed_layer="listener"
+            failed_lport="$lport"
             fwd_failed=1
             _check_emit_section
             continue
@@ -2008,6 +2011,7 @@ tunnel_do_check() {
             printf -v row "    tls:      certificate problem for %s — compare with the peer's claim: tailroute tunnel drift %s\n" "$hostname" "$peer"
             detail="$detail$row"
             failed="TLS does not verify for $hostname"
+            failed_layer="tls"
             fwd_failed=1
             _check_emit_section
             continue
@@ -2027,6 +2031,8 @@ tunnel_do_check() {
                 printf -v row '              fix the service on the peer (the tunnel itself delivered it)\n'
                 detail="$detail$row"
                 failed="the peer's Serve upstream reports $http_code on 127.0.0.1:$lport"
+                failed_layer="http_5xx"
+                failed_lport="$lport"
                 fwd_failed=1
                 ;;
             ""|000)
@@ -2038,6 +2044,8 @@ tunnel_do_check() {
                 printf -v row '              inspect the service on the peer, or: tailroute tunnel restart %s, then re-check\n' "$peer"
                 detail="$detail$row"
                 failed="no HTTP answer on 127.0.0.1:$lport"
+                failed_layer="http_noanswer"
+                failed_lport="$lport"
                 fwd_failed=1
                 ;;
             *)
@@ -2062,7 +2070,40 @@ tunnel_do_check() {
         # must not be called a green layer.
         echo "$peer: healthy — the path is proven on every forward"
     else
-        echo "$peer: check FAILED — $failed"
+        # The verdict block answers what / why / next for the failed layer,
+        # reusing the repair knowledge the detail rows above already carry
+        # (detail rows and the ✗ chain line stay untouched).
+        case "$failed_layer" in
+            hosts)
+                echo "$peer: check FAILED — the /etc/hosts mapping is missing or stale"
+                echo "  next: tailroute tunnel remove $peer && tailroute tunnel add $peer, then re-run:"
+                echo "  tailroute tunnel check $peer"
+                ;;
+            listener)
+                echo "$peer: check FAILED — the local forward is not listening"
+                echo "  the launchd tunnel job is not accepting on 127.0.0.1:$failed_lport"
+                echo "  next: tailroute tunnel restart $peer, then re-run:"
+                echo "  tailroute tunnel check $peer"
+                ;;
+            tls)
+                echo "$peer: check FAILED — the certificate does not verify for $hostname"
+                echo "  the served certificate's identity doesn't match the managed hostname"
+                echo "  next: compare with the peer's claim: tailroute tunnel drift $peer, then re-run:"
+                echo "  tailroute tunnel check $peer"
+                ;;
+            http_5xx)
+                echo "$peer: check FAILED — the peer's service is down, not the tunnel"
+                echo "  TLS is valid and the port accepts — the tunnel did its job"
+                echo "  fix on the peer: restart the Serve backend, then re-run:"
+                echo "  tailroute tunnel check $peer"
+                ;;
+            *)
+                # No HTTP answer is open between a target that does not speak
+                # TLS/HTTP and a broken transport (see the probe above) — no
+                # truthful why line exists, so today's wording stands.
+                echo "$peer: check FAILED — $failed"
+                ;;
+        esac
     fi
     echo "Policy: check probes and prints only — it changes nothing on this Mac or the peer."
     [ -z "$failed" ]
@@ -2154,10 +2195,12 @@ print(json.dumps(e, sort_keys=True))
     # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pair args
     if ! tunnel_generate_plist "$peer" "$ip" "$log_path" "${alias:-$peer}" $pairs > "$plist" \
         || ! tunnel_plist_lint "$plist"; then
-        echo "ROLLED BACK: could not regenerate job — previous job restored" >&2
+        ui_fail "could not regenerate job"
+        echo "→ rolling back…" >&2
         if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
         [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
         tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
+        echo "✓ rolled back · registry · previous job restored" >&2
         _tun_journal_clear
         return 1
     fi
@@ -2165,10 +2208,12 @@ print(json.dumps(e, sort_keys=True))
     _tun_journal_write update "$peer" "$update_steps" '["registry","plist"]' || true
 
     if ! tunnel_job_bootstrap "$plist"; then
-        echo "ROLLED BACK: job bootstrap failed — previous job restored" >&2
+        ui_fail "job bootstrap failed"
+        echo "→ rolling back…" >&2
         if [ -f "$plist.prev" ]; then mv "$plist.prev" "$plist"; else rm -f "$plist"; fi
         [ -f "$plist" ] && tunnel_job_bootstrap "$plist" >/dev/null 2>&1 || true
         tunnel_registry_update "$peer" "$entry" >/dev/null 2>&1 || true
+        echo "✓ rolled back · registry · previous job restored" >&2
         _tun_journal_clear
         return 1
     fi
@@ -2568,6 +2613,8 @@ tunnel_do_add() {
             printf '→ %s\n' "$url"
         fi
     fi
+    # Next-step hint: dim data line before the blank line + footer
+    ui_dim "  next: tailroute tunnel check $peer · tailroute tunnel open $peer"
     echo ""
     # The system-wide note keeps today's stream choice (stderr) — ui_dim only
     # writes stdout, so the dim styling is applied inline against the stderr
