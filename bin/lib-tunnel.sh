@@ -2597,20 +2597,23 @@ tunnel_do_add() {
 
     tunnel_lock_release
 
-    # Payoff: dim arrow, underlined URL, dim forwards note (non-default ports)
+    # Payoff: dim arrow, linked+underlined URL via ui_url (OSC 8 where
+    # supported), dim forwards note (non-default ports)
     local url="https://$full_hostname:$lport"
+    local linked
+    linked="$(ui_url "$url")"
     if _ui_gate_out; then
         if [ "$rport" != "443" ]; then
-            printf '%s→ %s%s%s%s (forwards to remote %s)%s\n' \
-                "$_UI_SGR_DIM" "$_UI_SGR_UNDERLINE" "$url" "$_UI_SGR_RESET" "$_UI_SGR_DIM" "$rport" "$_UI_SGR_RESET"
+            printf '%s→ %s %s(forwards to remote %s)%s\n' \
+                "$_UI_SGR_DIM" "$linked" "$_UI_SGR_DIM" "$rport" "$_UI_SGR_RESET"
         else
-            printf '%s→ %s%s%s\n' "$_UI_SGR_DIM" "$_UI_SGR_UNDERLINE" "$url" "$_UI_SGR_RESET"
+            printf '%s→ %s%s\n' "$_UI_SGR_DIM" "$linked" "$_UI_SGR_RESET"
         fi
     else
         if [ "$rport" != "443" ]; then
-            printf '→ %s (forwards to remote %s)\n' "$url" "$rport"
+            printf '→ %s (forwards to remote %s)\n' "$linked" "$rport"
         else
-            printf '→ %s\n' "$url"
+            printf '→ %s\n' "$linked"
         fi
     fi
     # Next-step hint: dim data line before the blank line + footer
