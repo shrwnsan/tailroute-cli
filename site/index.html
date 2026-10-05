@@ -111,15 +111,17 @@
   /* hero product visual */
   .hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
   .hcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.4); }
-  .hcard-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--faint); }
-  .hcard-bar .act { color: var(--lime-ink); background: var(--lime); border-radius: 6px; padding: 2px 9px; font-weight: 600; }
-  .hcard-bar .sp { flex: 1; }
+  .hbar { position: relative; display: flex; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+  .dots { display: flex; gap: 7px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18); }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .hbar-title { position: absolute; left: 50%; transform: translateX(-50%); max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--dim); }
+  .hbar-title.mono { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
   .hcard-body { padding: 12px 14px; font-family: var(--mono); font-size: 11.5px; }
   .hrow { display: flex; justify-content: space-between; gap: 14px; padding: 5px 2px; color: var(--dim); }
   .hrow span:last-child { color: var(--text); }
   .hrow .ok { color: var(--lime); } .hrow .warnc { color: var(--amber); }
-  .hcard.st { border-top: 2px solid var(--lime-line); }
-  .hcard-st-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding: 10px 14px 0; }
+  .hcomment { font-size: 10.5px; color: var(--faint); padding: 0 2px 6px; }
 
   /* stat band */
   .band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-top: 56px; }
@@ -398,7 +400,7 @@
 
         <div class="hero-visual reveal d2" aria-hidden="true">
           <div class="hcard">
-            <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
+            <div class="hbar"><span class="dots"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i></span><span class="hbar-title">tailroute</span></div>
             <div class="hcard-body">
               <div class="hrow"><span>State</span><span class="ok">Coexisting — VPN + Tailscale</span></div>
               <div class="hrow"><span>MagicDNS</span><span class="warnc">disabled (auto)</span></div>
@@ -406,9 +408,10 @@
               <div class="hrow"><span>Tunnels</span><span>2 healthy</span></div>
             </div>
           </div>
-          <div class="hcard st">
-            <p class="hcard-st-title">$ tailroute status — sample output</p>
+          <div class="hcard">
+            <div class="hbar"><span class="dots"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i></span><span class="hbar-title mono">tailroute status</span></div>
             <div class="hcard-body">
+              <p class="hcomment"># sample output</p>
               <div class="hrow"><span>daemon</span><span class="ok">running (pid 4821)</span></div>
               <div class="hrow"><span>tailscale</span><span>utun4 (100.101.12.40)</span></div>
               <div class="hrow"><span>vpn</span><span>utun3 (default route)</span></div>
