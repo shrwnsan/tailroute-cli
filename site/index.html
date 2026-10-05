@@ -74,6 +74,7 @@
   .gh-btn svg { width: 15px; height: 15px; fill: currentColor; }
   .sp-link { font-family: var(--mono); font-size: 12px; color: var(--lime); text-decoration: none; border: 1px solid var(--lime-line); background: var(--lime-soft); border-radius: 999px; padding: 6px 14px; }
   .sp-link:hover { background: rgba(198,242,78,0.18); }
+  .brand, .stage-pill, .nav-mid a, .ver, .gh-btn, .sp-link { white-space: nowrap; }
 
   /* ============ HERO ============ */
   .hero { padding: 92px 0 64px; position: relative; }
@@ -306,8 +307,10 @@
   .reveal.d1 { transition-delay: 0.07s; } .reveal.d2 { transition-delay: 0.15s; } .reveal.d3 { transition-delay: 0.23s; }
 
   @media (max-width: 1000px) {
+    .nav-mid { display: none; }
     .hero-grid { grid-template-columns: 1fr; }
     .hero-grid > * { min-width: 0; }
+    .hero-visual { max-width: 560px; padding-top: 0; }
     .b7, .b5, .b8, .b4 { grid-column: span 12; }
     .proof-grid, .split-cards, .app-grid { grid-template-columns: 1fr; gap: 32px; }
     .band { grid-template-columns: repeat(2, 1fr); }
@@ -315,7 +318,6 @@
     .sup-card { grid-template-columns: 1fr; }
   }
   @media (max-width: 620px) {
-    .nav-mid { display: none; }
     .nav-right .gh-btn, .nav-right .ver { display: none; }
     .sw-tab .tagx { display: none; }
     .sw-cmd { font-size: 12px; white-space: normal; }
