@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "version": "0.8.17",
-  "build": "256",
-  "url": "https://github.com/shrwnsan/tailroute-cli/releases/download/app-v0.8.17/Tailroute-0.8.17.dmg",
-  "sha256": "2f4b83c1dd65548f1293560ed631d96dc4ae04d6eac18b2df2af0b5c2689a534",
-  "size": 308896,
-  "releaseDate": "2026-10-06T08:42:52Z",
-  "releaseNotesUrl": "https://github.com/shrwnsan/tailroute-cli/releases/tag/app-v0.8.17",
+  "version": "0.8.18",
+  "build": "257",
+  "url": "https://github.com/shrwnsan/tailroute-cli/releases/download/app-v0.8.18/Tailroute-0.8.18.dmg",
+  "sha256": "fa1c9cf156e33cf644976d200e734e8c7023710be6241f315ddc071d2ef325e1",
+  "size": 308919,
+  "releaseDate": "2026-10-06T10:19:22Z",
+  "releaseNotesUrl": "https://github.com/shrwnsan/tailroute-cli/releases/tag/app-v0.8.18",
   "minimumSystemVersion": "12.0"
 }
