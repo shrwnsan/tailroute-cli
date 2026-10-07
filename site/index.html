@@ -114,7 +114,12 @@
 
   /* hero product visual */
   .hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
-  .hcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.4); }
+  .hcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 18px 44px rgba(0,0,0,0.32); transition: transform 0.25s cubic-bezier(0.2,0.65,0.3,1), box-shadow 0.25s cubic-bezier(0.2,0.65,0.3,1), border-color 0.25s ease; }
+  .hcard:hover, .hcard:focus-within { transform: translateY(-3px); box-shadow: 0 30px 70px rgba(0,0,0,0.45); border-color: var(--line2); }
+  .hcard .dot { filter: saturate(0.35) brightness(0.82); opacity: 0.85; transition: filter 0.25s ease, opacity 0.25s ease; }
+  .hcard:hover .dot, .hcard:focus-within .dot { filter: none; opacity: 1; }
+  .hcard .act { transition: filter 0.25s ease; }
+  .hcard:hover .hcard-bar .act { filter: brightness(1.08); }
   .hcard-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--faint); }
   .hcard-bar > span:first-child { font-weight: 600; color: var(--dim); }
   .hcard-bar .act { color: var(--lime-ink); background: var(--lime); border-radius: 6px; padding: 2px 9px; font-weight: 600; }
@@ -355,6 +360,9 @@
     .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--lime-ink); padding-top: 9px; }
   }
   @media (prefers-reduced-motion: reduce) {
+    .hcard:hover, .hcard:focus-within { transform: none; }
+    .hcard, .hcard .dot, .hcard .act { transition: none; }
+
     html.js .reveal { opacity: 1; transform: none; transition: none; }
   }
 </style>
