@@ -7,7 +7,8 @@ The page makes promises a reviewer should not have to re-check by hand:
 - the release metrics the deploy script injects are present and findable,
 - JSON-LD structured data parses and the FAQ stays in sync with it,
 - every in-page anchor resolves and the public anchor ids stay put,
-- titles use the CLI name, and retired claims stay retired.
+- titles use the CLI name, and retired claims stay retired,
+- the shared text colours meet the WCAG AA contrast minimum on their surfaces.
 
 Default mode runs the launch-blocking checks and is safe on every branch.
 --strict adds the design-system checks (tokens only, no entrance animations,
@@ -96,6 +97,20 @@ LEGACY_TOKENS = (
 # Every install path ends with the user verifying the daemon state.
 ACTIVATION_TEXT = "tailroute status"
 
+# Text and stroke tokens the contrast check vouches for, each against the
+# page's three dark surfaces; --mesh-ink is vouched against its --mesh fill.
+# The minimum is the WCAG AA bar for normal text.
+AA_MIN_CONTRAST = 4.5
+CONTRAST_PAIRS = (
+    ("--text", ("--ground", "--surface", "--surface-2")),
+    ("--text-dim", ("--ground", "--surface", "--surface-2")),
+    ("--text-faint", ("--ground", "--surface", "--surface-2")),
+    ("--mesh", ("--ground", "--surface", "--surface-2")),
+    ("--mesh-mark", ("--ground", "--surface", "--surface-2")),
+    ("--vpn", ("--ground", "--surface", "--surface-2")),
+    ("--mesh-ink", ("--mesh",)),
+)
+
 # The one Gatekeeper disclosure sentence every .gk-note element must carry.
 GATEKEEPER_NOTE = (
     "The app isn't notarized yet. The first time you open it, macOS asks you "
@@ -126,6 +141,9 @@ EXPECTED_REGIONS = (
 # ---------------------------------------------------------------------------
 
 RAW_COLOUR_RE = re.compile(r"#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])|\brgba?\(|\bhsla?\(")
+CUSTOM_PROPERTY_RE = re.compile(r"(--[A-Za-z0-9-]+)\s*:\s*([^;{}]+);")
+HEX_COLOUR_RE = re.compile(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
+VAR_REFERENCE_RE = re.compile(r"var\((--[A-Za-z0-9-]+)\)")
 FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(?P<value>[^;{}]+)")
 UPPERCASE_RE = re.compile(r"text-transform\s*:\s*uppercase")
 STYLE_BLOCK_RE = re.compile(r"<style\b[^>]*>(.*?)</style>", re.S)
@@ -806,6 +824,96 @@ def check_legacy_tokens(page, css_sources):
     return fails
 
 
+def parse_custom_properties(text):
+    """Map each custom property name in a CSS file to its (value, line)."""
+    props = {}
+    for match in CUSTOM_PROPERTY_RE.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        props[match.group(1)] = (match.group(2).strip(), line)
+    return props
+
+
+def resolve_token(props, name, _seen=()):
+    """Value of a custom property, following var() aliases; None if unknown."""
+    if name in _seen or name not in props:
+        return None
+    value = props[name][0]
+    alias = VAR_REFERENCE_RE.fullmatch(value)
+    if alias:
+        return resolve_token(props, alias.group(1), _seen + (name,))
+    return value
+
+
+def hex_rgb(value):
+    """(r, g, b) tuple of 0–255 values for a #rgb or #rrggbb literal, else None."""
+    match = HEX_COLOUR_RE.fullmatch(value or "")
+    if not match:
+        return None
+    digits = match.group(1)
+    if len(digits) == 3:
+        digits = "".join(char + char for char in digits)
+    return tuple(int(digits[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def relative_luminance(rgb):
+    """WCAG 2.x relative luminance of an (r, g, b) tuple of 0–255 values."""
+    def channel(byte):
+        srgb = byte / 255
+        return srgb / 12.92 if srgb <= 0.04045 else ((srgb + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(byte) for byte in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(fg_rgb, bg_rgb):
+    """WCAG 2.x contrast ratio between two (r, g, b) tuples."""
+    luminances = (relative_luminance(fg_rgb), relative_luminance(bg_rgb))
+    return (max(luminances) + 0.05) / (min(luminances) + 0.05)
+
+
+def check_contrast(css_sources):
+    """Every pair in CONTRAST_PAIRS must reach the AA minimum (4.5:1)."""
+    tokens = next(
+        (source for source in css_sources if source.rel == "assets/css/tokens.css"),
+        None,
+    )
+    if tokens is None:
+        return [Failure(
+            "assets/css/tokens.css", 1,
+            "tokens.css not found — the contrast check reads its custom properties",
+        )]
+    props = parse_custom_properties(tokens.text)
+    fails = []
+
+    def rgb_of(name, line):
+        rgb = hex_rgb(resolve_token(props, name))
+        if rgb is None:
+            fails.append(Failure(
+                tokens.rel, line,
+                f"{name} is missing or not a #rgb/#rrggbb colour"
+                " — the contrast check needs it",
+            ))
+        return rgb
+
+    for fg_name, bg_names in CONTRAST_PAIRS:
+        fg_line = props.get(fg_name, ("", 1))[1]
+        fg_rgb = rgb_of(fg_name, fg_line)
+        if fg_rgb is None:
+            continue
+        for bg_name in bg_names:
+            bg_rgb = rgb_of(bg_name, fg_line)
+            if bg_rgb is None:
+                continue
+            ratio = contrast_ratio(fg_rgb, bg_rgb)
+            if ratio < AA_MIN_CONTRAST:
+                fails.append(Failure(
+                    tokens.rel, fg_line,
+                    f"{fg_name} on {bg_name} is {ratio:.2f}:1"
+                    f" — below the {AA_MIN_CONTRAST}:1 AA minimum",
+                ))
+    return fails
+
+
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
@@ -882,6 +990,7 @@ def main(argv=None):
         ("anchors", lambda: check_anchors(pages, strict=args.strict)),
         ("names", lambda: check_names(pages)),
         ("banned", lambda: check_banned(root, pages, strict=args.strict)),
+        ("contrast", lambda: check_contrast(css_files)),
     ]
     if REQUIRE_REGIONS:
         checks.append(("regions", lambda: check_regions(landing)))

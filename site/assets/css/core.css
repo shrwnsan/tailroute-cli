@@ -7,7 +7,7 @@
 /* ============ OPEN CORE SPLIT (paper) ============ */
 .split { background: var(--paper); color: var(--paper-ink); }
 .split h2 em { color: #4d7c0f; } /* brand lime fails on paper (~1.5:1); deep lime keeps the family at ~4.5:1 */
-.split .k { color: #5c7f10; }
+.split .k { color: #4f6e0c; }
 .split .lede { color: var(--paper-dim); }
 .split-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .sc { border: 2px solid var(--paper-ink); border-radius: 20px; padding: 30px 30px 26px; background: #fffef9; display: flex; flex-direction: column; }
