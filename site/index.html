@@ -212,8 +212,11 @@
   .tl-ok { color: var(--lime); } .tl-warn { color: var(--amber); }
   .term-foot { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
   .term-foot span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); white-space: nowrap; }
-  .term-foot b { font-weight: 600; margin-left: 4px; min-width: 3ch; display: inline-block; }
-  .term-foot span:last-child b { min-width: 7ch; } /* widest phase label—row wrap must not depend on loop state */
+  /* value floors are sized to the widest bold glyph run per chip
+     (ch tracks regular weight—bold runs run wider) */
+  .term-foot b { font-weight: 600; margin-left: 4px; min-width: 3.5ch; display: inline-block; }
+  .term-foot span:nth-child(2) b { min-width: 4.5ch; } /* down */
+  .term-foot span:last-child b { min-width: 8ch; } /* COEXIST—row wrap must not depend on loop state */
   .fon { color: var(--lime); } .foff { color: var(--amber); }
 
   .mrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
