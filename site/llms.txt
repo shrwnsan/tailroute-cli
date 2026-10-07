@@ -2,7 +2,8 @@
 
 > tailroute is a fail-safe macOS daemon that keeps Tailscale and commercial VPNs (NordVPN, Mullvad, corporate VPN apps) working simultaneously. When a VPN connects it disables Tailscale's MagicDNS so internet keeps flowing through the VPN, and serves Tailscale peers through a local SOCKS5 proxy (127.0.0.1:1055) and launchd-managed browser tunnels with valid .ts.net TLS. Apache-2.0, no telemetry, no account.
 
-- Manual (this page): https://shrwnsan.github.io/tailroute-cli/
+- Landing page: https://shrwnsan.github.io/tailroute-cli/
+- Manual page: https://shrwnsan.github.io/tailroute-cli/docs/
 - GitHub repository: https://github.com/shrwnsan/tailroute-cli
 - Install: `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install`
 - Changelog: https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md
