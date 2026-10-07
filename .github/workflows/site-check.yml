@@ -1,0 +1,49 @@
+name: Site check
+
+# Guards the promises the landing page makes: no third-party subresources,
+# release-metric markers intact, JSON-LD that parses, FAQ text in sync with
+# its structured data, anchors that resolve, the CLI name in every title,
+# and retired claims that stay retired. The checker's own tests run
+# alongside it.
+#
+# Default mode is safe on every branch. --strict adds the design-system
+# checks and applies to pull requests that merge the site integration
+# branch into main, where the page is held to the full contract.
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "scripts/**"
+      - "tests/test-check-site.sh"
+      - ".github/workflows/site-check.yml"
+  push:
+    branches: [site/prd-007]
+    paths:
+      - "site/**"
+      - "scripts/**"
+      - "tests/test-check-site.sh"
+      - ".github/workflows/site-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Check the landing page
+        env:
+          STRICT: ${{ github.event_name == 'pull_request' && github.head_ref == 'site/prd-007' && github.base_ref == 'main' }}
+        run: |
+          if [ "$STRICT" = "true" ]; then
+            python3 scripts/check-site.py --strict
+          else
+            python3 scripts/check-site.py
+          fi
+
+      - name: Run the checker's tests
+        run: tests/run-tests.sh tests/test-check-site.sh
