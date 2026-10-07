@@ -1,0 +1,19 @@
+/* finale CTA band */
+.finale { background: var(--lime); color: var(--lime-ink); padding: 84px 0; }
+.finale h2 { color: var(--lime-ink); font-size: clamp(2.2rem, 4.4vw, 3.6rem); }
+.finale .fin-sub { font-size: 17px; color: rgba(22,26,5,0.72); margin: 14px 0 34px; max-width: 620px; font-weight: 500; }
+.fin-installs { display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
+.fin-chip { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.55); border: 2px solid var(--lime-ink); border-radius: 12px; padding: 11px 14px 11px 16px; }
+.fin-chip .flabel { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; width: 104px; flex-shrink: 0; }
+.fin-chip .fcmd { font-family: var(--mono); font-size: 13px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.fin-chip .fcmd::-webkit-scrollbar { display: none; }
+.fin-chip button { font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; background: var(--lime-ink); color: var(--lime); border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; flex-shrink: 0; }
+.fin-chip button.ok { background: #fffef9; color: var(--lime-ink); }
+.fin-micro { margin-top: 16px; font-family: var(--mono); font-size: 11px; color: rgba(22,26,5,0.65); }
+
+.fin-chip button.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+
+@media (max-width: 620px) {
+  .fin-chip { flex-wrap: wrap; }
+  .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--lime-ink); padding-top: 9px; }
+}

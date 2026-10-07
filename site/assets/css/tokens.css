@@ -1,0 +1,25 @@
+:root {
+  --bg: #0d0d0b;
+  --bg2: #121210;
+  --card: #161613;
+  --card2: #1b1b17;
+  --line: #262620;
+  --line2: #38382e;
+  --text: #f0efe8;
+  --dim: #a3a196;
+  --faint: #747267;
+  --lime: #c6f24e;
+  --lime-soft: rgba(198, 242, 78, 0.10);
+  --lime-line: rgba(198, 242, 78, 0.32);
+  --lime-ink: #161a05;
+  --mark: #74a41a;        /* chart marks only—validated for dark surface */
+  --amber: #e8a33d;
+  --amber-soft: rgba(232, 163, 61, 0.09);
+  --amber-line: rgba(232, 163, 61, 0.35);
+  --paper: #f4f2ea;
+  --paper-ink: #15150f;
+  --paper-dim: #5d5c52;
+  --disp: "Bricolage Grotesque", sans-serif;
+  --sans: "Instrument Sans", sans-serif;
+  --mono: "Geist Mono", monospace;
+}

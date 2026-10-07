@@ -1,0 +1,12 @@
+#faq { padding-top: 0; }
+
+/* ============ FAQ ============ */
+.faq { max-width: 800px; margin-top: 36px; }
+details.q { border-bottom: 1px solid var(--line); }
+details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary .pm { font-family: var(--mono); color: var(--lime); font-size: 18px; flex-shrink: 0; }
+details.q[open] summary .pm { transform: rotate(45deg); }
+details.q .a { padding: 0 4px 22px; color: var(--dim); font-size: 15px; max-width: 720px; }
+details.q .a b { color: var(--text); }
+details.q .a code { color: var(--text); }

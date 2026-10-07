@@ -36,9 +36,9 @@ run_checker() {
     CHECK_RC=$rc
 }
 
-# Same as run_checker, but with the regions check switched on. The check is
-# off until the page carries region markers; patching the module constant
-# simulates the state after that flip without editing the script.
+# Same as run_checker, but with the regions check switched on. The checker
+# enforces regions now, so the patch is a no-op; the helper stays so the
+# region cases keep working either way.
 run_checker_regions_on() {
     local dir="$1"
     shift
@@ -111,6 +111,7 @@ write_good_page() {
 </body>
 </html>
 HTML
+    add_region_markers "$dir"
 }
 
 # The good page plus everything --strict wants: the install anchor, a clean
@@ -166,10 +167,10 @@ region_marker_lines() {
     done
 }
 
-# The good page plus a balanced set of region markers in the expected order.
-write_region_page() {
+# Insert a balanced set of region markers in the expected order after <body>.
+# The checker enforces regions, so every fixture page carries the full set.
+add_region_markers() {
     local dir="$1"
-    write_good_page "$dir"
     local markers
     markers=$(region_marker_lines)
     python3 - "$dir/index.html" "$markers" <<'PY'
@@ -182,6 +183,13 @@ open(path, "w", encoding="utf-8").write(text.replace("<body>", "<body>\n" + mark
 PY
 }
 
+# The good page plus a balanced set of region markers in the expected order.
+# (The base fixture carries the markers since the regions check turned on.)
+write_region_page() {
+    local dir="$1"
+    write_good_page "$dir"
+}
+
 # ---------------------------------------------------------------------------
 # Whole-run behaviour
 # ---------------------------------------------------------------------------
@@ -192,7 +200,7 @@ test_clean_page_passes_default_checks() {
     write_good_page "$dir"
     run_checker "$dir"
     assert_eq "0" "$CHECK_RC" "expected the clean fixture to pass: $CHECK_OUT"
-    assert_contains "OK 7 checks" "$CHECK_OUT"
+    assert_contains "OK 8 checks" "$CHECK_OUT"
 }
 
 test_clean_page_passes_strict_checks() {
@@ -201,7 +209,7 @@ test_clean_page_passes_strict_checks() {
     write_strict_clean_page "$dir"
     run_checker "$dir" --strict
     assert_eq "0" "$CHECK_RC" "expected the strict-clean fixture to pass: $CHECK_OUT"
-    assert_contains "OK 16 checks" "$CHECK_OUT"
+    assert_contains "OK 17 checks" "$CHECK_OUT"
 }
 
 # ---------------------------------------------------------------------------
@@ -537,16 +545,16 @@ test_legacy_tokens_flags_old_token_names() {
 }
 
 # ---------------------------------------------------------------------------
-# regions (off until the page carries region markers)
+# regions (enforced; --region scopes the strict checks)
 # ---------------------------------------------------------------------------
 
-test_region_flag_errors_until_regions_required() {
+test_region_flag_scopes_strict_checks() {
     local dir
     dir=$(make_fixture)
-    write_good_page "$dir"
-    run_checker "$dir" --region hero
-    assert_eq "2" "$CHECK_RC" "--region must error while regions are off"
-    assert_contains "--region" "$CHECK_OUT"
+    write_strict_clean_page "$dir"
+    run_checker "$dir" --strict --region hero
+    assert_eq "0" "$CHECK_RC" "--region scopes the strict checks to one region: $CHECK_OUT"
+    assert_contains "OK 16 checks" "$CHECK_OUT"
 }
 
 test_regions_pass_when_enabled() {
