@@ -11,7 +11,11 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "scripts/**"
       - ".github/workflows/deploy-site.yml"
+  schedule:
+    # weekly refresh so hero metrics stay current even when the site has not changed
+    - cron: "17 9 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +37,11 @@ jobs:
         with:
           ref: gh-pages
           path: gh-pages
+
+      - name: Inject live release metrics
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/update-metrics.py
 
       - name: Sync site into gh-pages
         run: |
