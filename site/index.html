@@ -13,6 +13,9 @@
   <meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/">
   <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="tailroute — Tailscale + VPN coexistence for macOS">
+  <meta name="twitter:description" content="Keep working. VPN up, tailnet up.">
+  <meta name="twitter:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -131,9 +134,22 @@
   /* stat band */
   .band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-top: 56px; }
   .stat { background: var(--bg2); padding: 16px 18px; display: flex; align-items: baseline; gap: 10px; }
-  .stat b { font-family: var(--disp); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
-  .stat b i { font-style: normal; color: var(--lime); }
-  .stat span { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); flex: 1; min-width: 0; }
+  .stat dd { margin: 0; order: -1; font-family: var(--disp); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
+  .stat dd i { font-style: normal; color: var(--lime); }
+  .stat dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); flex: 1; min-width: 0; }
+
+
+  /* ---- section-scoped extraction (markup hygiene pass) ---- */
+  #faq, #support { padding-top: 0; }
+  .compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }
+  .compat-copy { max-width: 560px; }
+  .matrix-foot { margin-top: 16px; }
+  .matrix-note { margin-top: 16px; font-size: 13.5px; }
+  .sc-body { font-size: 14.5px; color: #c9c8bd; }
+  .sc-body.alt { color: var(--paper-dim); }
+  .limits-k { color: var(--amber); }
+  .limits-note { margin-top: 14px; font-size: 13.5px; }
+  .sup-note { color: var(--dim); margin-top: 14px; max-width: 480px; }
 
   /* ============ SECTION SCAFFOLD ============ */
   section { padding: 96px 0; }
@@ -210,7 +226,7 @@
   /* ============ PROOF / CHART ============ */
   .proof { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .proof-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: start; }
-  .chart-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 14px; }
+  .chart-card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 14px; }
   .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .chart-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
   .chart-hi { font-family: var(--mono); font-size: 11px; color: var(--mark); }
@@ -225,6 +241,7 @@
   details.data td, details.data th { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--line); }
   .feed { display: flex; flex-direction: column; gap: 0; }
   .feed-item { display: flex; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .feed-item.last { border-bottom: none; }
   .feed-item:first-child { padding-top: 4px; }
   .feed-v { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--lime); min-width: 64px; flex-shrink: 0; }
   .feed-t { font-size: 14px; color: var(--dim); }
@@ -274,7 +291,7 @@
   .honest .vpnline span { font-family: var(--mono); font-size: 11px; color: var(--amber); border: 1px solid var(--amber-line); border-radius: 999px; padding: 4px 11px; }
 
   /* ============ FAQ ============ */
-  .faq { max-width: 800px; }
+  .faq { max-width: 800px; margin-top: 36px; }
   details.q { border-bottom: 1px solid var(--line); }
   details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
   details.q summary::-webkit-details-marker { display: none; }
@@ -309,6 +326,7 @@
 
   html.js .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2,0.65,0.3,1); }
   html.js .reveal.in { opacity: 1; transform: none; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; border-radius: 4px; }
   .reveal.d1 { transition-delay: 0.07s; } .reveal.d2 { transition-delay: 0.15s; } .reveal.d3 { transition-delay: 0.23s; }
 
   @media (max-width: 1000px) {
@@ -328,7 +346,7 @@
     h1 { font-size: clamp(2.2rem, 10vw, 2.8rem); }
     .menu-bar { flex-wrap: wrap; }
     .band { grid-template-columns: 1fr; }
-    .stat b { font-size: 21px; }
+    .stat dd { font-size: 21px; }
     .sw-body { flex-wrap: wrap; }
     .sw-cmd { flex-basis: 100%; }
     .probband { grid-template-columns: 1fr; }
@@ -425,7 +443,7 @@
 </head>
 <body>
 
-<nav>
+<nav aria-label="Primary">
   <div class="nav-in">
     <div class="brand-wrap">
       <a class="brand" href="#top">tailroute<i>.</i></a>
@@ -467,10 +485,10 @@
 
           <div class="switcher reveal d3">
             <div class="sw-tabs" role="tablist" aria-label="Install target">
-              <button class="sw-tab on" id="tab-app" role="tab" aria-selected="true">Menu bar app <span class="tagx">early access · free</span></button>
-              <button class="sw-tab" id="tab-cli" role="tab" aria-selected="false">CLI daemon <span class="tagx">apache-2.0</span></button>
+              <button class="sw-tab on" id="tab-app" role="tab" aria-selected="true" aria-controls="sw-panel">Menu bar app <span class="tagx">early access · free</span></button>
+              <button class="sw-tab" id="tab-cli" role="tab" aria-selected="false" aria-controls="sw-panel" tabindex="-1">CLI daemon <span class="tagx">apache-2.0</span></button>
             </div>
-            <div class="sw-body">
+            <div class="sw-body" id="sw-panel" role="tabpanel" aria-label="Install command">
               <span class="sw-cmd"><span class="sw-p">$</span><span id="sw-text">brew install --cask shrwnsan/tap/tailroute</span></span>
               <span class="sw-note" id="sw-note">includes the CLI</span>
               <button class="copy" id="sw-copy" type="button">Copy</button>
@@ -515,12 +533,12 @@
         </div>
       </div>
 
-      <div class="band reveal">
-        <div class="stat"><b><i>31</i></b><span>tagged releases · public since mar ’26</span></div>
-        <div class="stat"><b>417</b><span>shell tests · 348 → 417 in five weeks</span></div>
-        <div class="stat"><b><i>0</i></b><span>telemetry · external calls · accounts</span></div>
-        <div class="stat"><b><i>$0</i></b><span>forever · apache-2.0 core</span></div>
-      </div>
+      <dl class="band reveal">
+        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd><i>31</i></dd></div>
+        <div class="stat"><dt>shell tests · 348 → 417 in five weeks</dt><dd>417</dd></div>
+        <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
+        <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
+      </dl>
     </div>
   </header>
 
@@ -548,12 +566,12 @@
         <div class="b-card b5 reveal d2">
           <p class="b-k">the matrix</p>
           <h3>Three states, zero judgment calls</h3>
-          <div style="margin-top:16px">
+          <div class="matrix-foot">
             <div class="mrow"><span class="led led-l"></span><b>VPN + Tailscale</b><span>dns off · proxy up</span></div>
             <div class="mrow"><span class="led led-m"></span><b>Tailscale only</b><span>dns on · proxy down</span></div>
             <div class="mrow"><span class="led led-o"></span><b>No Tailscale</b><span>watching…</span></div>
           </div>
-          <p style="margin-top:16px;font-size:13.5px"><b>Ambiguous?</b> Two VPNs at once—it logs a warning and does nothing. Fail-safe first.</p>
+          <p class="matrix-note"><b>Ambiguous?</b> Two VPNs at once—it logs a warning and does nothing. Fail-safe first.</p>
         </div>
 
         <div class="probband reveal d1">
@@ -582,8 +600,8 @@
         </div>
 
         <div class="b-card b12 reveal d1">
-          <div style="display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap;align-items:center">
-            <div style="max-width:560px">
+          <div class="compat-head">
+            <div class="compat-copy">
               <p class="b-k">compatibility</p>
               <h3>Works with any utun-route VPN</h3>
               <p>The daemon classifies routing changes from any VPN that takes the default route—including corporate clients
@@ -614,7 +632,7 @@
       <p class="lede reveal d2">No stars to flex, no fake logos. The repo is six months old and the commit history is the pitch: a slow spring, then a hardening sprint that hasn&rsquo;t stopped.</p>
 
       <div class="proof-grid">
-        <div class="chart-card reveal d1" style="position:relative">
+        <div class="chart-card reveal d1">
           <div class="chart-head">
             <span class="chart-title">Tagged releases—cumulative</span>
             <span class="chart-hi">29 of 31 releases shipped since Aug 24</span>
@@ -668,7 +686,7 @@
             <div class="feed-item"><span class="feed-v">0.8.16</span><div><p class="feed-t"><b>Second peers stay removable</b>—hosts mappings land inside the managed block.</p><p class="feed-d">2026-09-24 · tests 406 → 408</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.15</span><div><p class="feed-t"><b>Proxy registry self-heals against reality</b>—and the auth key no longer leaks through argv.</p><p class="feed-d">2026-09-23 · tests 383 → 405</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.14</span><div><p class="feed-t"><b>Every tunnel verb accepts the ssh alias</b>—no more dead ends on <code>tunnel check prime</code>.</p><p class="feed-d">2026-09-23 · tests 367 → 383</p></div></div>
-            <div class="feed-item" style="border-bottom:none"><span class="feed-v">0.8.11</span><div><p class="feed-t"><b><code>tunnel check</code></b>—the browser&rsquo;s truth: hosts → listener → TLS → HTTP, zero ssh.</p><p class="feed-d">2026-09-03 · read-only by construction</p></div></div>
+            <div class="feed-item last"><span class="feed-v">0.8.11</span><div><p class="feed-t"><b><code>tunnel check</code></b>—the browser&rsquo;s truth: hosts → listener → TLS → HTTP, zero ssh.</p><p class="feed-d">2026-09-03 · read-only by construction</p></div></div>
           </div>
           <p class="sprint"><b>22 releases in 72 hours</b> (Sep 1–3)—the v0.7→v0.8 hardening sprint: a burst of fixes after the 0.8.0 rewrite, each one tagged and tested. Full history: <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md ↗</a></p>
         </div>
@@ -687,7 +705,7 @@
         <div class="sc core reveal d1">
           <p class="sc-tag">The core—CLI daemon</p>
           <h3>Everything, in your terminal</h3>
-          <p style="color:#c9c8bd;font-size:14.5px">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
+          <p class="sc-body">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
           <p class="price">$0 <small>forever · Apache-2.0 · no account</small></p>
           <ul class="sc-core-list">
             <li>Every feature, no gates—proxies, tunnels, helpers</li>
@@ -701,7 +719,7 @@
         <div class="sc app reveal d2">
           <p class="sc-tag">The shell—menu bar app</p>
           <h3>Set it and forget it</h3>
-          <p style="color:var(--paper-dim);font-size:14.5px">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
+          <p class="sc-body alt">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
           <p class="price">Free <small>during early access · planned one-time license at v1.0—never a subscription</small></p>
           <ul class="sc-app-list">
             <li>Menu bar icon with live connection state</li>
@@ -718,7 +736,7 @@
   <!-- HONESTY -->
   <section id="limits">
     <div class="wrap">
-      <p class="k reveal" style="color:var(--amber)">Honest limits</p>
+      <p class="k reveal limits-k">Honest limits</p>
       <h2 class="reveal d1">What it can&rsquo;t fix</h2>
       <p class="lede reveal d2">Told up front, not discovered later.</p>
       <div class="honest reveal d2">
@@ -731,54 +749,54 @@
           <span>NordVPN—CGNAT blocked</span>
           <span>older VPNs—often fine</span>
         </div>
-        <p style="margin-top:14px;font-size:13.5px">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
+        <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
       </div>
     </div>
   </section>
 
   <!-- FAQ -->
-  <section id="faq" style="padding-top:0">
+<section id="faq">
     <div class="wrap">
       <p class="k reveal">FAQ</p>
       <h2 class="reveal d1">Asked, answered</h2>
-      <div class="faq" style="margin-top:36px">
+      <div class="faq">
         <details class="q reveal d1">
-          <summary>Can I use Tailscale and my VPN at the same time on a Mac? <span class="pm">+</span></summary>
+          <summary>Can I use Tailscale and my VPN at the same time on a Mac? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">Yes—that&rsquo;s exactly what tailroute does. When your VPN connects, the daemon toggles MagicDNS off and brings up a
             local SOCKS5 proxy, so <b>internet flows through the VPN while peers stay reachable through the mesh</b>—and it reverses
             itself when the VPN disconnects. Any VPN that takes the default route works; VPNs that also block Tailscale&rsquo;s CGNAT
             range at the packet level (Mullvad, NordVPN) still need that proxy or a tunnel for direct peer traffic—next question covers those.</div>
         </details>
         <details class="q reveal d1">
-          <summary>Does it work with Mullvad or NordVPN? <span class="pm">+</span></summary>
+          <summary>Does it work with Mullvad or NordVPN? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The <b>DNS fix works</b>—internet stays up through the VPN with Tailscale connected. But both VPNs block
             direct traffic to Tailscale&rsquo;s CGNAT range at the Network-Extension layer, so <b>direct peer connections fail</b>;
             use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes.</div>
         </details>
         <details class="q reveal d1">
-          <summary>What about corporate VPNs—Cisco AnyConnect, GlobalProtect, Zscaler? <span class="pm">+</span></summary>
+          <summary>What about corporate VPNs—Cisco AnyConnect, GlobalProtect, Zscaler? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The daemon classifies routing changes from <b>any VPN that takes the default route</b>—no per-VPN
             plugins, no allowlists. The DNS conflict is fixed automatically either way; if the corporate client also blocks
             the CGNAT range at the Network-Extension layer, the same proxy-and-tunnel path bridges your peers.</div>
         </details>
         <details class="q reveal d1">
-          <summary>Which Tailscale install does it need? <span class="pm">+</span></summary>
+          <summary>Which Tailscale install does it need? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The <b>CLI daemon</b> (<code>brew install tailscale</code>) is fully supported—tailroute toggles DNS over its unix socket.
             The GUI app works with limitations (fall-back MagicDNS detection), and the Mac App Store version is not supported.</div>
         </details>
         <details class="q reveal d1">
-          <summary>Does it phone home? <span class="pm">+</span></summary>
+          <summary>Does it phone home? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network
             activity is the proxy and tunnels you configure, pointing at your own tailnet.</div>
         </details>
         <details class="q reveal d1">
-          <summary>It runs as root—why should I trust it? <span class="pm">+</span></summary>
+          <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
             <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
             strict input validation, absolute paths only, fail-safe on ambiguous state, and a public threat model.
             The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q reveal d2">
-          <summary>What happens when I quit the VPN or uninstall? <span class="pm">+</span></summary>
+          <summary>What happens when I quit the VPN or uninstall? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">VPN disconnects → MagicDNS is restored automatically (within ~60s, event-driven). Uninstall restores MagicDNS
             state, removes the daemon, tunnels, and hosts entries—and preserves logs for review.</div>
         </details>
@@ -787,13 +805,13 @@
   </section>
 
   <!-- SUPPORT -->
-  <section id="support" style="padding-top:0">
+<section id="support">
     <div class="wrap">
       <div class="sup-card reveal">
         <div>
           <p class="k">Support the work</p>
           <h2>Open source isn&rsquo;t <em>free to build.</em></h2>
-          <p style="color:var(--dim);margin-top:14px;max-width:480px">The CLI stays free and open source. If tailroute saved your sanity mid-deadline, a star or a sponsorship keeps the hardening sprint going.</p>
+          <p class="sup-note">The CLI stays free and open source. If tailroute saved your sanity mid-deadline, a star or a sponsorship keeps the hardening sprint going.</p>
           <div class="sup-actions">
             <a class="btn-lime" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">★ Star on GitHub</a>
             <!-- TODO: uncomment once a channel is live
@@ -885,10 +903,20 @@
     current = which;
     tabApp.classList.toggle("on", which === "app"); tabApp.setAttribute("aria-selected", which === "app");
     tabCli.classList.toggle("on", which === "cli"); tabCli.setAttribute("aria-selected", which === "cli");
+    tabApp.tabIndex = which === "app" ? 0 : -1; tabCli.tabIndex = which === "cli" ? 0 : -1;
     swText.textContent = CMDS[which].cmd; swNote.textContent = CMDS[which].note;
   }
   tabApp.addEventListener("click", function () { pick("app"); });
   tabCli.addEventListener("click", function () { pick("cli"); });
+  [tabApp, tabCli].forEach(function (t) {
+    t.addEventListener("keydown", function (ev) {
+      if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+      ev.preventDefault();
+      var toCli = t === tabApp;
+      pick(toCli ? "cli" : "app");
+      (toCli ? tabCli : tabApp).focus();
+    });
+  });
   function honestCopy(text, btn, okLabel, resetLabel, okClass, failLabel) {
     function ok() { btn.textContent = okLabel; btn.classList.add(okClass); setTimeout(function () { btn.textContent = resetLabel; btn.classList.remove(okClass); }, 1600); }
     function fail() { btn.textContent = failLabel; btn.classList.add("fail"); setTimeout(function () { btn.textContent = resetLabel; btn.classList.remove("fail"); }, 2400); }
