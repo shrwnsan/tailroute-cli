@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>tailroute-cli — Tailscale + VPN coexistence daemon for macOS</title>
-<meta name="description" content="tailroute-cli manual: a fail-safe macOS launchd daemon that toggles Tailscale MagicDNS when a VPN connects — internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
-<link rel="canonical" href="https://shrwnsan.github.io/tailroute-cli/">
+<title>tailroute-cli—Tailscale + VPN coexistence daemon for macOS</title>
+<meta name="description" content="tailroute-cli manual: a fail-safe macOS launchd daemon that toggles Tailscale MagicDNS when a VPN connects—internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
+<link rel="canonical" href="https://shrwnsan.github.io/tailroute-cli/docs/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="tailroute-cli">
-<meta property="og:title" content="tailroute-cli — Tailscale + VPN coexistence for macOS">
-<meta property="og:description" content="A fail-safe launchd daemon toggles MagicDNS when your VPN connects — internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
-<meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/">
+<meta property="og:title" content="tailroute-cli—Tailscale + VPN coexistence for macOS">
+<meta property="og:description" content="A fail-safe launchd daemon toggles MagicDNS when your VPN connects—internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
+<meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/docs/">
 <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -21,17 +21,17 @@
   "name": "tailroute-cli",
   "operatingSystem": "macOS 12+",
   "applicationCategory": "UtilitiesApplication",
-  "description": "Fail-safe macOS daemon that toggles Tailscale MagicDNS when a VPN connects — internet through the VPN, peers through the mesh. Includes a SOCKS5 mesh proxy and launchd-managed browser tunnels.",
+  "description": "Fail-safe macOS daemon that toggles Tailscale MagicDNS when a VPN connects—internet through the VPN, peers through the mesh. Includes a SOCKS5 mesh proxy and launchd-managed browser tunnels.",
   "softwareVersion": "0.8.17",
   "license": "https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE",
-  "url": "https://shrwnsan.github.io/tailroute-cli/",
+  "url": "https://shrwnsan.github.io/tailroute-cli/docs/",
   "codeRepository": "https://github.com/shrwnsan/tailroute-cli",
   "author": { "@type": "Person", "name": "shrwnsan", "url": "https://github.com/shrwnsan" },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
 }
 </script>
 <style>
-  /* Deliberate choice: system monospace stack — this page is styled as the man
+  /* Deliberate choice: system monospace stack—this page is styled as the man
      page it documents. No webfonts, no animations, no transitions. */
   :root {
     color-scheme: light dark;
@@ -107,6 +107,11 @@
     align-self: center;
   }
   .badge.free { color: var(--green); border-color: var(--green); }
+  /* on-this-page toc + backlink to landing */
+  .backlink { color: var(--dim); white-space: nowrap; }
+  .toc { font-size: 12px; color: var(--dim); margin: 0 0 8px; }
+  .toc .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint); }
+  .toc a { color: var(--dim); }
   .synopsis {
     background: var(--paper);
     border-left: 3px solid var(--ink);
@@ -164,6 +169,7 @@
   .slabel { font-size: 11px; fill: var(--dim); font-family: inherit; }
   .figcap { font-size: 11px; color: var(--faint); margin-top: 6px; }
   @keyframes figflow { to { stroke-dashoffset: -10; } }
+  :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .sedge.hot { animation: none; } }
 </style>
 </head>
@@ -171,17 +177,28 @@
 <main>
 
   <h1>tailroute</h1>
-  <p class="meta"><span class="badge">alpha</span> <span class="badge free">v0.8.17</span> <span>tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</span></p>
+  <p class="meta"><a class="backlink" href="../">← tailroute</a> <span class="badge">alpha</span> <span class="badge free">v0.8.17</span> <span>tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</span></p>
+  <p class="toc"><span class="toc-label">On this page</span> ·
+     <a href="#name">name</a> ·
+     <a href="#the-problem">the problem</a> ·
+     <a href="#synopsis">synopsis</a> ·
+     <a href="#description">description</a> ·
+     <a href="#states">states</a> ·
+     <a href="#browser-tunnels">browser tunnels</a> ·
+     <a href="#what-it-cannot-fix">what it cannot fix</a> ·
+     <a href="#security">security</a> ·
+     <a href="#diagnostics">diagnostics</a> ·
+     <a href="#see-also">see also</a></p>
 
-  <h2>Name</h2>
-  <p><b>tailroute</b> — automatic Tailscale + VPN coexistence daemon for macOS</p>
+  <h2 id="name">Name</h2>
+  <p><b>tailroute</b>—automatic Tailscale + VPN coexistence daemon for macOS</p>
 
-  <h2>The problem</h2>
+  <h2 id="the-problem">The problem</h2>
   <p>Most commercial VPNs on macOS don't support split tunneling. The moment the
      VPN connects, it takes the default route and the DNS path with it:
      MagicDNS becomes unreachable, <code>*.ts.net</code> names stop resolving, and
      some VPNs also drop traffic to Tailscale's CGNAT range entirely. You are left
-     choosing between internet and your peers — or hand-editing
+     choosing between internet and your peers—or hand-editing
      <code>--accept-dns</code> every time.</p>
   <p><b>tailroute refuses the choice.</b> It watches the routing table and makes
      the same call a careful admin would make, every time:</p>
@@ -215,11 +232,11 @@
     <path class="sedge" id="e2-startoff" d="M108,268 C58,240 58,136 92,70" marker-end="url(#ah2)"/><text class="slabel" x="4" y="172">starts ·</text><text class="slabel" x="4" y="186">no vpn</text>
     <path class="sedge" id="e2-starton" d="M272,268 C322,240 322,136 288,70" marker-end="url(#ah2)"/><text class="slabel" x="328" y="172">starts ·</text><text class="slabel" x="328" y="186">vpn on</text>
   </svg>
-  <p class="figcap">fig. 1 — the decision state machine; route-monitor events replayed below</p>
+  <p class="figcap">fig. 1—the decision state machine; route-monitor events replayed below</p>
   <p class="note" id="fig-caption">…</p>
   </div>
 
-  <h2>Synopsis</h2>
+  <h2 id="synopsis">Synopsis</h2>
   <div class="synopsis">
     <div><span class="p">$</span> brew install shrwnsan/tap/tailroute-cli <button data-copy="brew install shrwnsan/tap/tailroute-cli">copy</button></div>
     <div><span class="p">$</span> sudo tailroute install <button data-copy="sudo tailroute install">copy</button></div>
@@ -228,9 +245,9 @@
   <p class="note">Menu bar app (same engine, native UI, free during early access):
     <code>brew install --cask shrwnsan/tap/tailroute</code></p>
   <p class="note">No Homebrew? <a href="https://github.com/shrwnsan/tailroute-cli/releases/latest" target="_blank" rel="noopener">Download the DMG ↗</a>
-    · sha256 published on the release · unsigned — macOS will ask you to approve the first launch</p>
+    · sha256 published on the release · unsigned—macOS will ask you to approve the first launch</p>
 
-  <h2>Description</h2>
+  <h2 id="description">Description</h2>
   <p><b>tailroute</b> is a launchd daemon that watches the macOS routing table. When a
      commercial VPN connects, it disables Tailscale's MagicDNS so internet traffic
      keeps flowing through the VPN, and starts a SOCKS5 proxy on
@@ -240,7 +257,7 @@
   <p>It manages exactly one thing and touches nothing else. If state is ambiguous
      (e.g. two VPNs active), it logs a warning and changes nothing.</p>
 
-  <h2>States</h2>
+  <h2 id="states">States</h2>
   <table class="states">
     <thead><tr><th>Condition</th><th>MagicDNS</th><th>SOCKS5 proxy</th><th>Else</th></tr></thead>
     <tbody>
@@ -250,9 +267,9 @@
     </tbody>
   </table>
 
-  <h2>Browser tunnels</h2>
+  <h2 id="browser-tunnels">Browser tunnels</h2>
   <p>Register a peer's Tailscale Serve dashboard once and open it in any browser
-     with a valid <code>.ts.net</code> certificate — no extensions, no warnings.
+     with a valid <code>.ts.net</code> certificate—no extensions, no warnings.
      Tunnels are launchd-managed and adapt automatically: SOCKS5 path when the
      VPN is up, direct otherwise.</p>
   <div class="synopsis">
@@ -260,17 +277,17 @@
   </div>
   <p class="note indent">→ https://mypeer.yourtailnet.ts.net:8443</p>
 
-  <h2>What it cannot fix</h2>
+  <h2 id="what-it-cannot-fix">What it cannot fix</h2>
   <p>VPN Network Extensions may still block traffic to Tailscale's CGNAT range
      (<code>100.64/10</code>) at the packet level. Tested and blocked:
      <b>Mullvad</b> (WireGuard), <b>NordVPN</b> (NordLynx, OpenVPN, NordWhisper).
      The SOCKS5 proxy and tunnels are the supported paths when that happens.
-     While the VPN is active, MagicDNS names do not resolve — use
+     While the VPN is active, MagicDNS names do not resolve—use
      <code>100.x</code> addresses or a tunnel.</p>
   <p class="note">Report your VPN's behavior:
      <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml">open a vpn-compat issue</a></p>
 
-  <h2>Security</h2>
+  <h2 id="security">Security</h2>
   <ul>
     <li>Runs as a root launchd daemon; install writes a SHA-256 manifest
         (<code>/var/db/tailroute/installed.checksums</code>) verified before any library loads.</li>
@@ -279,7 +296,7 @@
     <li>417 tests as of v0.8.17. Source: <a href="https://github.com/shrwnsan/tailroute-cli">github.com/shrwnsan/tailroute-cli</a></li>
   </ul>
 
-  <h2>Diagnostics</h2>
+  <h2 id="diagnostics">Diagnostics</h2>
   <div class="synopsis">
     <div><span class="p">$</span> tailroute status</div>
   </div>
@@ -288,17 +305,17 @@
   <p>Preview without changes: <code>tailroute --dry-run</code>.
      Logs: <code>tail -f /var/log/tailroute.log</code>.</p>
 
-  <h2>See also</h2>
+  <h2 id="see-also">See also</h2>
   <ul>
-    <li><a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md">CHANGELOG.md</a> — release history</li>
-    <li><a href="https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md">architecture.md</a> — system design</li>
+    <li><a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md">CHANGELOG.md</a>—release history</li>
+    <li><a href="https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md">architecture.md</a>—system design</li>
     <li><a href="https://github.com/shrwnsan/tailroute-cli/releases">Releases</a> · <a href="https://github.com/shrwnsan/tailroute-cli/issues">Issues</a> · <a href="https://github.com/shrwnsan/tailroute-cli#readme">Full manual on GitHub</a></li>
   </ul>
 
 </main>
 <footer>
-  <p class="colophon">No trackers, no webfonts, no analytics on this page — the daemon doesn't call home either.</p>
-  <p class="legal">CLI: Apache-2.0 · App: proprietary · © 2026 shrwnsan · not affiliated with Tailscale Inc.</p>
+  <p class="colophon">No trackers, no webfonts, no analytics on this page—the daemon doesn't call home either.</p>
+  <p class="legal">CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc. · <a class="backlink" href="../">← tailroute</a></p>
 </footer>
 <script>
 function honestCopy(text, btn) {
