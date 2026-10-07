@@ -29,7 +29,6 @@
 <script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/chart.js"></script>
 <script defer src="assets/js/nav.js"></script>
-<script defer src="assets/js/reveal.js"></script>
 <!-- /region:assets -->
 
 <!-- region:meta owner:T-720 -->
@@ -120,16 +119,16 @@
     <div class="wrap">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow reveal">
+          <div class="eyebrow">
             <span class="hot">Open core · Apache-2.0 CLI</span>
             <span>macOS 15+</span>
             <span>fail-safe by design</span>
           </div>
-          <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
-          <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS when your VPN connects—and back when it drops—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
+          <h1><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
+          <p class="hero-sub">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS when your VPN connects—and back when it drops—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
             fail-safe, self-verifying, and entirely local.</p>
 
-          <div class="install reveal d3" data-install id="hero-install">
+          <div class="install" data-install id="hero-install">
             <div class="install-tabs" role="tablist" aria-label="Install target">
               <button class="install-tab" type="button" role="tab" id="hero-tab-app" aria-controls="hero-panel-app" aria-selected="true">Menu bar app <span class="tagx">early access · free</span></button>
               <button class="install-tab" type="button" role="tab" id="hero-tab-cli" aria-controls="hero-panel-cli" aria-selected="false" tabindex="-1">CLI daemon <span class="tagx">apache-2.0</span></button>
@@ -147,9 +146,9 @@
               <button class="copy" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-target="hero-cmd-cli" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
             </div>
           </div>
-          <p class="microcopy reveal d3">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
+          <p class="microcopy">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
 
-          <div class="hero-cta reveal d3">
+          <div class="hero-cta">
             <a class="ghost" href="#core">Free core vs the app ↓</a>
             <a class="ghost" href="docs/">Full docs ↗</a>
             <!-- DMG direct download: uncomment only once builds are notarized (v0.3.0). Two blockers on record:
@@ -163,7 +162,7 @@
         </div>
 
         <!-- region:diagram owner:T-721 -->
-        <div class="hero-visual reveal d2" aria-hidden="true">
+        <div class="hero-visual" aria-hidden="true">
           <div class="hcard">
             <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
             <div class="hcard-body">
@@ -195,12 +194,12 @@
   <!-- BENTO FEATURES -->
   <section id="features">
     <div class="wrap">
-      <p class="k reveal">What it does</p>
-      <h2 class="reveal d1">A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
-      <p class="lede reveal d2">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
+      <p class="k">What it does</p>
+      <h2>A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
+      <p class="lede">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
 
       <div class="bento">
-        <div class="b-card b7 reveal d1">
+        <div class="b-card b7">
           <p class="b-k">demo · the decision loop, replayed</p>
           <div class="terminal">
             <div class="term-bar"><i></i><i></i><i></i><span>tailroute daemon—demo loop</span></div>
@@ -213,7 +212,7 @@
           </div>
         </div>
 
-        <div class="b-card b5 reveal d2">
+        <div class="b-card b5">
           <p class="b-k">the matrix</p>
           <h3>Three states, zero judgment calls</h3>
           <div class="matrix-foot">
@@ -224,7 +223,7 @@
           <p class="matrix-note"><b>Ambiguous?</b> Two VPNs at once—it logs a warning and does nothing. Fail-safe first.</p>
         </div>
 
-        <div class="probband reveal d1">
+        <div class="probband">
           <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
           <div class="resp"><h3><i>01</i>SOCKS5 mesh proxy</h3>
             <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
@@ -232,7 +231,7 @@
             Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
         </div>
 
-        <div class="probband reveal d2">
+        <div class="probband">
           <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
           <div class="resp"><h3><i>02</i>Browser tunnels</h3>
             <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
@@ -249,10 +248,10 @@
   <!-- HONESTY -->
   <section id="limits">
     <div class="wrap">
-      <p class="k reveal limits-k">Honest limits</p>
-      <h2 class="reveal d1">What it can&rsquo;t fix</h2>
-      <p class="lede reveal d2">Told up front, not discovered later.</p>
-      <div class="honest reveal d2">
+      <p class="k limits-k">Honest limits</p>
+      <h2>What it can&rsquo;t fix</h2>
+      <p class="lede">Told up front, not discovered later.</p>
+      <div class="honest">
         <h3>Network Extensions can still block the mesh</h3>
         <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic—including packets to Tailscale&rsquo;s CGNAT range
            (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
@@ -265,7 +264,7 @@
         <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
       </div>
 
-      <div class="b-card b12 reveal d1">
+      <div class="b-card b12">
         <div class="compat-head">
           <div class="compat-copy">
             <p class="b-k">compatibility</p>
@@ -294,17 +293,17 @@
   <!-- PROOF -->
   <section class="proof" id="proof">
     <div class="wrap">
-      <dl class="band reveal">
+      <dl class="band">
         <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>31</i></dd></div>
         <div class="stat"><dt>shell tests · 348 → 417 in five weeks</dt><dd>417</dd></div>
         <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
         <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
       </dl>
-      <p class="k reveal">Built in the open</p>
-      <h2 class="reveal d1">Shipped, not <em>promised.</em></h2>
-      <p class="lede reveal d2">No stars to flex, no fake logos. The repo is six months old and the commit history is the pitch: a slow spring, then a hardening sprint that hasn&rsquo;t stopped.</p>
+      <p class="k">Built in the open</p>
+      <h2>Shipped, not <em>promised.</em></h2>
+      <p class="lede">No stars to flex, no fake logos. The repo is six months old and the commit history is the pitch: a slow spring, then a hardening sprint that hasn&rsquo;t stopped.</p>
 
-      <div class="probband reveal d3">
+      <div class="probband">
         <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
         <div class="resp"><h3><i>03</i>Self-verifying install</h3>
           <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
@@ -313,7 +312,7 @@
       </div>
 
       <div class="proof-grid">
-        <div class="chart-card reveal d1">
+        <div class="chart-card">
           <div class="chart-head">
             <span class="chart-title">Tagged releases—cumulative</span>
             <span class="chart-hi">29 of 31 releases shipped since Aug 24</span>
@@ -361,7 +360,7 @@
           </details>
         </div>
 
-        <div class="reveal d2">
+        <div>
           <div class="feed">
             <div class="feed-item"><span class="feed-v">0.8.17</span><div><p class="feed-t"><b>Log rotation actually rotates</b>—staged at daemon startup for every layout; integrity manifest now layout-aware.</p><p class="feed-d">2026-09-30 · tests 408 → 417</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.16</span><div><p class="feed-t"><b>Second peers stay removable</b>—hosts mappings land inside the managed block.</p><p class="feed-d">2026-09-24 · tests 406 → 408</p></div></div>
@@ -390,12 +389,12 @@
   <!-- OPEN CORE SPLIT -->
   <section class="split" id="core">
     <div class="wrap">
-      <p class="k reveal">The model</p>
-      <h2 class="reveal d1">One engine. <em>Two apps.</em></h2>
-      <p class="lede reveal d2">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
+      <p class="k">The model</p>
+      <h2>One engine. <em>Two apps.</em></h2>
+      <p class="lede">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
 
       <div class="split-cards">
-        <div class="sc core reveal d1">
+        <div class="sc core">
           <p class="sc-tag">The core—CLI daemon</p>
           <h3>Everything, in your terminal</h3>
           <p class="sc-body">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
@@ -409,7 +408,7 @@
           <p class="sc-foot">star it, fork it, audit it—that&rsquo;s the point</p>
         </div>
 
-        <div class="sc app reveal d2">
+        <div class="sc app">
           <p class="sc-tag">The shell—menu bar app</p>
           <h3>Set it and forget it</h3>
           <p class="sc-body alt">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
@@ -431,50 +430,50 @@
   <!-- FAQ -->
 <section id="faq">
     <div class="wrap">
-      <p class="k reveal">FAQ</p>
-      <h2 class="reveal d1">Asked, answered</h2>
+      <p class="k">FAQ</p>
+      <h2>Asked, answered</h2>
       <div class="faq">
-        <details class="q reveal d1">
+        <details class="q">
           <summary>Can I use Tailscale and my VPN at the same time on a Mac? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">Yes—that&rsquo;s exactly what tailroute does. When your VPN connects, the daemon toggles MagicDNS off and brings up a
             local SOCKS5 proxy, so <b>internet flows through the VPN while peers stay reachable through the mesh</b>—and it reverses
             itself when the VPN disconnects. Any VPN that takes the default route works; VPNs that also block Tailscale&rsquo;s CGNAT
             range at the packet level (Mullvad, NordVPN) still need that proxy or a tunnel for direct peer traffic—next question covers those.</div>
         </details>
-        <details class="q reveal d1">
+        <details class="q">
           <summary>Does it work with Mullvad or NordVPN? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The <b>DNS fix works</b>—internet stays up through the VPN with Tailscale connected. But both VPNs block
             direct traffic to Tailscale&rsquo;s CGNAT range at the Network-Extension layer, so <b>direct peer connections fail</b>;
             use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes.</div>
         </details>
-        <details class="q reveal d1">
+        <details class="q">
           <summary>What about corporate VPNs—Cisco AnyConnect, GlobalProtect, Zscaler? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The daemon classifies routing changes from <b>any VPN that takes the default route</b>—no per-VPN
             plugins, no allowlists. The DNS conflict is fixed automatically either way; if the corporate client also blocks
             the CGNAT range at the Network-Extension layer, the same proxy-and-tunnel path bridges your peers.</div>
         </details>
-        <details class="q reveal d1">
+        <details class="q">
           <summary>Which Tailscale install does it need? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">The <b>CLI daemon</b> (<code>brew install tailscale</code>) is fully supported—tailroute toggles DNS over its unix socket.
             The GUI app works with limitations (fall-back MagicDNS detection), and the Mac App Store version is not supported.</div>
         </details>
-        <details class="q reveal d1">
+        <details class="q">
           <summary>Does it phone home? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network
             activity is the proxy and tunnels you configure, pointing at your own tailnet.</div>
         </details>
-        <details class="q reveal d1">
+        <details class="q">
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
             <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
             strict input validation, absolute paths only, fail-safe on ambiguous state.
             The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
-        <details class="q reveal d2">
+        <details class="q">
           <summary>What happens when I quit the VPN or uninstall? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">VPN disconnects → MagicDNS is restored automatically (within seconds of the route change, with a 60-second safety check for anything missed). Uninstall restores MagicDNS
             state, removes the daemon, tunnels, and hosts entries—and preserves logs for review.</div>
         </details>
-        <details class="q reveal d2">
+        <details class="q">
           <summary>Who is tailroute for—and who is it not for? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">For one Mac running two networks at once: <b>Tailscale alongside a second VPN</b>—the corporate client
             (Cisco AnyConnect, GlobalProtect, Zscaler), a commercial privacy VPN (NordVPN, ProtonVPN, Surfshark), or a
@@ -483,7 +482,7 @@
             which already solves coexistence inside Tailscale. Also out of scope: MagicDNS split DNS while on a VPN, multiple
             simultaneous VPNs, IPv6.</div>
         </details>
-        <details class="q reveal d2">
+        <details class="q">
           <summary>What&rsquo;s the best way to run Tailscale and a VPN together on a Mac? <span class="pm" aria-hidden="true">+</span></summary>
           <div class="a">There are two working approaches. If your privacy VPN is Mullvad, <b>Tailscale&rsquo;s Mullvad exit-node
             add-on</b> is the first-choice route—buy it inside Tailscale and skip a second app. For every other VPN
@@ -581,9 +580,9 @@
 <!-- FINALE CTA -->
 <section class="finale">
   <div class="wrap">
-    <h2 class="reveal">Two minutes. Then never<br>think about it again.</h2>
-    <p class="fin-sub reveal d1">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
-    <div class="fin-installs reveal d2">
+    <h2>Two minutes. Then never<br>think about it again.</h2>
+    <p class="fin-sub">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
+    <div class="fin-installs">
       <div class="fin-chip">
         <span class="flabel">Menu bar app</span>
         <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
@@ -595,7 +594,7 @@
         <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
       </div>
     </div>
-    <p class="fin-micro reveal d3">no account · no telemetry · uninstall restores everything</p>
+    <p class="fin-micro">no account · no telemetry · uninstall restores everything</p>
   </div>
 </section>
 <!-- /region:finale -->
@@ -604,7 +603,7 @@
   <!-- SUPPORT -->
 <section id="support">
     <div class="wrap">
-      <div class="sup-card reveal">
+      <div class="sup-card">
         <div>
           <p class="k">Support the work</p>
           <h2>Open source isn&rsquo;t <em>free to build.</em></h2>
