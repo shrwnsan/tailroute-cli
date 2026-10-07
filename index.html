@@ -203,13 +203,21 @@
   .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line2); }
   .term-bar i:first-child { background: var(--lime); }
   .term-bar span { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-left: 6px; }
-  .term-body { padding: 16px; min-height: 240px; font-family: var(--mono); font-size: 12.4px; line-height: 1.8; }
+  /* fixed 10-line capacity (matches the loop's cap) so the demo never shifts
+     layout; extra lines exit the top, scrollback-style */
+  .term-body { padding: 16px; height: calc(1.8em * 10 + 32px); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; font-family: var(--mono); font-size: 12.4px; line-height: 1.8; }
+  .term-body > div { flex: none; }
   .tl-cmd { color: var(--text); } .tl-cmd::before { content: "❯ "; color: var(--lime); }
   .tl-out { color: var(--dim); } .tl-dim { color: var(--faint); }
   .tl-ok { color: var(--lime); } .tl-warn { color: var(--amber); }
-  .term-foot { display: flex; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
-  .term-foot span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); }
-  .term-foot b { font-weight: 600; margin-left: 4px; }
+  .term-foot { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .term-foot span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); white-space: nowrap; }
+  /* value floors are sized to the widest bold glyph run per chip
+     (ch tracks regular weight—bold runs run wider); family is pinned
+     here rather than inherited so all three values share one declaration */
+  .term-foot b { font-family: var(--mono); font-weight: 600; margin-left: 4px; min-width: 3.5ch; display: inline-block; }
+  .term-foot span:nth-child(2) b { min-width: 4.5ch; } /* down */
+  .term-foot span:last-child b { min-width: 8ch; } /* COEXIST—row wrap must not depend on loop state */
   .fon { color: var(--lime); } .foff { color: var(--amber); }
 
   .mrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
@@ -382,6 +390,13 @@
     .prob { border-right: none; border-bottom: 1px solid var(--line); }
     .fin-chip { flex-wrap: wrap; }
     .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--lime-ink); padding-top: 9px; }
+    /* footer: brand full-width, then the three link columns share one row */
+    .foot-grid { grid-template-columns: repeat(3, 1fr); gap: 26px 16px; }
+    .foot-brand { grid-column: 1 / -1; }
+    /* stacked status chips: label over value—chip width stays loop-independent */
+    .term-foot { gap: 16px; }
+    .term-foot span { display: flex; flex-direction: column; gap: 2px; }
+    .term-foot b { margin-left: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .hcard:hover, .hcard:focus-within { transform: none; }
@@ -1049,6 +1064,7 @@
   }
   function makeLine(cls) {
     var div = document.createElement("div"); div.className = "tl-" + cls; termBody.appendChild(div);
+    /* cap must stay in sync with .term-body's fixed 10-line height */
     while (termBody.children.length > 10) termBody.removeChild(termBody.firstChild);
     return div;
   }
