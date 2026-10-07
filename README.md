@@ -11,6 +11,12 @@ sudo tailroute install
 
 That's it. The daemon runs automatically in the background.
 
+Menu bar app (same engine, native UI, free during early access):
+
+```bash
+brew install --cask shrwnsan/tap/tailroute
+```
+
 Or let the installer do both steps for you:
 
 ```bash
@@ -25,6 +31,10 @@ When you have both Tailscale and a VPN (NordVPN, ProtonVPN, etc.) connected:
 
 - **DNS fix**: MagicDNS breaks your internet → tailroute toggles it automatically
 - **Mesh access**: VPN blocks Tailscale IPs → use the built-in SOCKS5 proxy to reach peers
+
+## VPN compatibility
+
+Tested against Mullvad and NordVPN; the daemon classifies routing changes from any VPN that takes the default route (corporate clients included). Current matrix and notes live on the [homepage](https://tailroute.app/). If your VPN behaves differently, [report it](https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml) — reports feed the compatibility notes.
 
 ## Tuning
 
