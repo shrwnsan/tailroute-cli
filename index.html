@@ -114,29 +114,61 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 :root {
-  --bg: #0d0d0b;
-  --bg2: #121210;
-  --card: #161613;
-  --card2: #1b1b17;
+  /* colour */
+  --ground: #0d0d0b;
+  --surface: #161613;
+  --surface-2: #1b1b17;
   --line: #262620;
-  --line2: #38382e;
+  --line-2: #38382e;
   --text: #f0efe8;
-  --dim: #a3a196;
-  --faint: #747267;
-  --lime: #c6f24e;
+  --text-dim: #a3a196;
+  --text-faint: #8a887d;
+  --mesh: #c6f24e;
+  --mesh-ink: #161a05;
+  --mesh-mark: #74a41a; /* diagram and chart strokes */
+  --vpn: #e8a33d;
+
+  /* type scale */
+  --step--1: 13px;
+  --step-0: 16.5px;
+  --step-1: 20px;
+  --step-2: 28px;
+  --step-3: clamp(2rem, 3.6vw, 2.9rem);
+  --step-4: clamp(2.4rem, 5.6vw, 4.5rem);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-press: 160ms;
+  --dur-ui: 200ms;
+
+  /* fonts */
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Instrument Sans", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+
+  /* legacy aliases: removed in T-750 */
+  --bg: var(--ground);
+  --bg2: #121210;
+  --card: var(--surface);
+  --card2: var(--surface-2);
+  --line2: var(--line-2);
+  --dim: var(--text-dim);
+  --faint: var(--text-faint);
+  --lime: var(--mesh);
   --lime-soft: rgba(198, 242, 78, 0.10);
   --lime-line: rgba(198, 242, 78, 0.32);
-  --lime-ink: #161a05;
-  --mark: #74a41a;        /* chart marks only—validated for dark surface */
-  --amber: #e8a33d;
+  --lime-ink: var(--mesh-ink);
+  --mark: var(--mesh-mark);
+  --amber: var(--vpn);
   --amber-soft: rgba(232, 163, 61, 0.09);
   --amber-line: rgba(232, 163, 61, 0.35);
   --paper: #f4f2ea;
   --paper-ink: #15150f;
   --paper-dim: #5d5c52;
-  --disp: "Bricolage Grotesque", sans-serif;
-  --sans: "Instrument Sans", sans-serif;
-  --mono: "Geist Mono", monospace;
+  --disp: var(--font-display);
+  --sans: var(--font-body);
+  --mono: var(--font-mono);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -442,7 +474,7 @@ details.data td, details.data th { padding: 4px 8px; text-align: left; border-bo
 /* ============ OPEN CORE SPLIT (paper) ============ */
 .split { background: var(--paper); color: var(--paper-ink); }
 .split h2 em { color: #4d7c0f; } /* brand lime fails on paper (~1.5:1); deep lime keeps the family at ~4.5:1 */
-.split .k { color: #5c7f10; }
+.split .k { color: #4f6e0c; }
 .split .lede { color: var(--paper-dim); }
 .split-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .sc { border: 2px solid var(--paper-ink); border-radius: 20px; padding: 30px 30px 26px; background: #fffef9; display: flex; flex-direction: column; }

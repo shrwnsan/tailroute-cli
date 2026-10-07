@@ -1,25 +1,57 @@
 :root {
-  --bg: #0d0d0b;
-  --bg2: #121210;
-  --card: #161613;
-  --card2: #1b1b17;
+  /* colour */
+  --ground: #0d0d0b;
+  --surface: #161613;
+  --surface-2: #1b1b17;
   --line: #262620;
-  --line2: #38382e;
+  --line-2: #38382e;
   --text: #f0efe8;
-  --dim: #a3a196;
-  --faint: #747267;
-  --lime: #c6f24e;
+  --text-dim: #a3a196;
+  --text-faint: #8a887d;
+  --mesh: #c6f24e;
+  --mesh-ink: #161a05;
+  --mesh-mark: #74a41a; /* diagram and chart strokes */
+  --vpn: #e8a33d;
+
+  /* type scale */
+  --step--1: 13px;
+  --step-0: 16.5px;
+  --step-1: 20px;
+  --step-2: 28px;
+  --step-3: clamp(2rem, 3.6vw, 2.9rem);
+  --step-4: clamp(2.4rem, 5.6vw, 4.5rem);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-press: 160ms;
+  --dur-ui: 200ms;
+
+  /* fonts */
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-body: "Instrument Sans", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+
+  /* legacy aliases: removed in T-750 */
+  --bg: var(--ground);
+  --bg2: #121210;
+  --card: var(--surface);
+  --card2: var(--surface-2);
+  --line2: var(--line-2);
+  --dim: var(--text-dim);
+  --faint: var(--text-faint);
+  --lime: var(--mesh);
   --lime-soft: rgba(198, 242, 78, 0.10);
   --lime-line: rgba(198, 242, 78, 0.32);
-  --lime-ink: #161a05;
-  --mark: #74a41a;        /* chart marks only—validated for dark surface */
-  --amber: #e8a33d;
+  --lime-ink: var(--mesh-ink);
+  --mark: var(--mesh-mark);
+  --amber: var(--vpn);
   --amber-soft: rgba(232, 163, 61, 0.09);
   --amber-line: rgba(232, 163, 61, 0.35);
   --paper: #f4f2ea;
   --paper-ink: #15150f;
   --paper-dim: #5d5c52;
-  --disp: "Bricolage Grotesque", sans-serif;
-  --sans: "Instrument Sans", sans-serif;
-  --mono: "Geist Mono", monospace;
+  --disp: var(--font-display);
+  --sans: var(--font-body);
+  --mono: var(--font-mono);
 }
