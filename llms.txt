@@ -6,7 +6,7 @@ The tool answers one question: "How do I keep Tailscale and my VPN working at th
 
 ## Install
 
-- `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install` (CLI daemon, Apache-2.0, macOS 12+)
+- `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install` (CLI daemon, Apache-2.0, macOS 15+)
 - `brew install --cask shrwnsan/tap/tailroute` (menu bar app, same engine, free during early access)
 - No account. No telemetry. Uninstall restores the previous MagicDNS state.
 
