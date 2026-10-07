@@ -1,24 +1,51 @@
-/* install switcher */
-.switcher { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
-.sw-tabs { display: flex; border-bottom: 1px solid var(--line); }
-.sw-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
-.sw-tab.on { color: var(--text); }
-.sw-tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
-.sw-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
-.sw-body { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
-.sw-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
-.sw-cmd::-webkit-scrollbar { display: none; }
-.sw-p { color: var(--lime); margin-right: 4px; }
-.sw-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
-.copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); background: var(--lime); color: var(--lime-ink); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
-.copy:hover { filter: brightness(1.06); }
-.copy.ok { background: var(--text); }
+/* Install component (tabs + command + copy button) and the shared copy-button
+   structure. Markup contract: see the comment at the top of js/install.js.
+   Copy-button behaviour contract: see the comment at the top of js/copy.js. */
 
+.install { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
+.install-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.install-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
+.install-tab[aria-selected="true"] { color: var(--text); }
+.install-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
+.install-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
+.install-panel { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+.install-panel[hidden] { display: none; }
+.install-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: pre; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
+.install-cmd::-webkit-scrollbar { display: none; }
+.install-ps1 { color: var(--lime); margin-right: 4px; }
+.install-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+
+/* the active tab's label is the tab itself; the per-panel label is no-JS only */
+html.js .install-label { display: none; }
+
+/* ---- copy button: fixed-width label swap ----
+   copy.js stacks the original label, the ok label, and the fail label into
+   this one cell, so the button always sizes to the widest label and nothing
+   shifts when the text changes. The auto track keeps one-line buttons on one
+   line; a width-constrained button (width: 100%) still wraps its text within
+   the space it already has. */
+button[data-copy] { display: grid; grid-template-areas: "stack"; grid-template-columns: auto; justify-content: center; }
+button[data-copy] > span { grid-area: stack; }
+
+.copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lime-ink); background: var(--lime); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
+.copy.ok { background: var(--text); }
 .copy.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+@media (hover: hover) and (pointer: fine) {
+  .copy:hover { filter: brightness(1.06); }
+}
+
+/* ---- no JavaScript: hide the tabs, show every panel stacked with its label ---- */
+html:not(.js) .install-tabs { display: none; }
+html:not(.js) .install-panel,
+html:not(.js) .install-panel[hidden] { display: block; }
+html:not(.js) .install-panel + .install-panel { border-top: 1px solid var(--line); }
+html:not(.js) .install-label { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin: 0 0 8px; }
+html:not(.js) .install-cmd, html:not(.js) .install-note { display: block; }
+html:not(.js) .install-panel button[data-copy] { margin-top: 10px; }
 
 @media (max-width: 620px) {
-  .sw-tab .tagx { display: none; }
-  .sw-cmd { font-size: 12px; white-space: normal; }
-  .sw-body { flex-wrap: wrap; }
-  .sw-cmd { flex-basis: 100%; }
+  .install-tab .tagx { display: none; }
+  .install-cmd { font-size: 12px; }
+  .install-panel { flex-wrap: wrap; }
+  .install-cmd { flex-basis: 100%; }
 }

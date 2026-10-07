@@ -196,6 +196,17 @@ html.js .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   html.js .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* ============ BUTTONS (shared press and hover) ============ */
+button { transition: transform var(--dur-press) var(--ease-out); }
+button:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  button:hover { filter: brightness(1.06); } /* colour-only; never a lift */
+}
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+  button:active { transform: none; }
+}
 /* ============ NAV ============ */
 nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .nav-in { position: relative; max-width: 1180px; margin: 0 auto; padding: 13px 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
@@ -251,29 +262,56 @@ nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -w
 @media (max-width: 620px) {
   .menu-bar { flex-wrap: wrap; }
 }
-/* install switcher */
-.switcher { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
-.sw-tabs { display: flex; border-bottom: 1px solid var(--line); }
-.sw-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
-.sw-tab.on { color: var(--text); }
-.sw-tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
-.sw-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
-.sw-body { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
-.sw-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
-.sw-cmd::-webkit-scrollbar { display: none; }
-.sw-p { color: var(--lime); margin-right: 4px; }
-.sw-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
-.copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); background: var(--lime); color: var(--lime-ink); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
-.copy:hover { filter: brightness(1.06); }
-.copy.ok { background: var(--text); }
+/* Install component (tabs + command + copy button) and the shared copy-button
+   structure. Markup contract: see the comment at the top of js/install.js.
+   Copy-button behaviour contract: see the comment at the top of js/copy.js. */
 
+.install { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
+.install-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.install-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
+.install-tab[aria-selected="true"] { color: var(--text); }
+.install-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
+.install-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
+.install-panel { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+.install-panel[hidden] { display: none; }
+.install-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: pre; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
+.install-cmd::-webkit-scrollbar { display: none; }
+.install-ps1 { color: var(--lime); margin-right: 4px; }
+.install-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+
+/* the active tab's label is the tab itself; the per-panel label is no-JS only */
+html.js .install-label { display: none; }
+
+/* ---- copy button: fixed-width label swap ----
+   copy.js stacks the original label, the ok label, and the fail label into
+   this one cell, so the button always sizes to the widest label and nothing
+   shifts when the text changes. The auto track keeps one-line buttons on one
+   line; a width-constrained button (width: 100%) still wraps its text within
+   the space it already has. */
+button[data-copy] { display: grid; grid-template-areas: "stack"; grid-template-columns: auto; justify-content: center; }
+button[data-copy] > span { grid-area: stack; }
+
+.copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lime-ink); background: var(--lime); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
+.copy.ok { background: var(--text); }
 .copy.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+@media (hover: hover) and (pointer: fine) {
+  .copy:hover { filter: brightness(1.06); }
+}
+
+/* ---- no JavaScript: hide the tabs, show every panel stacked with its label ---- */
+html:not(.js) .install-tabs { display: none; }
+html:not(.js) .install-panel,
+html:not(.js) .install-panel[hidden] { display: block; }
+html:not(.js) .install-panel + .install-panel { border-top: 1px solid var(--line); }
+html:not(.js) .install-label { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin: 0 0 8px; }
+html:not(.js) .install-cmd, html:not(.js) .install-note { display: block; }
+html:not(.js) .install-panel button[data-copy] { margin-top: 10px; }
 
 @media (max-width: 620px) {
-  .sw-tab .tagx { display: none; }
-  .sw-cmd { font-size: 12px; white-space: normal; }
-  .sw-body { flex-wrap: wrap; }
-  .sw-cmd { flex-basis: 100%; }
+  .install-tab .tagx { display: none; }
+  .install-cmd { font-size: 12px; }
+  .install-panel { flex-wrap: wrap; }
+  .install-cmd { flex-basis: 100%; }
 }
 /* ============ HERO ============ */
 .hero { padding: 92px 0 64px; position: relative; }
@@ -667,15 +705,22 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
           <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS when your VPN connects—and back when it drops—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
             fail-safe, self-verifying, and entirely local.</p>
 
-          <div class="switcher reveal d3">
-            <div class="sw-tabs" role="tablist" aria-label="Install target">
-              <button class="sw-tab on" id="tab-app" role="tab" aria-selected="true" aria-controls="sw-panel">Menu bar app <span class="tagx">early access · free</span></button>
-              <button class="sw-tab" id="tab-cli" role="tab" aria-selected="false" aria-controls="sw-panel" tabindex="-1">CLI daemon <span class="tagx">apache-2.0</span></button>
+          <div class="install reveal d3" data-install id="hero-install">
+            <div class="install-tabs" role="tablist" aria-label="Install target">
+              <button class="install-tab" type="button" role="tab" id="hero-tab-app" aria-controls="hero-panel-app" aria-selected="true">Menu bar app <span class="tagx">early access · free</span></button>
+              <button class="install-tab" type="button" role="tab" id="hero-tab-cli" aria-controls="hero-panel-cli" aria-selected="false" tabindex="-1">CLI daemon <span class="tagx">apache-2.0</span></button>
             </div>
-            <div class="sw-body" id="sw-panel" role="tabpanel" aria-label="Install command">
-              <span class="sw-cmd"><span class="sw-p">$</span><span id="sw-text">brew install --cask shrwnsan/tap/tailroute</span></span>
-              <span class="sw-note" id="sw-note">includes the CLI</span>
-              <button class="copy" id="sw-copy" type="button">Copy</button>
+            <div class="install-panel" role="tabpanel" id="hero-panel-app" aria-labelledby="hero-tab-app">
+              <p class="install-label">Menu bar app</p>
+              <code class="install-cmd"><span class="install-ps1">$</span><span id="hero-cmd-app">brew install --cask shrwnsan/tap/tailroute</span></code>
+              <span class="install-note">includes the CLI</span>
+              <button class="copy" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-target="hero-cmd-app" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+            </div>
+            <div class="install-panel" role="tabpanel" id="hero-panel-cli" aria-labelledby="hero-tab-cli" hidden>
+              <p class="install-label">CLI daemon</p>
+              <code class="install-cmd"><span class="install-ps1">$</span><span id="hero-cmd-cli">brew install shrwnsan/tap/tailroute-cli</span></code>
+              <span class="install-note">then: sudo tailroute install</span>
+              <button class="copy" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-target="hero-cmd-cli" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
             </div>
           </div>
           <p class="microcopy reveal d3">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
@@ -902,7 +947,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
             <li>Homebrew or source; runs as a root launchd service</li>
             <li>Your traffic never touches our infrastructure (there isn&rsquo;t any)</li>
           </ul>
-          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-label="brew install shrwnsan/tap/tailroute-cli">brew install shrwnsan/tap/tailroute-cli</button>
+          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="✓ copied—paste into Terminal" data-copy-fail="copy failed—select the command">brew install shrwnsan/tap/tailroute-cli</button>
           <p class="sc-foot">star it, fork it, audit it—that&rsquo;s the point</p>
         </div>
 
@@ -916,7 +961,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
             <li>First-run onboarding and a diagnostic panel</li>
             <li>Brew-aware updates with DMG download</li>
           </ul>
-          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-label="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
+          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="✓ copied—paste into Terminal" data-copy-fail="copy failed—select the command">brew install --cask shrwnsan/tap/tailroute</button>
           <p class="sc-foot">early adopters shape the v1.0 roadmap—file issues</p>
         </div>
       </div>
@@ -1133,15 +1178,15 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
     <h2 class="reveal">Two minutes. Then never<br>think about it again.</h2>
     <p class="fin-sub reveal d1">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
     <div class="fin-installs reveal d2">
-      <div class="fin-chip" data-copy="brew install --cask shrwnsan/tap/tailroute">
+      <div class="fin-chip">
         <span class="flabel">Menu bar app</span>
         <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
-        <button type="button">copy</button>
+        <button type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
       </div>
-      <div class="fin-chip" data-copy="brew install shrwnsan/tap/tailroute-cli">
+      <div class="fin-chip">
         <span class="flabel">CLI daemon</span>
         <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
-        <button type="button">copy</button>
+        <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
       </div>
     </div>
     <p class="fin-micro reveal d3">no account · no telemetry · uninstall restores everything</p>
