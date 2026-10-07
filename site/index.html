@@ -504,7 +504,10 @@
             <div style="max-width:560px">
               <p class="b-k">compatibility</p>
               <h3>Works with any utun-route VPN</h3>
-              <p>The daemon classifies routing changes from any VPN that takes the default route — no per-VPN plugins, no allowlists.</p>
+              <p>The daemon classifies routing changes from any VPN that takes the default route — including corporate clients
+              like Cisco AnyConnect, GlobalProtect or Zscaler (classified, not lab-tested:
+              <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">report yours ↗</a>)
+              — no per-VPN plugins, no allowlists.</p>
             </div>
             <div class="vpnrow">
               <span class="t">Mullvad · tested</span>
@@ -512,6 +515,7 @@
               <span>ProtonVPN</span>
               <span>Surfshark</span>
               <span>ExpressVPN</span>
+              <span>corporate VPNs · any utun default-route</span>
               <span>your VPN ↗</span>
             </div>
           </div>
@@ -656,6 +660,13 @@
       <p class="k reveal">FAQ</p>
       <h2 class="reveal d1">Asked, answered</h2>
       <div class="faq" style="margin-top:36px">
+        <details class="q reveal d1">
+          <summary>Can I use Tailscale and my VPN at the same time on a Mac? <span class="pm">+</span></summary>
+          <div class="a">Yes — that&rsquo;s exactly what tailroute does. When your VPN connects, the daemon toggles MagicDNS off and brings up a
+            local SOCKS5 proxy, so <b>internet flows through the VPN while peers stay reachable through the mesh</b> — and it reverses
+            itself when the VPN disconnects. Any VPN that takes the default route works; VPNs that also block Tailscale&rsquo;s CGNAT
+            range at the packet level (Mullvad, NordVPN) still need that proxy or a tunnel for direct peer traffic — next question covers those.</div>
+        </details>
         <details class="q reveal d1">
           <summary>Does it work with Mullvad or NordVPN? <span class="pm">+</span></summary>
           <div class="a">The <b>DNS fix works</b> — internet stays up through the VPN with Tailscale connected. But both VPNs block
