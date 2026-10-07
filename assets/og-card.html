@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&family=Geist+Mono:wght@400;500&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 55% 45% at 72% -5%, rgba(198,242,78,0.09), transparent 70%),
+      linear-gradient(160deg, #0d0d0b, #121210);
+    color: #f0efe8;
+    font-family: "Instrument Sans", sans-serif;
+    position: relative;
+  }
+  .grid { position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(0deg, rgba(240,239,232,0.022) 0 1px, transparent 1px 64px),
+      repeating-linear-gradient(90deg, rgba(240,239,232,0.022) 0 1px, transparent 1px 64px);
+  }
+  .wrap { position: absolute; inset: 0; padding: 64px 72px; }
+  .head { display: flex; align-items: center; gap: 14px; }
+  .brand { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 30px; letter-spacing: -0.02em; }
+  .brand i { font-style: normal; color: #c6f24e; }
+  .pill { font-family: "Geist Mono", monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #e8a33d; background: rgba(232,163,61,0.09); border: 1px solid rgba(232,163,61,0.35); border-radius: 999px; padding: 4px 12px; }
+  .pill.ver { color: #82cf9f; background: rgba(130,207,159,0.08); border-color: rgba(130,207,159,0.4); }
+  h1 { margin-top: 56px; font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+    font-size: 70px; line-height: 0.98; letter-spacing: -0.025em; max-width: 680px; }
+  h1 em { font-style: normal; color: #c6f24e; }
+  .sub { margin-top: 28px; font-size: 21px; line-height: 1.5; color: #a3a096; max-width: 660px; }
+  .sub b { color: #f0efe8; font-weight: 500; }
+  .foot { position: absolute; left: 72px; right: 72px; bottom: 56px;
+    display: flex; align-items: center; justify-content: space-between; gap: 40px; }
+  .chip { display: flex; align-items: center; gap: 14px; border: 1px solid #38382e; background: #161613;
+    border-radius: 12px; padding: 14px 22px; font-family: "Geist Mono", monospace; font-size: 16px; }
+  .chip .k { color: #747267; font-size: 12px; letter-spacing: 0.14em; }
+  .chip .d { color: #c6f24e; }
+  .url { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 30px;
+    letter-spacing: -0.02em; color: #f0efe8; }
+  .url span { color: #c6f24e; }
+  .win { position: absolute; right: 72px; top: 168px; width: 360px; background: #161613;
+    border: 1px solid #262620; border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
+  .win .bar { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid #262620; }
+  .win .dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; }
+  .win .t { margin-left: auto; font-family: "Geist Mono", monospace; font-size: 11px; color: #747267; }
+  .win .row { display: flex; justify-content: space-between; font-family: "Geist Mono", monospace;
+    font-size: 12.5px; padding: 9px 14px; border-bottom: 1px solid #1b1b17; }
+  .win .row:last-child { border-bottom: none; }
+  .win .row b { font-weight: 500; color: #a3a096; }
+  .win .row span { color: #d9d6ca; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">tailroute<i>.</i></div>
+      <div class="pill">alpha</div>
+      <div class="pill ver">v0.8.17</div>
+    </div>
+    <h1><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
+    <p class="sub"><b>Internet through the VPN—peers through the mesh.</b> A fail-safe macOS daemon that toggles MagicDNS when your VPN connects. No telemetry. Apache-2.0 CLI.</p>
+    <div class="foot">
+      <div class="chip"><span class="k">INSTALL</span><span><span class="d">$</span> brew install --cask shrwnsan/tap/tailroute</span></div>
+      <div class="url">tailroute<span>.app</span></div>
+    </div>
+    <div class="win">
+      <div class="bar">
+        <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+        <span class="t">tailroute status</span>
+      </div>
+      <div class="row"><b>daemon</b><span>running (pid 4821)</span></div>
+      <div class="row"><b>magicdns</b><span>disabled (vpn_active)</span></div>
+      <div class="row"><b>proxy</b><span>127.0.0.1:1055 · running</span></div>
+    </div>
+  </div>
+</body>
+</html>
