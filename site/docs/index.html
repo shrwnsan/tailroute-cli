@@ -86,8 +86,12 @@
     letter-spacing: -0.02em;
     margin: 0 0 8px;
   }
+  .title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .title-row h1 { margin: 0; }
+  .title-row h1 a { color: var(--ink); text-decoration: none; }
+  .title-row h1 a .dot { color: var(--accent); }
+  .title-row h1 a:hover .dot { text-decoration: underline; text-decoration-color: var(--accent); }
   .meta {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     font-size: 13px; color: var(--dim);
     margin-bottom: 20px;
   }
@@ -109,16 +113,6 @@
   p, li, td { overflow-wrap: anywhere; }
   code { font-family: var(--mono); background: var(--green-bg); padding: 1px 5px; border-radius: 3px; }
   .meta, .toc, table, .note, .figcap { font-family: var(--mono); }
-  .brandmark {
-    font-family: var(--disp);
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    text-decoration: none;
-  }
-  .brandmark span { color: var(--accent); }
-  .brandmark:hover span { text-decoration: underline; }
   .badge {
     font-family: var(--mono);
     font-size: 10px;
@@ -202,8 +196,12 @@
 <body>
 <main>
 
-  <h1>tailroute</h1>
-  <p class="meta"><a class="brandmark" href="../" aria-label="tailroute home">tailroute<span>.</span></a> <span class="badge" title="pre-v1.0 software">alpha</span> <span class="badge free">v0.8.17</span> <span>tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</span></p>
+  <div class="title-row">
+    <h1><a href="../" aria-label="tailroute home">tailroute<span class="dot">.</span></a></h1>
+    <span class="badge" title="pre-v1.0 software">alpha</span>
+    <span class="badge free">v0.8.17</span>
+  </div>
+  <p class="meta">tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</p>
   <p class="toc"><span class="toc-label">On this page</span> ·
      <a href="#name">name</a> ·
      <a href="#the-problem">the problem</a> ·
