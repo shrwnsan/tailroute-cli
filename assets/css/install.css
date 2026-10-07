@@ -1,0 +1,24 @@
+/* install switcher */
+.switcher { max-width: 640px; border: 1px solid var(--line2); border-radius: 16px; background: var(--card); overflow: hidden; }
+.sw-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.sw-tab { flex: 1; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--faint); padding: 11px 10px; cursor: pointer; position: relative; }
+.sw-tab.on { color: var(--text); }
+.sw-tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
+.sw-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
+.sw-body { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+.sw-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.sw-cmd::-webkit-scrollbar { display: none; }
+.sw-p { color: var(--lime); margin-right: 4px; }
+.sw-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.copy { font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); background: var(--lime); color: var(--lime-ink); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
+.copy:hover { filter: brightness(1.06); }
+.copy.ok { background: var(--text); }
+
+.copy.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+
+@media (max-width: 620px) {
+  .sw-tab .tagx { display: none; }
+  .sw-cmd { font-size: 12px; white-space: normal; }
+  .sw-body { flex-wrap: wrap; }
+  .sw-cmd { flex-basis: 100%; }
+}

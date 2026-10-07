@@ -1,0 +1,30 @@
+/* ============ PROOF / CHART ============ */
+.proof { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.proof-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: start; }
+.chart-card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 14px; }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.chart-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.chart-hi { font-family: var(--mono); font-size: 11px; color: var(--mark); }
+.chart-card svg { width: 100%; height: auto; display: block; }
+.axis { stroke: var(--line); stroke-width: 1; }
+.axtext { font-family: var(--mono); font-size: 9.5px; fill: var(--faint); }
+.chart-tip { position: absolute; pointer-events: none; background: #23231e; border: 1px solid var(--line2); border-radius: 8px; padding: 7px 11px; font-family: var(--mono); font-size: 11px; color: var(--text); transform: translate(-50%, -120%); white-space: nowrap; opacity: 0; transition: opacity 0.1s; z-index: 5; }
+.chart-tip b { color: var(--lime); }
+details.data { margin-top: 8px; }
+details.data summary { font-family: var(--mono); font-size: 10.5px; color: var(--faint); cursor: pointer; letter-spacing: 0.06em; }
+details.data table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 8px; }
+details.data td, details.data th { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+.feed { display: flex; flex-direction: column; gap: 0; }
+.feed-item { display: flex; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+.feed-item.last { border-bottom: none; }
+.feed-item:first-child { padding-top: 4px; }
+.feed-v { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--lime); min-width: 64px; flex-shrink: 0; }
+.feed-t { font-size: 14px; color: var(--dim); }
+.feed-t b { color: var(--text); font-weight: 600; }
+.feed-d { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 3px; }
+.sprint { margin-top: 22px; font-family: var(--mono); font-size: 12px; color: var(--dim); border-left: 3px solid var(--mark); padding-left: 14px; }
+.sprint b { color: var(--text); }
+
+@media (max-width: 1000px) {
+  .proof-grid { grid-template-columns: 1fr; gap: 32px; }
+}
