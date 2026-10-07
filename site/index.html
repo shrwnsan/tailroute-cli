@@ -86,7 +86,7 @@
   .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
   .eyebrow span { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 5px 12px; }
   .eyebrow span.hot { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
-  h1 { font-family: var(--disp); font-weight: 800; font-size: clamp(2.8rem, 6vw, 5rem); line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; }
+  h1 { font-family: var(--disp); font-weight: 800; font-size: clamp(2.8rem, 6vw, 5rem); line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: balance; }
   h1 em { font-style: normal; color: var(--lime); }
   .hero-sub { max-width: 620px; color: var(--dim); font-size: 18px; margin: 26px 0 34px; }
   .hero-sub b { color: var(--text); font-weight: 600; }
@@ -486,7 +486,7 @@
             <span>macOS 12+</span>
             <span>fail-safe by design</span>
           </div>
-          <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet up.</h1>
+          <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
           <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS at exactly
             the right moment—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
             fail-safe, self-verifying, and entirely local.</p>
