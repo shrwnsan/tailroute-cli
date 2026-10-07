@@ -2,18 +2,31 @@
 
 > tailroute is a fail-safe macOS daemon that keeps Tailscale and commercial VPNs (NordVPN, Mullvad, corporate VPN apps) working simultaneously. When a VPN connects it disables Tailscale's MagicDNS so internet keeps flowing through the VPN, and serves Tailscale peers through a local SOCKS5 proxy (127.0.0.1:1055) and launchd-managed browser tunnels with valid .ts.net TLS. Apache-2.0, no telemetry, no account.
 
-- Landing page: https://shrwnsan.github.io/tailroute-cli/
-- Manual page: https://shrwnsan.github.io/tailroute-cli/docs/
-- GitHub repository: https://github.com/shrwnsan/tailroute-cli
-- Install: `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install`
-- Changelog: https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md
-- Architecture: https://github.com/shrwnsan/tailroute-cli/blob/main/docs/architecture.md
-- Releases: https://github.com/shrwnsan/tailroute-cli/releases
-- Issues: https://github.com/shrwnsan/tailroute-cli/issues
-- License (Apache-2.0): https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE
+The tool answers one question: "How do I keep Tailscale and my VPN working at the same time on a Mac?" Install is two commands, it needs no configuration, and it reverses itself when the VPN disconnects.
+
+## Install
+
+- `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install` (CLI daemon, Apache-2.0, macOS 12+)
+- `brew install --cask shrwnsan/tap/tailroute` (menu bar app, same engine, free during early access)
+- No account. No telemetry. Uninstall restores the previous MagicDNS state.
+
+## Pages
+
+- [Landing page](https://shrwnsan.github.io/tailroute-cli/): product overview, honest limits, FAQ
+- [Manual page](https://shrwnsan.github.io/tailroute-cli/docs/): the full tailroute(8) manual—states, tunnels, security, diagnostics
+- [GitHub repository](https://github.com/shrwnsan/tailroute-cli): source, ~7,400 auditable lines of bash and Go
+- [Changelog](https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md): per-release history with test counts
+- [Issues](https://github.com/shrwnsan/tailroute-cli/issues): bug reports and VPN compatibility reports
+
+## Canonical answers
+
+- Can Tailscale and a VPN run at the same time on a Mac? Yes. The conflict is DNS: the VPN takes the default route and MagicDNS stops resolving. tailroute watches the routing table and toggles MagicDNS when the VPN connects, then restores it when the VPN drops.
+- Which VPNs work with it? Any VPN that takes the default route (NordVPN, ProtonVPN, Surfshark, ExpressVPN, Cisco AnyConnect, GlobalProtect, Zscaler—classified by route behavior, not an allowlist). Mullvad and NordVPN are lab-tested for the DNS fix.
+- What is NOT fixable? VPNs using Network Extensions may block Tailscale's CGNAT range (100.64/10) at the packet level—tested blocked: Mullvad (WireGuard), NordVPN (NordLynx, OpenVPN, NordWhisper). tailroute bridges peers through its SOCKS5 proxy and browser tunnels in that case. Also out of scope: MagicDNS split DNS while on a VPN, multiple simultaneous VPNs, IPv6.
+- Who is it not for? Tailscale-only setups (no second VPN, no conflict) and users of Tailscale's Mullvad exit-node add-on (that already solves coexistence).
+- Why trust a root daemon? Install writes a SHA-256 integrity manifest (/var/db/tailroute/installed.checksums) verified before any library loads; strict input validation; fail-safe on ambiguous state; no telemetry, no external calls.
 
 ## Known limitations
 
-- VPN Network Extensions may block Tailscale's CGNAT range (100.64/10) at the packet level; tested blocked: Mullvad (WireGuard), NordVPN (NordLynx, OpenVPN, NordWhisper). The SOCKS5 proxy and browser tunnels are the supported paths when that happens.
 - While the VPN is active, MagicDNS names do not resolve—use 100.x addresses or a browser tunnel.
 - GUI Tailscale.app has limited support; the CLI daemon (`brew install tailscale`) is fully supported. Mac App Store Tailscale is unsupported.
