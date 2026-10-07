@@ -390,6 +390,9 @@
     .prob { border-right: none; border-bottom: 1px solid var(--line); }
     .fin-chip { flex-wrap: wrap; }
     .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--lime-ink); padding-top: 9px; }
+    /* footer: brand full-width, then the three link columns share one row */
+    .foot-grid { grid-template-columns: repeat(3, 1fr); gap: 26px 16px; }
+    .foot-brand { grid-column: 1 / -1; }
     /* stacked status chips: label over value—chip width stays loop-independent */
     .term-foot { gap: 16px; }
     .term-foot span { display: flex; flex-direction: column; gap: 2px; }
