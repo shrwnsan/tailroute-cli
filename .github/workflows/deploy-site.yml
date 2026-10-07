@@ -43,6 +43,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/update-metrics.py
 
+      - name: Inline region CSS
+        run: python3 scripts/inline-css.py
+
       - name: Check the page before it deploys
         run: python3 scripts/check-site.py
 
