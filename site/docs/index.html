@@ -14,12 +14,15 @@
 <meta property="og:image" content="https://tailroute.app/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Geist+Mono:wght@400;500;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "tailroute-cli",
-  "operatingSystem": "macOS 12+",
+  "operatingSystem": "macOS 15+",
   "applicationCategory": "UtilitiesApplication",
   "description": "Fail-safe macOS daemon that toggles Tailscale MagicDNS when a VPN connects—internet through the VPN, peers through the mesh. Includes a SOCKS5 mesh proxy and launchd-managed browser tunnels.",
   "softwareVersion": "0.8.17",
@@ -31,9 +34,14 @@
 }
 </script>
 <style>
-  /* Deliberate choice: system monospace stack—this page is styled as the man
-     page it documents. No webfonts, no animations, no transitions. */
+  /* Manual register, shared brand voice: the type families match the landing
+     (Bricolage Grotesque display, Instrument Sans body, Geist Mono reference),
+     while the man-page form—one column, hairline rules, no animations—stays. */
   :root {
+    --disp: "Bricolage Grotesque", sans-serif;
+    --sans: "Instrument Sans", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --accent: var(--green);
     color-scheme: light dark;
     --paper: #fbfaf6;
     --ink: #1c1c18;
@@ -58,34 +66,42 @@
       --amber: #d9a03d;
       --amber-bg: #2b2418;
       --red: #e07a7a;
+      --accent: #c6f24e;
     }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: var(--paper);
     color: var(--ink);
-    font-family: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", monospace;
+    font-family: var(--sans);
     font-size: 15px;
     line-height: 1.7;
     padding: 56px 24px 88px;
   }
   main { max-width: 78ch; margin: 0 auto; }
   h1 {
+    font-family: var(--disp);
     font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-weight: 800;
+    letter-spacing: -0.02em;
     margin: 0 0 8px;
   }
+  .title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .title-row h1 { margin: 0; }
+  .title-row h1 a { color: var(--ink); text-decoration: none; }
+  .title-row h1 a .dot { color: var(--accent); }
+  .title-row h1 a:hover .dot { text-decoration: underline; text-decoration-color: var(--accent); }
   .meta {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     font-size: 13px; color: var(--dim);
     margin-bottom: 20px;
   }
   h2 {
+    font-family: var(--mono);
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
+    color: var(--accent);
     border-bottom: 1px solid var(--rule);
     padding-bottom: 6px;
     margin: 48px 0 16px;
@@ -95,22 +111,26 @@
   a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
   a:hover { text-decoration-color: var(--ink); }
   p, li, td { overflow-wrap: anywhere; }
-  code { background: var(--green-bg); padding: 1px 5px; border-radius: 3px; }
+  code { font-family: var(--mono); background: var(--green-bg); padding: 1px 5px; border-radius: 3px; }
+  .meta, .toc, table, .note, .figcap { font-family: var(--mono); }
   .badge {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
     color: var(--amber);
+    background: var(--amber-bg);
     border: 1px solid var(--amber);
-    border-radius: 3px;
-    padding: 1px 7px;
+    border-radius: 999px;
+    padding: 3px 10px;
     align-self: center;
   }
-  .badge.free { color: var(--green); border-color: var(--green); }
+  .badge.free { color: var(--green); background: var(--green-bg); border-color: var(--green); }
   /* on-this-page toc + backlink to landing */
   .backlink { color: var(--dim); white-space: nowrap; }
   .toc { font-size: 12px; color: var(--dim); margin: 0 0 8px; }
-  .toc .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint); }
+  .toc .toc-label { font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); }
   .toc a { color: var(--dim); }
   .synopsis {
     background: var(--paper);
@@ -176,8 +196,12 @@
 <body>
 <main>
 
-  <h1>tailroute</h1>
-  <p class="meta"><a class="backlink" href="../">← tailroute</a> <span class="badge">alpha</span> <span class="badge free">v0.8.17</span> <span>tailroute-cli manual · apache-2.0 · macOS 12+ · free &amp; open source</span></p>
+  <div class="title-row">
+    <h1><a href="../" aria-label="tailroute home">tailroute<span class="dot">.</span></a></h1>
+    <span class="badge" title="pre-v1.0 software">alpha</span>
+    <span class="badge free">v0.8.17</span>
+  </div>
+  <p class="meta">tailroute-cli manual · apache-2.0 · macOS 15+ · free &amp; open source</p>
   <p class="toc"><span class="toc-label">On this page</span> ·
      <a href="#name">name</a> ·
      <a href="#the-problem">the problem</a> ·
@@ -314,7 +338,7 @@
 
 </main>
 <footer>
-  <p class="colophon">No trackers, no webfonts, no analytics on this page—the daemon doesn't call home either.</p>
+  <p class="colophon">No trackers, no analytics on this page—the daemon doesn’t call home either.</p>
   <p class="legal">CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc. · <a class="backlink" href="../">← tailroute</a></p>
 </footer>
 <script>
