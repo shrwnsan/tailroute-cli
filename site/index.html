@@ -13,7 +13,7 @@
   <meta property="og:url" content="https://tailroute.app/">
   <meta property="og:image" content="https://tailroute.app/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="tailroute — Tailscale + VPN coexistence for macOS">
+  <meta name="twitter:title" content="tailroute-cli—Tailscale + VPN coexistence for macOS">
   <meta name="twitter:description" content="Keep working. VPN up, tailnet up.">
   <meta name="twitter:image" content="https://tailroute.app/og.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -462,7 +462,7 @@
         "name": "It runs as root—why should I trust it?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, fail-safe on ambiguous state, and a public threat model. The whole thing is ~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026). Prefer the manual? Read the full man page, shipped with this site."
+          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, fail-safe on ambiguous state. The whole thing is ~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026). Prefer the manual? Read the full man page, shipped with this site."
         }
       },
       {
@@ -470,7 +470,7 @@
         "name": "What happens when I quit the VPN or uninstall?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "VPN disconnects → MagicDNS is restored automatically (within ~60s, event-driven). Uninstall restores MagicDNS state, removes the daemon, tunnels, and hosts entries—and preserves logs for review."
+          "text": "VPN disconnects → MagicDNS is restored automatically (within seconds of the route change, with a 60-second safety check for anything missed). Uninstall restores MagicDNS state, removes the daemon, tunnels, and hosts entries—and preserves logs for review."
         }
       },
       {
@@ -558,7 +558,7 @@
               <button class="copy" id="sw-copy" type="button">Copy</button>
             </div>
           </div>
-          <p class="microcopy reveal d3">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Every install sha256-verified <i>·</i> Uninstall restores everything</p>
+          <p class="microcopy reveal d3">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
 
           <div class="hero-cta reveal d3">
             <a class="ghost" href="#core">Free core vs the app ↓</a>
@@ -639,7 +639,7 @@
         </div>
 
         <div class="probband reveal d1">
-          <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday. The usual escape is a $100 travel router.</p><h4>Every peer times out.</h4></div>
+          <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
           <div class="resp"><h3><i>01</i>SOCKS5 mesh proxy</h3>
             <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
             the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
@@ -856,12 +856,12 @@
         <details class="q reveal d1">
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
             <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
-            strict input validation, absolute paths only, fail-safe on ambiguous state, and a public threat model.
+            strict input validation, absolute paths only, fail-safe on ambiguous state.
             The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q reveal d2">
           <summary>What happens when I quit the VPN or uninstall? <span class="pm" aria-hidden="true">+</span></summary>
-          <div class="a">VPN disconnects → MagicDNS is restored automatically (within ~60s, event-driven). Uninstall restores MagicDNS
+          <div class="a">VPN disconnects → MagicDNS is restored automatically (within seconds of the route change, with a 60-second safety check for anything missed). Uninstall restores MagicDNS
             state, removes the daemon, tunnels, and hosts entries—and preserves logs for review.</div>
         </details>
         <details class="q reveal d2">
@@ -905,7 +905,7 @@
         <div class="milestone">
           <p>Next milestone</p>
           <b>Notarized, Gatekeeper-clean builds</b>
-          <span>Apple Developer ID ($99/yr) buys signed + notarized DMGs—no more right-click-to-open for new users. Sponsorship goes here first.</span>
+          <span>Apple Developer ID ($99/yr) buys signed + notarized DMGs—so macOS opens the app without a Gatekeeper prompt. Sponsorship goes here first.</span>
         </div>
       </div>
     </div>
