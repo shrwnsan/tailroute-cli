@@ -70,6 +70,29 @@ assert_not_contains() {
 # Fixture builders
 # ---------------------------------------------------------------------------
 
+# The text and stroke palette the contrast check vouches for. --text-faint
+# resolves through an alias, so the check's var() handling is exercised on
+# every default run.
+write_tokens_css() {
+    local dir="$1"
+    mkdir -p "$dir/assets/css"
+    cat > "$dir/assets/css/tokens.css" <<'CSS'
+:root {
+  --ground: #0d0d0b;
+  --surface: #161613;
+  --surface-2: #1b1b17;
+  --text: #f0efe8;
+  --text-dim: #a3a196;
+  --faint-ink: #8a887d;
+  --text-faint: var(--faint-ink);
+  --mesh: #c6f24e;
+  --mesh-ink: #161a05;
+  --mesh-mark: #74a41a;
+  --vpn: #e8a33d;
+}
+CSS
+}
+
 # A minimal page that passes every default check: local resources only,
 # metric markers present, JSON-LD that parses, FAQ in sync, anchors intact,
 # the CLI name in every title.
@@ -112,6 +135,7 @@ write_good_page() {
 </html>
 HTML
     add_region_markers "$dir"
+    write_tokens_css "$dir"
 }
 
 # The good page plus everything --strict wants: the install anchor, a clean
@@ -200,7 +224,7 @@ test_clean_page_passes_default_checks() {
     write_good_page "$dir"
     run_checker "$dir"
     assert_eq "0" "$CHECK_RC" "expected the clean fixture to pass: $CHECK_OUT"
-    assert_contains "OK 8 checks" "$CHECK_OUT"
+    assert_contains "OK 9 checks" "$CHECK_OUT"
 }
 
 test_clean_page_passes_strict_checks() {
@@ -209,7 +233,7 @@ test_clean_page_passes_strict_checks() {
     write_strict_clean_page "$dir"
     run_checker "$dir" --strict
     assert_eq "0" "$CHECK_RC" "expected the strict-clean fixture to pass: $CHECK_OUT"
-    assert_contains "OK 17 checks" "$CHECK_OUT"
+    assert_contains "OK 18 checks" "$CHECK_OUT"
 }
 
 # ---------------------------------------------------------------------------
@@ -545,6 +569,38 @@ test_legacy_tokens_flags_old_token_names() {
 }
 
 # ---------------------------------------------------------------------------
+# contrast
+# ---------------------------------------------------------------------------
+
+test_contrast_passes_on_token_palette() {
+    local dir
+    dir=$(make_fixture)
+    write_good_page "$dir"
+    run_checker "$dir"
+    assert_eq "0" "$CHECK_RC"
+    assert_not_contains "FAIL contrast" "$CHECK_OUT"
+}
+
+test_contrast_flags_low_ratio_behind_alias() {
+    local dir
+    dir=$(make_fixture)
+    write_good_page "$dir"
+    python3 - "$dir/assets/css/tokens.css" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+old = "--faint-ink: #8a887d;"
+new = "--faint-ink: #747267;"
+assert old in text, "contrast fixture: --faint-ink line not found"
+open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
+PY
+    run_checker "$dir"
+    assert_eq "1" "$CHECK_RC"
+    assert_contains "FAIL contrast" "$CHECK_OUT"
+}
+
+# ---------------------------------------------------------------------------
 # regions (enforced; --region scopes the strict checks)
 # ---------------------------------------------------------------------------
 
@@ -554,7 +610,7 @@ test_region_flag_scopes_strict_checks() {
     write_strict_clean_page "$dir"
     run_checker "$dir" --strict --region hero
     assert_eq "0" "$CHECK_RC" "--region scopes the strict checks to one region: $CHECK_OUT"
-    assert_contains "OK 16 checks" "$CHECK_OUT"
+    assert_contains "OK 17 checks" "$CHECK_OUT"
 }
 
 test_regions_pass_when_enabled() {
@@ -563,7 +619,7 @@ test_regions_pass_when_enabled() {
     write_region_page "$dir"
     run_checker_regions_on "$dir"
     assert_eq "0" "$CHECK_RC" "expected balanced markers in order to pass: $CHECK_OUT"
-    assert_contains "OK 8 checks" "$CHECK_OUT"
+    assert_contains "OK 9 checks" "$CHECK_OUT"
     assert_not_contains "FAIL regions" "$CHECK_OUT"
 }
 
