@@ -43,6 +43,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/update-metrics.py
 
+      - name: Check the page before it deploys
+        run: python3 scripts/check-site.py
+
       - name: Sync site into gh-pages
         run: |
           rsync -a --delete \
