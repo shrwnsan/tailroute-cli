@@ -38,6 +38,7 @@ jobs:
         run: |
           rsync -a --delete \
             --exclude app-manifest.json \
+            --exclude CNAME \
             --exclude .git \
             site/ gh-pages/
           touch gh-pages/.nojekyll
