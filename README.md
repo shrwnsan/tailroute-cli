@@ -49,7 +49,7 @@ tailroute proxy-config ssh     # Generate SSH config helpers
 
 ## Requirements
 
-- macOS 12+
+- macOS 15+ (Sequoia or later)
 - Tailscale (`brew install tailscale`)
 - A VPN that uses `utun` interface
 
