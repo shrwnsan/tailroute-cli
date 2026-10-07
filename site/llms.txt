@@ -15,5 +15,5 @@
 ## Known limitations
 
 - VPN Network Extensions may block Tailscale's CGNAT range (100.64/10) at the packet level; tested blocked: Mullvad (WireGuard), NordVPN (NordLynx, OpenVPN, NordWhisper). The SOCKS5 proxy and browser tunnels are the supported paths when that happens.
-- While the VPN is active, MagicDNS names do not resolve — use 100.x addresses or a browser tunnel.
+- While the VPN is active, MagicDNS names do not resolve—use 100.x addresses or a browser tunnel.
 - GUI Tailscale.app has limited support; the CLI daemon (`brew install tailscale`) is fully supported. Mac App Store Tailscale is unsupported.
