@@ -91,7 +91,9 @@
     .nav-menu[open] .nav-panel a { font-family: var(--disp); font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); padding: 14px 0; border-bottom: 1px solid var(--line); border-radius: 0; }
     .nav-menu[open] .nav-panel a:last-child { border-bottom: none; }
     .nav-menu[open] .nav-panel a:hover { background: none; color: var(--lime); }
-  }
+    .nav-menu[open] .np-brand { position: absolute; top: 17px; left: 28px; font-family: var(--disp); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--text); display: flex; align-items: center; gap: 10px; }
+    .nav-menu[open] .np-brand i { font-style: normal; color: var(--lime); }
+    .nav-menu[open] .np-alpha { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); background: var(--amber-soft); border: 1px solid var(--amber-line); border-radius: 999px; padding: 3px 10px; }
   .gh-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; color: var(--dim); text-decoration: none; transition: color 0.15s, background 0.15s; }
   .gh-btn:hover { color: var(--text); background: var(--card2); }
   .gh-btn svg { width: 17px; height: 17px; fill: currentColor; }
@@ -514,6 +516,7 @@
           <svg class="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </summary>
         <div class="nav-panel">
+          <div class="np-brand" aria-hidden="true">tailroute<i>.</i> <span class="np-alpha">alpha</span></div>
           <a href="#features">Features</a>
           <a href="#proof">Built in the open</a>
           <a href="#core">Free</a>
