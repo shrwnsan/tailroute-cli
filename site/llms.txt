@@ -12,8 +12,8 @@ The tool answers one question: "How do I keep Tailscale and my VPN working at th
 
 ## Pages
 
-- [Landing page](https://shrwnsan.github.io/tailroute-cli/): product overview, honest limits, FAQ
-- [Manual page](https://shrwnsan.github.io/tailroute-cli/docs/): the full tailroute(8) manual—states, tunnels, security, diagnostics
+- [Landing page](https://tailroute.app/): product overview, honest limits, FAQ
+- [Manual page](https://tailroute.app/docs/): the full tailroute manual—states, tunnels, security, diagnostics
 - [GitHub repository](https://github.com/shrwnsan/tailroute-cli): source, ~7,400 auditable lines of bash and Go
 - [Changelog](https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md): per-release history with test counts
 - [Issues](https://github.com/shrwnsan/tailroute-cli/issues): bug reports and VPN compatibility reports
