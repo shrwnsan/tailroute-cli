@@ -127,12 +127,13 @@ EXPECTED_REGIONS = (
     "nav",
     "hero",
     "features",
-    "proof",
-    "core",
     "limits",
+    "proof",
+    "quickstart",
+    "core",
     "faq",
-    "support",
     "finale",
+    "support",
     "footer",
 )
 

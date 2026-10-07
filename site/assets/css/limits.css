@@ -1,5 +1,14 @@
 .limits-note { margin-top: 14px; font-size: 13.5px; }
 
+/* compatibility card (moved from features in T-719): its exclusive rules live
+   here; the shared .b-card/.b-k card rules stay in features.css until the
+   owning lanes rewrite their regions */
+.compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }
+.compat-copy { max-width: 560px; }
+.vpnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.vpnrow span { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 11px; }
+.vpnrow span.t { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
+
 /* ============ HONESTY ============ */
 .honest { border: 1px solid var(--amber-line); background: var(--amber-soft); border-radius: 16px; padding: 28px; }
 .honest h3 { font-family: var(--disp); font-weight: 700; font-size: 19px; color: var(--amber); margin-bottom: 12px; }

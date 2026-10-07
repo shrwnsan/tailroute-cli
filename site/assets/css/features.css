@@ -1,5 +1,5 @@
-.compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }
-.compat-copy { max-width: 560px; }
+/* the compatibility card moved to limits in T-719 (its compat-head/compat-copy/
+   vpnrow rules now live in limits.css; the shared .b-card/.b-k rules stay here) */
 .matrix-foot { margin-top: 16px; }
 .matrix-note { margin-top: 16px; font-size: 13.5px; }
 
@@ -47,9 +47,6 @@
 .mrow span { font-family: var(--mono); font-size: 11px; color: var(--faint); }
 .urlpill { display: inline-block; font-family: var(--mono); font-size: 11.5px; color: var(--text); background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 12px; margin-top: 14px; }
 .urlpill i { font-style: normal; color: var(--lime); }
-.vpnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.vpnrow span { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 11px; }
-.vpnrow span.t { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
 
 /* problem → response rows */
 .bento .probband { grid-column: span 12; }

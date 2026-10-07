@@ -13,9 +13,11 @@
 <link rel="stylesheet" href="assets/css/nav.css">
 <link rel="stylesheet" href="assets/css/install.css">
 <link rel="stylesheet" href="assets/css/hero.css">
+<link rel="stylesheet" href="assets/css/diagram.css">
 <link rel="stylesheet" href="assets/css/features.css">
 <link rel="stylesheet" href="assets/css/finale.css">
 <link rel="stylesheet" href="assets/css/proof.css">
+<link rel="stylesheet" href="assets/css/quickstart.css">
 <link rel="stylesheet" href="assets/css/core.css">
 <link rel="stylesheet" href="assets/css/limits.css">
 <link rel="stylesheet" href="assets/css/faq.css">
@@ -23,6 +25,7 @@
 <link rel="stylesheet" href="assets/css/footer.css">
 <script defer src="assets/js/copy.js"></script>
 <script defer src="assets/js/install.js"></script>
+<script defer src="assets/js/diagram.js"></script>
 <script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/chart.js"></script>
 <script defer src="assets/js/nav.js"></script>
@@ -159,6 +162,7 @@
           </div>
         </div>
 
+        <!-- region:diagram owner:T-721 -->
         <div class="hero-visual reveal d2" aria-hidden="true">
           <div class="hcard">
             <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
@@ -181,14 +185,8 @@
             </div>
           </div>
         </div>
+        <!-- /region:diagram -->
       </div>
-
-      <dl class="band reveal">
-        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>31</i></dd></div>
-        <div class="stat"><dt>shell tests · 348 → 417 in five weeks</dt><dd>417</dd></div>
-        <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
-        <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
-      </dl>
     </div>
   </header>
 <!-- /region:hero -->
@@ -242,48 +240,77 @@
             Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
             <span class="urlpill"><i>→</i> mypeer.yourtailnet.ts.net:8443</span></div>
         </div>
-
-        <div class="probband reveal d3">
-          <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
-          <div class="resp"><h3><i>03</i>Self-verifying install</h3>
-            <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
-            refuse to start, and say what changed. Strict validation, absolute paths, fail-safe on ambiguity,
-            417 tests and counting.</p></div>
-        </div>
-
-        <div class="b-card b12 reveal d1">
-          <div class="compat-head">
-            <div class="compat-copy">
-              <p class="b-k">compatibility</p>
-              <h3>Works with any utun-route VPN</h3>
-              <p>The daemon classifies routing changes from any VPN that takes the default route—including corporate clients
-              like Cisco AnyConnect, GlobalProtect or Zscaler (classified, not lab-tested:
-              <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">report yours ↗</a>)
-—no per-VPN plugins, no allowlists.</p>
-            </div>
-            <div class="vpnrow">
-              <span class="t">Mullvad · tested</span>
-              <span class="t">NordVPN · tested</span>
-              <span>ProtonVPN</span>
-              <span>Surfshark</span>
-              <span>ExpressVPN</span>
-              <span>corporate VPNs · any utun default-route</span>
-              <span>your VPN ↗</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </section>
 <!-- /region:features -->
 
+<!-- region:limits owner:T-723 -->
+  <!-- HONESTY -->
+  <section id="limits">
+    <div class="wrap">
+      <p class="k reveal limits-k">Honest limits</p>
+      <h2 class="reveal d1">What it can&rsquo;t fix</h2>
+      <p class="lede reveal d2">Told up front, not discovered later.</p>
+      <div class="honest reveal d2">
+        <h3>Network Extensions can still block the mesh</h3>
+        <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic—including packets to Tailscale&rsquo;s CGNAT range
+           (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
+           bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
+        <div class="vpnline">
+          <span>Mullvad—CGNAT blocked</span>
+          <span>NordVPN—CGNAT blocked</span>
+          <span>older VPNs—often fine</span>
+        </div>
+        <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
+      </div>
+
+      <div class="b-card b12 reveal d1">
+        <div class="compat-head">
+          <div class="compat-copy">
+            <p class="b-k">compatibility</p>
+            <h3>Works with any utun-route VPN</h3>
+            <p>The daemon classifies routing changes from any VPN that takes the default route—including corporate clients
+            like Cisco AnyConnect, GlobalProtect or Zscaler (classified, not lab-tested:
+            <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">report yours ↗</a>)
+—no per-VPN plugins, no allowlists.</p>
+          </div>
+          <div class="vpnrow">
+            <span class="t">Mullvad · tested</span>
+            <span class="t">NordVPN · tested</span>
+            <span>ProtonVPN</span>
+            <span>Surfshark</span>
+            <span>ExpressVPN</span>
+            <span>corporate VPNs · any utun default-route</span>
+            <span>your VPN ↗</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+<!-- /region:limits -->
+
 <!-- region:proof owner:T-724 -->
   <!-- PROOF -->
   <section class="proof" id="proof">
     <div class="wrap">
+      <dl class="band reveal">
+        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>31</i></dd></div>
+        <div class="stat"><dt>shell tests · 348 → 417 in five weeks</dt><dd>417</dd></div>
+        <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
+        <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
+      </dl>
       <p class="k reveal">Built in the open</p>
       <h2 class="reveal d1">Shipped, not <em>promised.</em></h2>
       <p class="lede reveal d2">No stars to flex, no fake logos. The repo is six months old and the commit history is the pitch: a slow spring, then a hardening sprint that hasn&rsquo;t stopped.</p>
+
+      <div class="probband reveal d3">
+        <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+        <div class="resp"><h3><i>03</i>Self-verifying install</h3>
+          <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
+          refuse to start, and say what changed. Strict validation, absolute paths, fail-safe on ambiguity,
+          417 tests and counting.</p></div>
+      </div>
 
       <div class="proof-grid">
         <div class="chart-card reveal d1">
@@ -349,6 +376,16 @@
   </section>
 <!-- /region:proof -->
 
+<!-- region:quickstart owner:T-725 -->
+  <section id="install">
+    <div class="wrap">
+      <p class="k">Quickstart</p>
+      <h2>Install, activate, verify</h2>
+      <p class="lede">Step-by-step install, activation, and verification for both install paths will live here.</p>
+    </div>
+  </section>
+<!-- /region:quickstart -->
+
 <!-- region:core owner:T-726 -->
   <!-- OPEN CORE SPLIT -->
   <section class="split" id="core">
@@ -389,29 +426,6 @@
     </div>
   </section>
 <!-- /region:core -->
-
-<!-- region:limits owner:T-723 -->
-  <!-- HONESTY -->
-  <section id="limits">
-    <div class="wrap">
-      <p class="k reveal limits-k">Honest limits</p>
-      <h2 class="reveal d1">What it can&rsquo;t fix</h2>
-      <p class="lede reveal d2">Told up front, not discovered later.</p>
-      <div class="honest reveal d2">
-        <h3>Network Extensions can still block the mesh</h3>
-        <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic—including packets to Tailscale&rsquo;s CGNAT range
-           (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
-           bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
-        <div class="vpnline">
-          <span>Mullvad—CGNAT blocked</span>
-          <span>NordVPN—CGNAT blocked</span>
-          <span>older VPNs—often fine</span>
-        </div>
-        <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
-      </div>
-    </div>
-  </section>
-<!-- /region:limits -->
 
 <!-- region:faq owner:T-727 -->
   <!-- FAQ -->
@@ -563,6 +577,29 @@
   </script>
 <!-- /region:faq -->
 
+<!-- region:finale owner:T-728 -->
+<!-- FINALE CTA -->
+<section class="finale">
+  <div class="wrap">
+    <h2 class="reveal">Two minutes. Then never<br>think about it again.</h2>
+    <p class="fin-sub reveal d1">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
+    <div class="fin-installs reveal d2">
+      <div class="fin-chip">
+        <span class="flabel">Menu bar app</span>
+        <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
+        <button type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
+      </div>
+      <div class="fin-chip">
+        <span class="flabel">CLI daemon</span>
+        <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
+        <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
+      </div>
+    </div>
+    <p class="fin-micro reveal d3">no account · no telemetry · uninstall restores everything</p>
+  </div>
+</section>
+<!-- /region:finale -->
+
 <!-- region:support owner:T-728 -->
   <!-- SUPPORT -->
 <section id="support">
@@ -591,29 +628,6 @@
 <!-- /region:support -->
 
 </main>
-
-<!-- region:finale owner:T-728 -->
-<!-- FINALE CTA -->
-<section class="finale">
-  <div class="wrap">
-    <h2 class="reveal">Two minutes. Then never<br>think about it again.</h2>
-    <p class="fin-sub reveal d1">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
-    <div class="fin-installs reveal d2">
-      <div class="fin-chip">
-        <span class="flabel">Menu bar app</span>
-        <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
-        <button type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-      <div class="fin-chip">
-        <span class="flabel">CLI daemon</span>
-        <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
-        <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-    </div>
-    <p class="fin-micro reveal d3">no account · no telemetry · uninstall restores everything</p>
-  </div>
-</section>
-<!-- /region:finale -->
 
 <!-- region:footer owner:T-728 -->
 <footer>
