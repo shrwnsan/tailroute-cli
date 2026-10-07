@@ -9,7 +9,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="tailroute">
   <meta property="og:title" content="tailroute—Tailscale + VPN coexistence for macOS">
-  <meta property="og:description" content="Internet through your VPN. Peers through your mesh. One fail-safe daemon toggles MagicDNS at exactly the right moment.">
+  <meta property="og:description" content="Internet through your VPN. Peers through your mesh. One fail-safe daemon toggles MagicDNS when your VPN connects.">
   <meta property="og:url" content="https://shrwnsan.github.io/tailroute-cli/">
   <meta property="og:image" content="https://shrwnsan.github.io/tailroute-cli/og.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -72,6 +72,16 @@
   .nav-mid a { font-family: var(--mono); font-size: 12.5px; color: var(--dim); text-decoration: none; }
   .nav-mid a:hover { color: var(--text); }
   .nav-right { display: flex; align-items: center; gap: 10px; }
+  .nav-menu { display: none; position: relative; }
+  .nav-menu summary { list-style: none; display: grid; place-items: center; gap: 4px; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .nav-menu summary::-webkit-details-marker { display: none; }
+  .nav-menu .mi { display: block; width: 16px; height: 2px; border-radius: 1px; background: var(--dim); transition: transform 0.2s ease, opacity 0.2s ease; }
+  .nav-menu[open] .mi1 { transform: translateY(6px) rotate(45deg); }
+  .nav-menu[open] .mi2 { opacity: 0; }
+  .nav-menu[open] .mi3 { transform: translateY(-6px) rotate(-45deg); }
+  .nav-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 220px; background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); padding: 8px; z-index: 70; }
+  .nav-panel a { display: block; padding: 12px 14px; border-radius: 9px; font-family: var(--mono); font-size: 13px; color: var(--dim); text-decoration: none; }
+  .nav-panel a:hover { color: var(--text); background: var(--card2); }
   .gh-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; color: var(--dim); text-decoration: none; transition: color 0.15s, background 0.15s; }
   .gh-btn:hover { color: var(--text); background: var(--card2); }
   .gh-btn svg { width: 17px; height: 17px; fill: currentColor; }
@@ -336,6 +346,7 @@
 
   @media (max-width: 1000px) {
     .nav-mid { display: none; }
+    .nav-menu { display: block; }
     .hero-grid { grid-template-columns: 1fr; }
     .hero-grid > * { min-width: 0; }
     .hero-visual { max-width: 560px; padding-top: 0; }
@@ -450,7 +461,7 @@
         "name": "Who is tailroute for—and who is it not for?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "For one Mac running two networks at once: Tailscale alongside a second VPN—the corporate client (Cisco AnyConnect, GlobalProtect, Zscaler), a commercial privacy VPN (NordVPN, ProtonVPN, Surfshark), or a travel setup where hotel Wi-Fi meets your tailnet. Not for: Tailscale-only setups—if Tailscale is your only VPN or exit node, there is no conflict to manage—and Tailscale's Mullvad exit-node add-on, which already solves coexistence first-party. Also out of scope: MagicDNS split DNS while on a VPN, multiple simultaneous VPNs, IPv6."
+          "text": "For one Mac running two networks at once: Tailscale alongside a second VPN—the corporate client (Cisco AnyConnect, GlobalProtect, Zscaler), a commercial privacy VPN (NordVPN, ProtonVPN, Surfshark), or a travel setup where hotel Wi-Fi meets your tailnet. Not for: Tailscale-only setups—if Tailscale is your only VPN or exit node, there is no conflict to manage—and Tailscale's Mullvad exit-node add-on, which already solves coexistence inside Tailscale. Also out of scope: MagicDNS split DNS while on a VPN, multiple simultaneous VPNs, IPv6."
         }
       }
     ]
@@ -475,6 +486,15 @@
       <!-- Star returns here only when a sponsorship channel is live (point it at the channel then; same moment, revisit the #support section)
       <a class="sp-link" href="https://github.com/sponsors/shrwnsan" target="_blank" rel="noopener">★ Sponsor</a>
       -->
+      <details class="nav-menu">
+        <summary aria-label="Menu"><span class="mi mi1"></span><span class="mi mi2"></span><span class="mi mi3"></span></summary>
+        <div class="nav-panel">
+          <a href="#features">Features</a>
+          <a href="#proof">Built in the open</a>
+          <a href="#core">Free</a>
+          <a href="#faq">FAQ</a>
+        </div>
+      </details>
       <a class="gh-btn" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener" aria-label="GitHub repository">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
       </a>
@@ -495,8 +515,7 @@
             <span>fail-safe by design</span>
           </div>
           <h1 class="reveal d1"><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
-          <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS at exactly
-            the right moment—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
+          <p class="hero-sub reveal d2">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS when your VPN connects—and back when it drops—<b>internet through the VPN, peers through the mesh.</b> A root daemon that is
             fail-safe, self-verifying, and entirely local.</p>
 
           <div class="switcher reveal d3">
@@ -563,7 +582,7 @@
     <div class="wrap">
       <p class="k reveal">What it does</p>
       <h2 class="reveal d1">A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
-      <p class="lede reveal d2">Every routing-table change is classified into one of three states, and the response is deterministic. You do nothing.</p>
+      <p class="lede reveal d2">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
 
       <div class="bento">
         <div class="b-card b7 reveal d1">
@@ -714,7 +733,7 @@
   <section class="split" id="core">
     <div class="wrap">
       <p class="k reveal">The model</p>
-      <h2 class="reveal d1">One engine. <em>Two frontends.</em></h2>
+      <h2 class="reveal d1">One engine. <em>Two apps.</em></h2>
       <p class="lede reveal d2">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
 
       <div class="split-cards">
@@ -822,7 +841,7 @@
             (Cisco AnyConnect, GlobalProtect, Zscaler), a commercial privacy VPN (NordVPN, ProtonVPN, Surfshark), or a
             travel setup where hotel Wi-Fi meets your tailnet. Not for: <b>Tailscale-only setups</b>—if Tailscale is your
             only VPN or exit node, there is no conflict to manage—and <b>Tailscale’s Mullvad exit-node add-on</b>,
-            which already solves coexistence first-party. Also out of scope: MagicDNS split DNS while on a VPN, multiple
+            which already solves coexistence inside Tailscale. Also out of scope: MagicDNS split DNS while on a VPN, multiple
             simultaneous VPNs, IPv6.</div>
         </details>
       </div>
@@ -848,7 +867,7 @@
         <div class="milestone">
           <p>Next milestone</p>
           <b>Notarized, Gatekeeper-clean builds</b>
-          <span>Apple Developer ID ($99/yr) unlocks signed + notarized DMGs—no more right-click-to-open for new users. Sponsorship goes here first.</span>
+          <span>Apple Developer ID ($99/yr) buys signed + notarized DMGs—no more right-click-to-open for new users. Sponsorship goes here first.</span>
         </div>
       </div>
     </div>
@@ -1063,6 +1082,18 @@
       honestCopy(chip.getAttribute("data-copy"), btn, "copied ✓", "copy", "ok", "copy failed");
     });
   });
+
+  /* ---- mobile menu: close on select, Escape, or outside tap ---- */
+  var navMenu = document.querySelector(".nav-menu");
+  if (navMenu) {
+    navMenu.addEventListener("click", function (ev) {
+      if (ev.target.closest(".nav-panel a")) navMenu.removeAttribute("open");
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && navMenu.hasAttribute("open")) { navMenu.removeAttribute("open"); navMenu.querySelector("summary").focus(); }
+    });
+    document.addEventListener("click", function (ev) { if (!navMenu.contains(ev.target)) navMenu.removeAttribute("open"); });
+  }
 
   /* ---- reveals ---- */
   var els = document.querySelectorAll(".reveal");
