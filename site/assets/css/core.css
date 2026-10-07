@@ -1,0 +1,37 @@
+.sc-body { font-size: 14.5px; color: #c9c8bd; }
+.sc-body.alt { color: var(--paper-dim); }
+
+.sc-btn { border: none; }
+.sc .sc-btn.fail { background: var(--amber) !important; color: var(--lime-ink) !important; }
+
+/* ============ OPEN CORE SPLIT (paper) ============ */
+.split { background: var(--paper); color: var(--paper-ink); }
+.split h2 em { color: #4d7c0f; } /* brand lime fails on paper (~1.5:1); deep lime keeps the family at ~4.5:1 */
+.split .k { color: #5c7f10; }
+.split .lede { color: var(--paper-dim); }
+.split-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.sc { border: 2px solid var(--paper-ink); border-radius: 20px; padding: 30px 30px 26px; background: #fffef9; display: flex; flex-direction: column; }
+.sc.core { background: var(--paper-ink); color: var(--paper); border-color: var(--paper-ink); }
+.sc-tag { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 18px; }
+.sc.core .sc-tag { color: var(--lime); }
+.sc.app .sc-tag { color: #b04e10; }
+.sc h3 { font-family: var(--disp); font-weight: 800; font-size: 27px; letter-spacing: -0.02em; margin-bottom: 6px; }
+.sc .price { font-family: var(--disp); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; margin: 14px 0 4px; }
+.sc .price small { font-family: var(--mono); font-weight: 400; font-size: 12px; letter-spacing: 0; color: inherit; opacity: 0.65; display: block; margin-top: 2px; }
+.sc ul { list-style: none; margin: 18px 0 24px; display: flex; flex-direction: column; gap: 9px; }
+.sc ul li { font-size: 14px; padding-left: 22px; position: relative; }
+.sc ul li::before { content: "◆"; position: absolute; left: 0; top: 1px; font-size: 9px; }
+.sc.core ul li::before { color: var(--lime); }
+.sc.app ul li::before { color: #b04e10; }
+.sc-core-list li { color: #c9c8bd; }
+.sc-app-list li { color: var(--paper-dim); }
+.sc-btn { margin-top: auto; display: block; width: 100%; cursor: pointer; text-align: center; font-family: var(--mono); font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 12px; padding: 14px 18px; }
+.sc.core .sc-btn { background: var(--lime); color: var(--lime-ink); }
+.sc.core .sc-btn:hover { filter: brightness(1.05); }
+.sc.app .sc-btn { background: transparent; color: var(--paper-ink); border: 2px solid var(--paper-ink); }
+.sc.app .sc-btn:hover { background: var(--paper-ink); color: var(--paper); }
+.sc-foot { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; text-align: center; color: inherit; opacity: 0.6; }
+
+@media (max-width: 1000px) {
+  .split-cards, .app-grid { grid-template-columns: 1fr; gap: 32px; }
+}

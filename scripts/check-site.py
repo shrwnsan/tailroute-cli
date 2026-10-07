@@ -102,9 +102,9 @@ GATEKEEPER_NOTE = (
     "to approve it in System Settings \u2192 Privacy & Security \u2192 Open Anyway."
 )
 
-# Region markers become mandatory once the page splits into per-region files.
-# Until then the regions check stays off and --region is an error.
-REQUIRE_REGIONS = False
+# Region markers are mandatory: the page is split into per-region files and
+# the regions check runs by default (--region scopes the strict checks).
+REQUIRE_REGIONS = True
 # Top-level regions in page order (head regions first).
 EXPECTED_REGIONS = (
     "assets",

@@ -1,0 +1,77 @@
+.compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }
+.compat-copy { max-width: 560px; }
+.matrix-foot { margin-top: 16px; }
+.matrix-note { margin-top: 16px; font-size: 13.5px; }
+
+/* ============ BENTO ============ */
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+.b-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; position: relative; overflow: hidden; transition: border-color 0.2s ease, transform 0.2s ease; }
+.b-card:hover { border-color: var(--line2); transform: translateY(-2px); }
+.b-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 200px at 80% -20%, rgba(198,242,78,0.05), transparent 70%); pointer-events: none; }
+.b7 { grid-column: span 7; } .b5 { grid-column: span 5; }
+.b4 { grid-column: span 4; } .b8 { grid-column: span 8; } .b12 { grid-column: span 12; }
+.b-k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
+.b-card h3 { font-family: var(--disp); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
+.b-card p { color: var(--dim); font-size: 14.5px; }
+.b-card p b { color: var(--text); font-weight: 600; }
+
+.terminal { background: #101010; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; }
+.term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line2); }
+.term-bar i:first-child { background: var(--lime); }
+.term-bar span { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-left: 6px; }
+/* fixed 10-line capacity (matches the loop's cap) so the demo never shifts
+   layout; extra lines exit the top, scrollback-style */
+.term-body { padding: 16px; height: calc(1.8em * 10 + 32px); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; font-family: var(--mono); font-size: 12.4px; line-height: 1.8; }
+.term-body > div { flex: none; }
+.tl-cmd { color: var(--text); } .tl-cmd::before { content: "❯ "; color: var(--lime); }
+.tl-out { color: var(--dim); } .tl-dim { color: var(--faint); }
+.tl-ok { color: var(--lime); } .tl-warn { color: var(--amber); }
+.term-foot { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.term-foot span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); white-space: nowrap; }
+/* value floors are sized to the widest bold glyph run per chip
+   (ch tracks regular weight—bold runs run wider); family is pinned
+   here rather than inherited so all three values share one declaration */
+.term-foot b { font-family: var(--mono); font-weight: 600; margin-left: 4px; min-width: 3.5ch; display: inline-block; }
+.term-foot span:nth-child(2) b { min-width: 4.5ch; } /* down */
+.term-foot span:last-child b { min-width: 8ch; } /* COEXIST—row wrap must not depend on loop state */
+.fon { color: var(--lime); } .foff { color: var(--amber); }
+
+.mrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.mrow:last-child { border-bottom: none; }
+.led { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.led-l { background: var(--amber); box-shadow: 0 0 8px rgba(232,163,61,0.5); }
+.led-m { background: var(--lime); box-shadow: 0 0 8px rgba(198,242,78,0.4); }
+.led-o { background: var(--line2); }
+.mrow b { font-weight: 600; font-size: 13.5px; width: 130px; flex-shrink: 0; }
+.mrow span { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.urlpill { display: inline-block; font-family: var(--mono); font-size: 11.5px; color: var(--text); background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 12px; margin-top: 14px; }
+.urlpill i { font-style: normal; color: var(--lime); }
+.vpnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.vpnrow span { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 11px; }
+.vpnrow span.t { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
+
+/* problem → response rows */
+.bento .probband { grid-column: span 12; }
+.probband { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--card); margin-bottom: 14px; }
+.prob { background: var(--bg2); padding: 24px 26px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
+.prob p { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.prob h4 { font-family: var(--disp); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; color: var(--dim); }
+.resp { padding: 24px 26px; }
+.resp h3 { font-family: var(--disp); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
+.resp h3 i { font-style: normal; color: var(--lime); margin-right: 8px; }
+.resp p { color: var(--dim); font-size: 14.5px; }
+.resp p b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 1000px) {
+  .b7, .b5, .b8, .b4 { grid-column: span 12; }
+}
+@media (max-width: 620px) {
+  .probband { grid-template-columns: 1fr; }
+  .prob { border-right: none; border-bottom: 1px solid var(--line); }
+
+  /* stacked status chips: label over value—chip width stays loop-independent */
+  .term-foot { gap: 16px; }
+  .term-foot span { display: flex; flex-direction: column; gap: 2px; }
+  .term-foot b { margin-left: 0; }
+}

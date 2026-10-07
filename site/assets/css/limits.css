@@ -1,0 +1,9 @@
+.limits-note { margin-top: 14px; font-size: 13.5px; }
+
+/* ============ HONESTY ============ */
+.honest { border: 1px solid var(--amber-line); background: var(--amber-soft); border-radius: 16px; padding: 28px; }
+.honest h3 { font-family: var(--disp); font-weight: 700; font-size: 19px; color: var(--amber); margin-bottom: 12px; }
+.honest p { color: var(--dim); font-size: 14.5px; max-width: 860px; }
+.honest p b { color: var(--text); }
+.honest .vpnline { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.honest .vpnline span { font-family: var(--mono); font-size: 11px; color: var(--amber); border: 1px solid var(--amber-line); border-radius: 999px; padding: 4px 11px; }

@@ -1,0 +1,20 @@
+#support { padding-top: 0; }
+
+.sup-note { color: var(--dim); margin-top: 14px; max-width: 480px; }
+
+/* ============ SUPPORT ============ */
+.sup-card { border: 1px solid var(--line2); border-radius: 20px; padding: 40px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; background: linear-gradient(120deg, var(--card), var(--bg2)); }
+.sup-card h2 { font-size: clamp(1.7rem, 2.8vw, 2.3rem); }
+.milestone { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+.milestone p { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
+.milestone b { font-size: 15px; font-weight: 600; display: block; margin-bottom: 4px; }
+.milestone span { font-size: 13px; color: var(--dim); }
+.sup-actions { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+.btn-lime { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 13px; font-weight: 600; background: var(--lime); color: var(--lime-ink); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+.btn-lime:hover { filter: brightness(1.05); }
+.btn-ghost2 { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 13px; color: var(--text); border: 1px solid var(--line2); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+.btn-ghost2:hover { border-color: var(--lime-line); }
+
+@media (max-width: 1000px) {
+  .sup-card { grid-template-columns: 1fr; }
+}
