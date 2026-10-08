@@ -1,6 +1,6 @@
 .limits-note { margin-top: 14px; font-size: 13.5px; }
 
-/* compatibility card (moved from features in T-719): its exclusive rules live
+/* compatibility card (moved from features): its exclusive rules live
    here; the shared .b-card/.b-k card rules stay in features.css until the
    owning lanes rewrite their regions */
 .compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }

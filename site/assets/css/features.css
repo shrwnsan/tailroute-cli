@@ -1,4 +1,4 @@
-/* the compatibility card moved to limits in T-719 (its compat-head/compat-copy/
+/* the compatibility card moved to limits (its compat-head/compat-copy/
    vpnrow rules now live in limits.css; the shared .b-card/.b-k rules stay here) */
 .matrix-foot { margin-top: 16px; }
 .matrix-note { margin-top: 16px; font-size: 13.5px; }

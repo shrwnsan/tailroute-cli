@@ -1,4 +1,4 @@
-/* diagram (T-721): the hero route diagram; these rules moved from hero.css in T-719 */
+/* the hero route diagram; these rules moved from hero.css when the region was split out */
 .hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
 .hcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 18px 44px rgba(0,0,0,0.32); transition: transform 0.25s cubic-bezier(0.2,0.65,0.3,1), box-shadow 0.25s cubic-bezier(0.2,0.65,0.3,1), border-color 0.25s ease; }
 .hcard:hover, .hcard:focus-within { transform: translateY(-3px); box-shadow: 0 30px 70px rgba(0,0,0,0.45); border-color: var(--line2); }

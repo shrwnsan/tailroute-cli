@@ -1,1 +1,1 @@
-/* diagram (T-721): the route-diagram script (play-once observer + replay) arrives with its task */
+/* route-diagram script: the play-once observer + replay controls arrive with the diagram's content */

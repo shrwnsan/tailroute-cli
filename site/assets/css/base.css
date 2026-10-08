@@ -14,10 +14,10 @@ section[id] { scroll-margin-top: 65px; }
 /* .limits-k stays ahead of .k: equal specificity, so source order decides
    and the label keeps .k's colour, exactly as in the single-sheet layout. */
 .limits-k { color: var(--amber); }
-/* .k labels are sentence case: no uppercase transform, no letter-spacing (T-719.6) */
+/* section labels are sentence case: no uppercase transform, no letter-spacing */
 .k { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--lime); margin-bottom: 16px; }
 /* headings default to the display face on the shared scale; section sheets
-   may only add layout, not re-size (T-719.6) */
+   may only add layout, not re-size */
 h1, h2, h3 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; }
 h1 { font-size: var(--step-4); line-height: 1.04; }
 h2 { font-size: var(--step-3); line-height: 1.04; }

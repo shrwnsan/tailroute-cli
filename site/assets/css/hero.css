@@ -5,7 +5,7 @@
 .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
 .eyebrow span { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 5px 12px; }
 .eyebrow span.hot { color: var(--lime); border-color: var(--lime-line); background: var(--lime-soft); }
-/* h1 size, face, and weight come from base.css (T-719.6 type scale) */
+/* h1 size, face, and weight come from base.css (shared type scale) */
 h1 { line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: balance; }
 h1 em { font-style: normal; color: var(--lime); }
 .hero-sub { max-width: 620px; color: var(--dim); font-size: 18px; margin: 26px 0 34px; }
@@ -17,12 +17,12 @@ h1 em { font-style: normal; color: var(--lime); }
 .ghost { font-family: var(--mono); font-size: 12.5px; color: var(--dim); text-decoration: none; border-bottom: 1px solid var(--line2); padding-bottom: 2px; }
 .ghost:hover { color: var(--text); border-color: var(--lime); }
 
-/* hero product visual moved to diagram.css (T-719); stat band moved to proof.css */
+/* hero product visual moved to diagram.css; stat band moved to proof.css */
 
 @media (max-width: 1000px) {
   .hero-grid { grid-template-columns: 1fr; }
   .hero-grid > * { min-width: 0; }
 }
 @media (max-width: 620px) {
-  h1 { font-size: clamp(2.2rem, 10vw, 2.8rem); } /* T-720.6 deletes this override */
+  h1 { font-size: clamp(2.2rem, 10vw, 2.8rem); } /* pending: replaced by the shared scale's mobile size */
 }
