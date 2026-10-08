@@ -3,7 +3,8 @@
 
 The page makes promises a reviewer should not have to re-check by hand:
 
-- no third-party subresources (fonts included),
+- no third-party subresources (fonts included) — the self-hosted analytics
+  ingest is the one first-party exception,
 - the release metrics the deploy script injects are present and findable,
 - JSON-LD structured data parses and the FAQ stays in sync with it,
 - every in-page anchor resolves and the public anchor ids stay put,
@@ -42,6 +43,12 @@ from urllib.parse import urlsplit
 
 # The only host a subresource may load from (the page serves from this domain).
 OWN_DOMAIN = "tailroute.app"
+
+# First-party hosts a subresource may additionally load from: the self-hosted
+# Plausible ingest, same registrable domain, DNS-only behind grey cloud. It
+# must stay that way — proxying it through a CDN challenges cross-origin
+# event POSTs and pageviews drop silently.
+FIRST_PARTY_HOSTS = frozenset({"pulse.tailroute.app"})
 
 # Claims the page must never make again: unsourced, stale, or contradictory.
 BANNED_PHRASES = (
@@ -302,6 +309,11 @@ def external_host(url):
     return None
 
 
+def subresource_host_allowed(host):
+    """Same-origin, or a first-party host (see FIRST_PARTY_HOSTS)."""
+    return not host or host == OWN_DOMAIN or host in FIRST_PARTY_HOSTS
+
+
 def inline_styles(page):
     """Inline <style> blocks as CSS sources with real line numbers."""
     sources = []
@@ -395,31 +407,31 @@ def check_third_party(pages, css_sources):
                     urls = [value.strip()]
                 for url in urls:
                     host = external_host(url)
-                    if host and host != OWN_DOMAIN:
+                    if not subresource_host_allowed(host):
                         fails.append(Failure(
                             page.rel, element.line,
                             f'<{element.tag} {attr}> loads from "{host}"'
-                            f" — every subresource must be same-origin",
+                            f" — every subresource must be same-origin or first-party",
                         ))
             style = element.attrs.get("style")
             if style:
                 for pattern in CSS_URL_PATTERNS[:1]:
                     for match in pattern.finditer(style):
                         host = external_host(match.group("url"))
-                        if host and host != OWN_DOMAIN:
+                        if not subresource_host_allowed(host):
                             fails.append(Failure(
                                 page.rel, element.line,
                                 f'inline style loads from "{host}"'
-                                f" — every subresource must be same-origin",
+                                f" — every subresource must be same-origin or first-party",
                             ))
     for source in css_sources:
         for pattern in CSS_URL_PATTERNS:
             for match in pattern.finditer(source.text):
                 host = external_host(match.group("url"))
-                if host and host != OWN_DOMAIN:
+                if not subresource_host_allowed(host):
                     fails.append(Failure(
                         source.rel, source.line_at(match.start()),
-                        f'CSS loads from "{host}" — every subresource must be same-origin',
+                        f'CSS loads from "{host}" — every subresource must be same-origin or first-party',
                     ))
     return fails
 

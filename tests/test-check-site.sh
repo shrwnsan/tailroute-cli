@@ -266,6 +266,44 @@ test_third_party_passes_on_local_resources() {
     assert_not_contains "FAIL third-party" "$CHECK_OUT"
 }
 
+test_third_party_allows_first_party_analytics_ingest() {
+    local dir
+    dir=$(make_fixture)
+    write_good_page "$dir"
+    python3 - "$dir/index.html" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+script = '<script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>'
+open(path, "w", encoding="utf-8").write(text.replace("</head>", script + "\n</head>"))
+PY
+    run_checker "$dir"
+    assert_eq "0" "$CHECK_RC" "the first-party Plausible ingest must pass: $CHECK_OUT"
+    assert_not_contains "FAIL third-party" "$CHECK_OUT"
+}
+
+test_third_party_still_flags_third_party_analytics() {
+    # Only the self-hosted first-party ingest (pulse.tailroute.app, same
+    # registrable domain) is allowed; the SaaS host is third-party. The
+    # ingest must never be CDN-proxied instead: a proxy challenges
+    # cross-origin event POSTs and pageviews drop silently.
+    local dir
+    dir=$(make_fixture)
+    write_good_page "$dir"
+    python3 - "$dir/index.html" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+script = '<script defer data-domain="tailroute.app" src="https://plausible.io/js/script.js"></script>'
+open(path, "w", encoding="utf-8").write(text.replace("</head>", script + "\n</head>"))
+PY
+    run_checker "$dir"
+    assert_eq "1" "$CHECK_RC"
+    assert_contains "FAIL third-party" "$CHECK_OUT"
+}
+
 # ---------------------------------------------------------------------------
 # metrics
 # ---------------------------------------------------------------------------
