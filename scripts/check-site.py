@@ -129,7 +129,6 @@ EXPECTED_REGIONS = (
     "features",
     "limits",
     "proof",
-    "quickstart",
     "core",
     "faq",
     "finale",

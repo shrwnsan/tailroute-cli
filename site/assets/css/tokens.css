@@ -19,7 +19,7 @@
   --step-1: 20px;
   --step-2: 28px;
   --step-3: clamp(2rem, 3.6vw, 2.9rem);
-  --step-4: clamp(2.4rem, 5.6vw, 4.5rem);
+  --step-4: clamp(2.8rem, 6vw, 5rem);
 
   /* motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

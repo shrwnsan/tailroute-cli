@@ -8,12 +8,11 @@
 .install-tab[aria-selected="true"] { color: var(--text); }
 .install-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--lime); }
 .install-tab .tagx { font-size: 9px; color: var(--lime); margin-left: 6px; }
-.install-panel { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+.install-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; row-gap: 8px; padding: 15px 16px 15px 18px; }
 .install-panel[hidden] { display: none; }
-.install-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1; white-space: pre; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
-.install-cmd::-webkit-scrollbar { display: none; }
+.install-cmd { font-family: var(--mono); font-size: 13.5px; flex: 1 1 300px; white-space: pre-wrap; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
 .install-ps1 { color: var(--lime); margin-right: 4px; }
-.install-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.install-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); flex-basis: 100%; order: 3; }
 
 /* the active tab's label is the tab itself; the per-panel label is no-JS only */
 html.js .install-label { display: none; }
@@ -46,6 +45,4 @@ html:not(.js) .install-panel button[data-copy] { margin-top: 10px; }
 @media (max-width: 620px) {
   .install-tab .tagx { display: none; }
   .install-cmd { font-size: 12px; }
-  .install-panel { flex-wrap: wrap; }
-  .install-cmd { flex-basis: 100%; }
 }

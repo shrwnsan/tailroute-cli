@@ -17,7 +17,6 @@
 <link rel="stylesheet" href="assets/css/features.css">
 <link rel="stylesheet" href="assets/css/finale.css">
 <link rel="stylesheet" href="assets/css/proof.css">
-<link rel="stylesheet" href="assets/css/quickstart.css">
 <link rel="stylesheet" href="assets/css/core.css">
 <link rel="stylesheet" href="assets/css/limits.css">
 <link rel="stylesheet" href="assets/css/faq.css">
@@ -364,7 +363,7 @@
 
       <div class="probband">
         <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
-        <div class="resp"><h3><i>03</i>Self-verifying install</h3>
+        <div class="resp"><h3>Self-verifying install</h3>
           <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
           refuse to start, and say what changed. Strict validation, absolute paths, fail-safe on ambiguity,
           417 tests and counting.</p></div>
@@ -373,20 +372,6 @@
   </section>
 <!-- /region:proof -->
 
-<!-- region:quickstart owner:quickstart -->
-  <section id="install">
-    <div class="wrap">
-      <p class="k">Quickstart</p>
-      <h2>Install, activate, verify</h2>
-      <p class="lede">Step-by-step install, activation, and verification for both install paths will live here.</p>
-      <ol class="qs-steps">
-        <li><span>1</span>Install</li>
-        <li><span>2</span>Activate</li>
-        <li><span>3</span>Verify with <code>tailroute status</code></li>
-      </ol>
-    </div>
-  </section>
-<!-- /region:quickstart -->
 
 <!-- region:core owner:core -->
   <!-- OPEN CORE SPLIT -->
@@ -581,7 +566,7 @@
 
 <!-- region:finale owner:finale -->
 <!-- FINALE CTA -->
-<section class="finale">
+<section class="finale" id="install">
   <div class="wrap">
     <h2>Two minutes. Then never<br>think about it again.</h2>
     <p class="fin-sub">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
