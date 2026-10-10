@@ -9,7 +9,7 @@
 .b-card:hover { border-color: var(--line2); transform: translateY(-2px); }
 .b-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 200px at 80% -20%, rgba(198,242,78,0.05), transparent 70%); pointer-events: none; }
 .b7 { grid-column: span 7; } .b5 { grid-column: span 5; }
-.b4 { grid-column: span 4; } .b8 { grid-column: span 8; } .b12 { grid-column: span 12; }
+.b12 { grid-column: span 12; }
 .b-k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
 .b-card h3 { font-family: var(--disp); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
 .b-card p { color: var(--dim); font-size: 14.5px; }
@@ -61,7 +61,7 @@
 .resp p b { color: var(--text); font-weight: 600; }
 
 @media (max-width: 1000px) {
-  .b7, .b5, .b8, .b4 { grid-column: span 12; }
+  .b7, .b5 { grid-column: span 12; }
 }
 @media (max-width: 620px) {
   .probband { grid-template-columns: 1fr; }

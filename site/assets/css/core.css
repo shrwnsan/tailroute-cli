@@ -33,5 +33,5 @@
 .sc-foot { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; text-align: center; color: inherit; opacity: 0.6; }
 
 @media (max-width: 1000px) {
-  .split-cards, .app-grid { grid-template-columns: 1fr; gap: 32px; }
+  .split-cards { grid-template-columns: 1fr; gap: 32px; }
 }
