@@ -32,7 +32,7 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "Geist Mono", monospace;
 
-  /* legacy aliases: removed in T-750 */
+  /* legacy aliases: temporary — removed once no stylesheet references them */
   --bg: var(--ground);
   --bg2: #121210;
   --card: var(--surface);

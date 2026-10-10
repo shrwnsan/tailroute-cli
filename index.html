@@ -147,7 +147,7 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "Geist Mono", monospace;
 
-  /* legacy aliases: removed in T-750 */
+  /* legacy aliases: temporary — removed once no stylesheet references them */
   --bg: var(--ground);
   --bg2: #121210;
   --card: var(--surface);
@@ -611,7 +611,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>
 <!-- /region:assets -->
 
-<!-- region:meta owner:T-720 -->
+<!-- region:meta owner:meta -->
 <title>tailroute-cli—Tailscale + VPN coexistence for macOS</title>
   <meta name="description" content="A fail-safe macOS daemon that toggles Tailscale's MagicDNS when your VPN connects—internet through the VPN, peers through the mesh. No telemetry. Apache-2.0 CLI.">
   <link rel="canonical" href="https://tailroute.app/">
@@ -652,7 +652,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 </head>
 <body>
 
-<!-- region:nav owner:T-729 -->
+<!-- region:nav owner:nav -->
 <nav aria-label="Primary">
   <div class="nav-in">
     <div class="brand-wrap">
@@ -693,7 +693,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 
 <main id="top">
 
-<!-- region:hero owner:T-720 -->
+<!-- region:hero owner:hero -->
   <!-- HERO -->
   <header class="hero">
     <div class="wrap">
@@ -731,11 +731,9 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
           <div class="hero-cta reveal d3">
             <a class="ghost" href="#core">Free core vs the app ↓</a>
             <a class="ghost" href="docs/">Full docs ↗</a>
-            <!-- DMG direct download: uncomment only once builds are notarized (v0.3.0). Two blockers on record:
-                 (1) a raw DMG link is a non-brew fetch path—it contradicts the standing supply-chain claim
-                 "no non-brew fetch path" (research-002 prop.4, gtm-001 §5) until the claim is amended;
+            <!-- DMG direct download: uncomment only once builds are notarized. Two blockers on record:
+                 (1) until notarization, a raw DMG link contradicts the project's brew-only install path;
                  (2) the DMG is ad-hoc signed, so browser downloads trip macOS 15+ "Apple could not verify".
-                 Flip together with a gtm-001 amendment.
             <a class="ghost" href="https://github.com/shrwnsan/tailroute-cli/releases/latest" target="_blank" rel="noopener">Download the DMG ↓</a>
             -->
           </div>
@@ -775,7 +773,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </header>
 <!-- /region:hero -->
 
-<!-- region:features owner:T-722 -->
+<!-- region:features owner:features -->
   <!-- BENTO FEATURES -->
   <section id="features">
     <div class="wrap">
@@ -859,7 +857,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </section>
 <!-- /region:features -->
 
-<!-- region:proof owner:T-724 -->
+<!-- region:proof owner:proof -->
   <!-- PROOF -->
   <section class="proof" id="proof">
     <div class="wrap">
@@ -931,7 +929,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </section>
 <!-- /region:proof -->
 
-<!-- region:core owner:T-726 -->
+<!-- region:core owner:core -->
   <!-- OPEN CORE SPLIT -->
   <section class="split" id="core">
     <div class="wrap">
@@ -972,7 +970,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </section>
 <!-- /region:core -->
 
-<!-- region:limits owner:T-723 -->
+<!-- region:limits owner:limits -->
   <!-- HONESTY -->
   <section id="limits">
     <div class="wrap">
@@ -995,7 +993,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </section>
 <!-- /region:limits -->
 
-<!-- region:faq owner:T-727 -->
+<!-- region:faq owner:faq -->
   <!-- FAQ -->
 <section id="faq">
     <div class="wrap">
@@ -1145,7 +1143,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </script>
 <!-- /region:faq -->
 
-<!-- region:support owner:T-728 -->
+<!-- region:support owner:support -->
   <!-- SUPPORT -->
 <section id="support">
     <div class="wrap">
@@ -1174,7 +1172,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 
 </main>
 
-<!-- region:finale owner:T-728 -->
+<!-- region:finale owner:finale -->
 <!-- FINALE CTA -->
 <section class="finale">
   <div class="wrap">
@@ -1197,7 +1195,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 </section>
 <!-- /region:finale -->
 
-<!-- region:footer owner:T-728 -->
+<!-- region:footer owner:footer -->
 <footer>
   <div class="wrap">
     <div class="foot-grid">
@@ -1228,7 +1226,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       </div>
     </div>
     <div class="legal">
-      <p>CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc.<span data-metric="updated"> · site updated 2026-10-08</span></p>
+      <p>CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc.<span data-metric="updated"> · site updated 2026-10-10</span></p>
     </div>
   </div>
 </footer>
