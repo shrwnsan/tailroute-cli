@@ -3,8 +3,9 @@
 
 The page makes promises a reviewer should not have to re-check by hand:
 
-- no third-party subresources (fonts included) — the self-hosted analytics
-  ingest is the one first-party exception,
+- no third-party subresources (fonts included) — the cookie-free analytics
+  ingests (self-hosted Plausible, Cloudflare Web Analytics) are the only
+  exceptions,
 - the release metrics the deploy script injects are present and findable,
 - JSON-LD structured data parses and the FAQ stays in sync with it,
 - every in-page anchor resolves and the public anchor ids stay put,
@@ -44,11 +45,14 @@ from urllib.parse import urlsplit
 # The only host a subresource may load from (the page serves from this domain).
 OWN_DOMAIN = "tailroute.app"
 
-# First-party hosts a subresource may additionally load from: the self-hosted
-# Plausible ingest, same registrable domain, DNS-only behind grey cloud. It
-# must stay that way — proxying it through a CDN challenges cross-origin
-# event POSTs and pageviews drop silently.
-FIRST_PARTY_HOSTS = frozenset({"pulse.tailroute.app"})
+# Analytics hosts a subresource may additionally load from. Both are
+# cookie-free, aggregate-only page analytics: the self-hosted Plausible
+# ingest (same registrable domain, DNS-only behind grey cloud — proxying it
+# through a CDN challenges cross-origin event POSTs and pageviews drop
+# silently) and the Cloudflare Web Analytics beacon, which per Cloudflare
+# "does not collect or use your visitors' personal data". Nothing else may
+# load cross-origin.
+ANALYTICS_HOSTS = frozenset({"pulse.tailroute.app", "static.cloudflareinsights.com"})
 
 # Claims the page must never make again: unsourced, stale, or contradictory.
 BANNED_PHRASES = (
@@ -310,8 +314,8 @@ def external_host(url):
 
 
 def subresource_host_allowed(host):
-    """Same-origin, or a first-party host (see FIRST_PARTY_HOSTS)."""
-    return not host or host == OWN_DOMAIN or host in FIRST_PARTY_HOSTS
+    """Same-origin, or an approved analytics host (see ANALYTICS_HOSTS)."""
+    return not host or host == OWN_DOMAIN or host in ANALYTICS_HOSTS
 
 
 def inline_styles(page):
@@ -411,7 +415,7 @@ def check_third_party(pages, css_sources):
                         fails.append(Failure(
                             page.rel, element.line,
                             f'<{element.tag} {attr}> loads from "{host}"'
-                            f" — every subresource must be same-origin or first-party",
+                            f" — every subresource must be same-origin or an approved analytics host",
                         ))
             style = element.attrs.get("style")
             if style:
@@ -422,7 +426,7 @@ def check_third_party(pages, css_sources):
                             fails.append(Failure(
                                 page.rel, element.line,
                                 f'inline style loads from "{host}"'
-                                f" — every subresource must be same-origin or first-party",
+                                f" — every subresource must be same-origin or an approved analytics host",
                             ))
     for source in css_sources:
         for pattern in CSS_URL_PATTERNS:
@@ -431,7 +435,7 @@ def check_third_party(pages, css_sources):
                 if not subresource_host_allowed(host):
                     fails.append(Failure(
                         source.rel, source.line_at(match.start()),
-                        f'CSS loads from "{host}" — every subresource must be same-origin or first-party',
+                        f'CSS loads from "{host}" — every subresource must be same-origin or an approved analytics host',
                     ))
     return fails
 

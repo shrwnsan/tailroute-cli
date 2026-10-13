@@ -30,6 +30,8 @@
 <!-- Plausible analytics: self-hosted, first-party (same registrable domain).
      Ingest = pulse.tailroute.app; keep it DNS-only — never CDN-proxy it. -->
 <script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>
+<!-- Cloudflare Web Analytics: cookie-free, aggregate-only. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "418fcc4385174264b82cae5eb6305a76"}'></script>
 <!-- /region:assets -->
 
 <!-- region:meta owner:meta -->

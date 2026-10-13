@@ -19,6 +19,8 @@
 <!-- Plausible analytics: self-hosted, first-party (same registrable domain).
      Ingest = pulse.tailroute.app; keep it DNS-only — never CDN-proxy it. -->
 <script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>
+<!-- Cloudflare Web Analytics: cookie-free, aggregate-only. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "418fcc4385174264b82cae5eb6305a76"}'></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -340,7 +342,7 @@
 
 </main>
 <footer>
-  <p class="colophon">No trackers, no analytics on this page—the daemon doesn’t call home either.</p>
+  <p class="colophon">Site analytics: cookie-free, aggregate-only (Plausible + Cloudflare)—the daemon doesn’t call home either.</p>
   <p class="legal">CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc. · <a class="backlink" href="../">← tailroute</a></p>
 </footer>
 <script>

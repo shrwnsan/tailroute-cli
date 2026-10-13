@@ -283,11 +283,29 @@ PY
     assert_not_contains "FAIL third-party" "$CHECK_OUT"
 }
 
+test_third_party_allows_cloudflare_beacon() {
+    local dir
+    dir=$(make_fixture)
+    write_good_page "$dir"
+    python3 - "$dir/index.html" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+script = "<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{\"token\": \"x\"}'></script>"
+open(path, "w", encoding="utf-8").write(text.replace("</head>", script + "\n</head>"))
+PY
+    run_checker "$dir"
+    assert_eq "0" "$CHECK_RC" "the Cloudflare Web Analytics beacon must pass: $CHECK_OUT"
+    assert_not_contains "FAIL third-party" "$CHECK_OUT"
+}
+
 test_third_party_still_flags_third_party_analytics() {
-    # Only the self-hosted first-party ingest (pulse.tailroute.app, same
-    # registrable domain) is allowed; the SaaS host is third-party. The
-    # ingest must never be CDN-proxied instead: a proxy challenges
-    # cross-origin event POSTs and pageviews drop silently.
+    # Only the approved analytics hosts (see ANALYTICS_HOSTS:
+    # pulse.tailroute.app and static.cloudflareinsights.com) may load
+    # cross-origin; other analytics SaaS hosts are third-party. The
+    # Plausible ingest must never be CDN-proxied instead: a proxy
+    # challenges cross-origin event POSTs and pageviews drop silently.
     local dir
     dir=$(make_fixture)
     write_good_page "$dir"
