@@ -609,6 +609,8 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <!-- Plausible analytics: self-hosted, first-party (same registrable domain).
      Ingest = pulse.tailroute.app; keep it DNS-only — never CDN-proxy it. -->
 <script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>
+<!-- Cloudflare Web Analytics: cookie-free, aggregate-only. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "418fcc4385174264b82cae5eb6305a76"}'></script>
 <!-- /region:assets -->
 
 <!-- region:meta owner:meta -->
@@ -1226,7 +1228,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       </div>
     </div>
     <div class="legal">
-      <p>CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc.<span data-metric="updated"> · site updated 2026-10-12</span></p>
+      <p>CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc.<span data-metric="updated"> · site updated 2026-10-14</span></p>
     </div>
   </div>
 </footer>
