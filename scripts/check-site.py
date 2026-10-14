@@ -415,7 +415,7 @@ def check_third_party(pages, css_sources):
                         fails.append(Failure(
                             page.rel, element.line,
                             f'<{element.tag} {attr}> loads from "{host}"'
-                            f" — every subresource must be same-origin or an approved analytics host",
+                            f" — every subresource must be same-origin or an explicitly allowed host",
                         ))
             style = element.attrs.get("style")
             if style:
@@ -426,7 +426,7 @@ def check_third_party(pages, css_sources):
                             fails.append(Failure(
                                 page.rel, element.line,
                                 f'inline style loads from "{host}"'
-                                f" — every subresource must be same-origin or an approved analytics host",
+                                f" — every subresource must be same-origin or an explicitly allowed host",
                             ))
     for source in css_sources:
         for pattern in CSS_URL_PATTERNS:
@@ -435,7 +435,7 @@ def check_third_party(pages, css_sources):
                 if not subresource_host_allowed(host):
                     fails.append(Failure(
                         source.rel, source.line_at(match.start()),
-                        f'CSS loads from "{host}" — every subresource must be same-origin or an approved analytics host',
+                        f'CSS loads from "{host}" — every subresource must be same-origin or an explicitly allowed host',
                     ))
     return fails
 
