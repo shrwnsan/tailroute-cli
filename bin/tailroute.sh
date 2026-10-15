@@ -153,6 +153,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && "${1:-}" == "daemon" ]]; then
 fi
 
 # Source all required libraries
+# shellcheck source=lib-ui.sh
+source "$LIB_DIR/lib-ui.sh"
 # shellcheck source=lib-log.sh
 source "$LIB_DIR/lib-log.sh"
 # shellcheck source=lib-event-loop.sh
@@ -501,7 +503,7 @@ do_install() {
             if pgrep -f "tailroute daemon" >/dev/null 2>&1; then
                 echo "  Daemon already running"
             else
-                echo "  Warning: Failed to load daemon (exit code: $bootstrap_err)"
+                ui_warn "Failed to load daemon (exit code: $bootstrap_err)"
                 echo "  Try: sudo launchctl bootstrap system /Library/LaunchDaemons/com.tailroute.daemon.plist"
             fi
         }
@@ -512,12 +514,12 @@ do_install() {
     sleep 1
 
     if pgrep -f "tailroute daemon" >/dev/null 2>&1; then
-        echo "✓ tailroute daemon installed and running"
+        ui_ok "tailroute daemon installed and running"
         echo ""
-        echo "  Check status: tailroute status"
-        echo "  View logs: tail -f /var/log/tailroute.log"
+        ui_dim "  Check status: tailroute status"
+        ui_dim "  View logs: tail -f /var/log/tailroute.log"
     else
-        echo "⚠ Warning: daemon may not have started yet"
+        ui_warn "daemon may not have started yet"
         echo "  Run 'tailroute status' to verify"
     fi
 
@@ -610,7 +612,7 @@ do_uninstall() {
     fi
     
     echo ""
-    echo "✓ tailroute daemon uninstalled"
+    ui_ok "tailroute daemon uninstalled"
     echo ""
 }
 
@@ -804,12 +806,12 @@ do_proxy_auth() {
             return 0
         fi
         if _proxy_last_run_needs_login; then
-            echo "⚠️  Proxy state exists but the last run was not logged in (NeedsLogin)."
+            ui_warn "Proxy state exists but the last run was not logged in (NeedsLogin)."
             _proxy_authkey_hint
             return 1
         fi
-        echo "✓ Proxy already authenticated."
-        echo "Start the proxy with: tailroute proxy start"
+        ui_ok "Proxy already authenticated."
+        ui_dim "Start the proxy with: tailroute proxy start"
         return 0
     fi
     
@@ -848,17 +850,17 @@ do_proxy_auth() {
         --state-dir "$PROXY_STATE_DIR"
     
     echo ""
-    echo "✓ Authentication complete!"
-    echo "Start the proxy with: tailroute proxy start"
+    ui_ok "Authentication complete!"
+    ui_dim "Start the proxy with: tailroute proxy start"
 }
 
 _check_proxy_binary_version() {
     local bin="$1" ver
     ver=$("$bin" --version 2>/dev/null | tail -n 1 | awk '{print $NF}' || true)
     if [[ -z "$ver" ]]; then
-        echo "⚠️  Binary did not report a version (pre-0.5 generation?) — reinstall to align"
+        ui_warn "Binary did not report a version (pre-0.5 generation?) — reinstall to align"
     elif [[ "$ver" != "$VERSION" ]]; then
-        echo "⚠️  Version skew: binary $ver, CLI v$VERSION — reinstall to align"
+        ui_warn "Version skew: binary $ver, CLI v$VERSION — reinstall to align"
     else
         echo "Version: $ver (matches CLI)"
     fi
@@ -876,7 +878,7 @@ _retire_legacy_system_proxy() {
     if mv -f "$system_bin" "$retired" 2>/dev/null; then
         echo "Retired legacy proxy: $system_bin → $retired"
     else
-        echo "⚠️  Legacy proxy at $system_bin could not be retired (permissions)."
+        ui_warn "Legacy proxy at $system_bin could not be retired (permissions)."
         echo "   Run: sudo mv \"$system_bin\" \"$retired\""
     fi
 }
@@ -962,7 +964,7 @@ do_proxy_start() {
         running_ver=$(cat "$HOME/.tailroute/proxy.log" 2>/dev/null | grep -m1 "tailroute-proxy" | awk '{print $NF}')
         if [[ -n "$installed_ver" && -n "$running_ver" && "$installed_ver" != "$running_ver" ]]; then
             echo ""
-            echo "⚠️  Version mismatch: running $running_ver, installed $installed_ver"
+            ui_warn "Version mismatch: running $running_ver, installed $installed_ver"
             echo "   Restart to use the new version:"
             echo "   tailroute proxy stop && tailroute proxy start"
         fi
@@ -974,7 +976,7 @@ do_proxy_start() {
         # Check for system-wide install
         if [[ -x "$(_system_proxy_bin)" ]]; then
             PROXY_BIN_PATH=$(_system_proxy_bin)
-            echo "⚠️  Using legacy proxy at $PROXY_BIN_PATH — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
+            ui_warn "Using legacy proxy at $PROXY_BIN_PATH — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
         else
             echo "Proxy binary not installed."
             read -p "Download tailroute-proxy (~20MB)? [Y/n] " confirm
@@ -1028,7 +1030,7 @@ do_proxy_start() {
         echo "  ssh -o ProxyCommand='nc -X 5 -x $PROXY_SOCKS_ADDR %h %p' <host>"
         echo "  curl -x socks5h://$PROXY_SOCKS_ADDR <url>"
     else
-        echo "WARNING: Proxy started but port not ready yet."
+        ui_warn "Proxy started but port not ready yet."
         echo "Check logs: cat ~/.tailroute/proxy.log"
         echo "First run may require Tailscale auth - check log for auth URL."
     fi
