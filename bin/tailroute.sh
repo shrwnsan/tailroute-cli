@@ -1600,6 +1600,14 @@ EOF
             shift
             tunnel_do_restart "$@"
             ;;
+        stop)
+            shift
+            tunnel_do_stop "$@"
+            ;;
+        start)
+            shift
+            tunnel_do_start "$@"
+            ;;
         journal)
             shift
             if [ "${1:-}" != "clear" ]; then

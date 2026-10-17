@@ -852,7 +852,14 @@ tunnel_job_is_loaded() {
 }
 
 tunnel_job_bootstrap() {
-    "$LAUNCHCTL_CMD" bootstrap "gui/$UID" "$1" >/dev/null 2>&1
+    # launchctl's stderr lands in TUNNEL_LAUNCHCTL_ERR (empty on success);
+    # its exit status is preserved. rc=5 covers disabled-label, already
+    # loaded, and I/O errors indistinguishably, so callers surface this
+    # text instead of guessing.
+    local err rc=0
+    err="$("$LAUNCHCTL_CMD" bootstrap "gui/$UID" "$1" 2>&1 >/dev/null)" || rc=$?
+    TUNNEL_LAUNCHCTL_ERR="$err"
+    return "$rc"
 }
 
 tunnel_job_bootout() {
@@ -865,6 +872,65 @@ tunnel_job_bootout() {
     done
     echo "ERROR: launchd job $1 did not unload" >&2
     return 1
+}
+
+# Launchd disabled-services store — the record of explicit start/stop intent
+# (parked tunnels). `launchctl enable` writes an explicit `=> enabled` line
+# and no entry is ever removed from the store, so a label's state must be
+# matched exactly, never by presence.
+
+tunnel_job_disable() {
+    local err rc=0
+    err="$("$LAUNCHCTL_CMD" disable "gui/$UID/$1" 2>&1 >/dev/null)" || rc=$?
+    TUNNEL_LAUNCHCTL_ERR="$err"
+    return "$rc"
+}
+
+tunnel_job_enable() {
+    local err rc=0
+    err="$("$LAUNCHCTL_CMD" enable "gui/$UID/$1" 2>&1 >/dev/null)" || rc=$?
+    TUNNEL_LAUNCHCTL_ERR="$err"
+    return "$rc"
+}
+
+# One print-disabled call; prints the store text on stdout, non-zero when
+# launchctl itself fails (stderr passes through).
+tunnel_disabled_store() {
+    "$LAUNCHCTL_CMD" print-disabled "gui/$UID"
+}
+
+# Exact, anchored state match: strip leading whitespace, then compare the
+# whole line against `"<label>" => disabled`. A prefix-colliding label
+# (web vs web-2) or an `=> enabled` line never matches.
+tunnel_label_is_disabled() { # <label> <store-text>
+    printf '%s\n' "$2" | sed 's/^[[:space:]]*//' | grep -Fx "\"$1\" => disabled" >/dev/null
+}
+
+# Print one of: running | stopped | not-running | running-disabled.
+# (loaded × disabled-flag). Pass a previously read store text as $2 to avoid
+# a second launchctl call. When the store cannot be read, the flag counts as
+# unknown and only running/not-running are reported — a wrong "stopped"
+# would hide a dead tunnel.
+tunnel_job_state() { # <label> [<store-text>]
+    local label="$1" store="" loaded=0
+    [ -n "${2:-}" ] && store="$2"
+    tunnel_job_is_loaded "$label" && loaded=1
+    if [ -z "$store" ]; then
+        store="$(tunnel_disabled_store 2>/dev/null)" || store=""
+    fi
+    local disabled=0
+    if [ -n "$store" ] && tunnel_label_is_disabled "$label" "$store"; then
+        disabled=1
+    fi
+    if [ "$loaded" -eq 1 ] && [ "$disabled" -eq 1 ]; then
+        echo "running-disabled"
+    elif [ "$loaded" -eq 1 ]; then
+        echo "running"
+    elif [ "$disabled" -eq 1 ]; then
+        echo "stopped"
+    else
+        echo "not-running"
+    fi
 }
 
 tunnel_wait_for_port() {
@@ -2637,6 +2703,36 @@ EOF
         tunnel_registry_get "$peer" >/dev/null 2>&1 || { echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; return 3; }
     fi
     return "$rc"
+}
+
+# -----------------------------------------------------------------------------
+# Start/stop — explicit pause/resume for registered tunnels
+# -----------------------------------------------------------------------------
+# The verbs are implemented lane by lane; the shared seams live above
+# (tunnel_job_disable/enable, tunnel_disabled_store, tunnel_label_is_disabled,
+# tunnel_job_state) and the strict journal gate below. Both verbs gate on the
+# incomplete journal like add/remove: a crashed add can hold a plist whose TLS
+# was never verified, and `start` must not bootstrap it past that check.
+
+# Returns 0 when there is no incomplete journal entry; otherwise prints the
+# standard refusal (same text as tunnel_do_remove's) and returns 1. Unlike
+# add/remove there is no own-op recovery case: stop/start recover nothing.
+tunnel_journal_gate_strict() {
+    if ! _tun_journal_has_incomplete; then
+        return 0
+    fi
+    echo "ERROR: incomplete journal for '$(_tun_journal_peer)' ($(_tun_journal_op)) — recover with 'tailroute tunnel journal clear' (state: 'tailroute tunnel status')" >&2
+    return 1
+}
+
+tunnel_do_stop() {
+    echo "ERROR: tunnel stop is not available yet" >&2
+    return 2
+}
+
+tunnel_do_start() {
+    echo "ERROR: tunnel start is not available yet" >&2
+    return 2
 }
 
 # -----------------------------------------------------------------------------
