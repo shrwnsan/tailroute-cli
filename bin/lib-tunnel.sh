@@ -2824,9 +2824,119 @@ EOF
     return "$rc"
 }
 
+_t811_print_urls() { # <entry>
+    local hostname lport
+    hostname="$(tunnel_registry_field "$1" hostname)"
+    local lports
+    lports="$(printf '%s' "$1" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    for lport in $lports; do
+        echo "  URL: https://$hostname:$lport"
+    done
+}
+
+# Resume one tunnel. Caller holds the per-user lock. Order is normative:
+# plist-exists check (zero mutation before it passes) → enable → loaded
+# check → bootstrap → listener poll.
+_t811_start_one() { # <peer>
+    local peer="$1" label plist
+    label="$(tunnel_label_for_peer "$peer")"
+    plist="$(tunnel_plist_path_for_peer "$peer")"
+    if [ ! -f "$plist" ]; then
+        echo "WARN: plist missing at $plist — repair: tailroute tunnel remove $peer && tailroute tunnel add $peer" >&2
+        return 1
+    fi
+
+    # enable lands unconditionally before any loaded check: a loaded+disabled
+    # tunnel must not read as "already running" while the flag survives to
+    # kill it at the next login
+    if ! tunnel_job_enable "$label"; then
+        [ -n "$TUNNEL_LAUNCHCTL_ERR" ] && echo "ERROR: $peer: $TUNNEL_LAUNCHCTL_ERR" >&2
+        return 1
+    fi
+
+    if tunnel_job_is_loaded "$label"; then
+        echo "Already running: $peer"
+        return 0
+    fi
+
+    if ! tunnel_job_bootstrap "$plist"; then
+        echo "ERROR: $peer: bootstrap failed — ${TUNNEL_LAUNCHCTL_ERR:-unknown launchctl error}" >&2
+        echo "  log: $TUNNEL_LOG_DIR/tunnel-$peer.log" >&2
+        return 1
+    fi
+
+    local entry lport log_path
+    log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
+    entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || entry=""
+    if [ -n "$entry" ]; then
+        local lports
+        lports="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) for f in json.load(sys.stdin)["forwards"]))')"
+        # shellcheck disable=SC2086  # $lports intentionally word-splits
+        for lport in $lports; do
+            if ! tunnel_wait_for_port "$lport"; then
+                echo "WARN: job loaded but 127.0.0.1:$lport is not listening yet — check: tail -f $log_path, or: tailroute tunnel check $peer" >&2
+            fi
+        done
+    fi
+
+    echo "Started: $peer"
+    _t811_print_urls "$entry"
+    return 0
+}
+
 tunnel_do_start() {
-    echo "ERROR: tunnel start is not available yet" >&2
-    return 2
+    local peer="" all_form=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --all) all_form=1; shift ;;
+            -*) echo "ERROR: unknown tunnel start flag '$1'" >&2; return 2 ;;
+            *)
+                [ -z "$peer" ] || { echo "ERROR: unexpected argument '$1'" >&2; return 2; }
+                peer="$1"; shift ;;
+        esac
+    done
+    if [ -n "$peer" ] && [ "$all_form" -eq 1 ]; then
+        echo "ERROR: tunnel start takes either <peer> or --all, not both" >&2
+        return 2
+    fi
+    if [ -n "$peer" ]; then
+        peer="$(tunnel_normalize_lower "$peer")"
+        peer="$(tunnel_resolve_peer "$peer")" || return $?
+    fi
+
+    tunnel_lock_acquire || return 1
+    if ! tunnel_journal_gate_strict; then
+        tunnel_lock_release
+        return 1
+    fi
+
+    local rc=0
+    if [ -n "$peer" ]; then
+        if ! tunnel_registry_get "$peer" >/dev/null 2>&1; then
+            echo "ERROR: tunnel for '$peer' not found" >&2
+            tunnel_registry_index_hint >&2
+            tunnel_lock_release
+            return 3
+        fi
+        _t811_start_one "$peer" || rc=1
+    else
+        local entry any=0 p
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            p="$(tunnel_registry_field "$entry" peer)"
+            any=1
+            _t811_start_one "$p" || rc=1
+        done <<EOF
+$(tunnel_registry_entries)
+EOF
+        if [ "$any" -eq 0 ]; then
+            echo "No tunnels configured."
+            tunnel_lock_release
+            return 0
+        fi
+    fi
+    tunnel_lock_release
+    return "$rc"
 }
 
 # -----------------------------------------------------------------------------
