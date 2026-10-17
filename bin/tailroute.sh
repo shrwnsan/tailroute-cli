@@ -186,6 +186,7 @@ Usage:
                                   list          Registered tunnels (JSON)
                                   peers         Registered tunnels at a glance
                                   restart       Restart tunnel jobs
+                                  stop/start    Park or resume tunnel jobs
                                   drift <peer>  Report serve-config drift (read-only; no peer = all)
                                   check <peer>  Probe the live browser path (read-only; zero ssh)
   Read-only verbs: status = inventory · drift = the peer's claim · check = the browser's truth
@@ -1545,7 +1546,24 @@ Commands:
         and the primary URL. Registry-only — no probing (use status for
         health, drift for comparison).
   restart [<peer>]
-        Restart one or all tunnel jobs.
+        Restart one or all tunnel jobs. Refuses on a stopped tunnel:
+        restarting a parked tunnel would be an implicit start (use
+        'tunnel start'); the all-form skips parked tunnels without failing.
+  stop [<peer>|--all]
+        Park a tunnel: launchd disable + bootout, so it stays parked across
+        logins and reboots. The registry and hosts mapping are kept — start
+        restores the same port and bookmarkable URL, with no sudo and no
+        re-registration. Already-stopped is a no-op; the parked URL refuses
+        connections until started. Exit codes: 0 ok (including already
+        stopped), 1 a tunnel failed or the journal gate refused, 2 usage,
+        3 not found.
+  start [<peer>|--all]
+        Resume a parked tunnel: launchd enable + bootstrap the existing
+        job, then wait for the listener. No TLS re-verification and no
+        preflight — start restores an already-verified configuration, and
+        the local port never moves. Refuses while an interrupted add's
+        recovery journal is pending; a missing plist points at
+        'remove && add'. Exit codes as for stop.
   journal clear [--force]
         Clear a recovery journal left by an interrupted add, update, or
         remove (print it, then state the stranded op). An interrupted add
