@@ -2674,11 +2674,17 @@ tunnel_do_journal_clear() {
 }
 
 tunnel_do_restart() {
-    local peer="${1:-}" entry p label plist rc=0
+    local peer="${1:-}" entry p label plist rc=0 state store
     if [ -n "$peer" ]; then
         peer="$(tunnel_normalize_lower "$peer")"
         peer="$(tunnel_resolve_peer "$peer")" || return $?
     fi
+
+    # under the per-user lock like every other mutator: an unlocked restart
+    # racing stop/start lands half-parked (rc=5 bootstrap) or worse
+    tunnel_lock_acquire || return 1
+
+    store="$(tunnel_disabled_store 2>/dev/null)" || store=""
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         p="$(tunnel_registry_field "$entry" peer)"
@@ -2687,6 +2693,28 @@ tunnel_do_restart() {
         plist="$(tunnel_plist_path_for_peer "$p")"
         if [ ! -f "$plist" ]; then
             echo "ERROR: $p: plist missing at $plist" >&2; rc=1; continue
+        fi
+        state="$(tunnel_job_state "$label" "$store")"
+        if [ "$state" = "stopped" ]; then
+            # parked matches intent: restarting it would be an implicit start
+            if [ -n "$peer" ]; then
+                echo "ERROR: tunnel is stopped — start it: tailroute tunnel start $p" >&2
+                rc=1
+            else
+                echo "Skipped: $p (stopped)"
+            fi
+            continue
+        fi
+        if [ "$state" = "running-disabled" ]; then
+            # bootout+bootstrap of a disabled label dies rc=5 and leaves the
+            # tunnel down — reconcile instead
+            if [ -n "$peer" ]; then
+                echo "ERROR: $p is loaded but disabled — reconcile: tailroute tunnel start $p (keep) or tailroute tunnel stop $p (park)" >&2
+            else
+                echo "Skipped: $p (running-disabled — reconcile: tailroute tunnel start $p (keep) or tailroute tunnel stop $p (park))"
+            fi
+            rc=1
+            continue
         fi
         if tunnel_job_is_loaded "$label"; then
             tunnel_job_bootout "$label" || true
@@ -2700,8 +2728,9 @@ tunnel_do_restart() {
 $(tunnel_registry_entries)
 EOF
     if [ "$rc" -eq 0 ] && [ -n "$peer" ]; then
-        tunnel_registry_get "$peer" >/dev/null 2>&1 || { echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; return 3; }
+        tunnel_registry_get "$peer" >/dev/null 2>&1 || { echo "ERROR: tunnel for '$peer' not found" >&2; tunnel_registry_index_hint >&2; tunnel_lock_release; return 3; }
     fi
+    tunnel_lock_release
     return "$rc"
 }
 
