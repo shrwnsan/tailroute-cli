@@ -288,6 +288,19 @@ test_help_documents_journal_clear() {
     assert_contains "journal clear [--force]" "$tunnel"
 }
 
+test_help_documents_stop_start() {
+    local top tunnel
+    top="$("$BIN_DIR/tailroute.sh" --help 2>/dev/null)"
+    assert_contains "stop/start" "$top"
+    tunnel="$("$BIN_DIR/tailroute.sh" tunnel --help 2>/dev/null)"
+    assert_contains "stop [<peer>|--all]" "$tunnel"
+    assert_contains "start [<peer>|--all]" "$tunnel"
+    assert_contains "stays parked across" "$tunnel"
+    # restart must advertise its parked-tunnel refusal
+    assert_contains "Refuses on a stopped tunnel" "$tunnel"
+    assert_contains "Exit codes" "$tunnel"
+}
+
 test_journal_clear_wired_through_cli() {
     local journal="$TEST_TMPDIR/wired.journal"
     local out rc=0
