@@ -2305,6 +2305,18 @@ tunnel_do_add() {
                 echo "ERROR: incomplete journal for '$(_tun_journal_peer)' ($(_tun_journal_op)) — recover with 'tailroute tunnel journal clear' (state: 'tailroute tunnel status')" >&2
                 tunnel_lock_release; return 1
             fi
+            # a parked or flagged job must not be rebuilt in place: the
+            # update's verify-then-commit contract needs a live listener
+            local ustate
+            ustate="$(tunnel_job_state "$(tunnel_label_for_peer "$peer")")"
+            if [ "$ustate" = "stopped" ]; then
+                echo "ERROR: tunnel is stopped — start it first: tailroute tunnel start $peer" >&2
+                tunnel_lock_release; return 1
+            fi
+            if [ "$ustate" = "running-disabled" ]; then
+                echo "ERROR: $peer is loaded but disabled — reconcile: tailroute tunnel start $peer (keep) or tailroute tunnel stop $peer (park)" >&2
+                tunnel_lock_release; return 1
+            fi
             tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
             tunnel_lock_release
             # tunnel_update_add_forward already printed the URL list and the
@@ -2479,7 +2491,11 @@ tunnel_do_add() {
     chmod 0644 "$plist"
     _tun_journal_write add "$peer" "$add_steps" '["registry","hosts","plist"]' || true
 
-    # Step 4: bootstrap
+    # Step 4: bootstrap — fresh adds and prototype adoption both flow through
+    # this single call, so clear any lingering disable flag first (a re-added
+    # peer must not bootstrap into a disabled label and die rc=5). A failed
+    # enable surfaces as the bootstrap failure + rollback below.
+    tunnel_job_enable "$label" || true
     if ! tunnel_job_bootstrap "$plist"; then
         echo "ROLLED BACK: plist, hosts entry, registry entry" >&2
         rm -f "$plist"
@@ -2565,6 +2581,12 @@ tunnel_do_remove() {
     _tun_journal_write remove "$peer" "$remove_steps" '[]' || true
     if tunnel_job_is_loaded "$label"; then
         tunnel_job_bootout "$label" || true
+    fi
+    # clear any disable flag unconditionally — a removed-then-re-added peer
+    # must not bootstrap into a disabled label. A failed clear is only a
+    # warning: add enables before bootstrap too.
+    if ! tunnel_job_enable "$label"; then
+        echo "WARN: could not clear the disable flag for $label (${TUNNEL_LAUNCHCTL_ERR:-launchctl failed})" >&2
     fi
     _tun_journal_write remove "$peer" "$remove_steps" '["bootout"]' || true
 
