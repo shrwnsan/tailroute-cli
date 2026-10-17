@@ -148,12 +148,10 @@ test_journal_gate_strict() {
     assert_eq "1" "$rc" "incomplete journal gates"
 }
 
-test_stop_start_stubs_refuse_with_usage_rc() {
+test_start_stub_refuses_with_usage_rc() {
+    # stop is implemented by its own lane; the start stub remains until then
     _tunnel_setup_sandbox
     local rc=0
-    tunnel_do_stop >/dev/null 2>&1 || rc=$?
-    assert_eq "2" "$rc" "stop stub"
-    rc=0
     tunnel_do_start >/dev/null 2>&1 || rc=$?
     assert_eq "2" "$rc" "start stub"
 }
