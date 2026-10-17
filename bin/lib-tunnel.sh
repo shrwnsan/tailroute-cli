@@ -2949,6 +2949,10 @@ tunnel_status_rows() {
     local entry p hostname ip suffix label ssh_alias
     local job hosts_state notes lookup_row online cur_ip cur_suffix
     local fwd_pairs allow_tls pair lport rport listener backend
+    # one print-disabled read for the whole inventory; a failed read leaves
+    # the flag unknown and tunnel_job_state never reports stopped
+    local store job_disabled
+    store="$(tunnel_disabled_store 2>/dev/null)" || store=""
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         p="$(tunnel_registry_field "$entry" peer)"
@@ -2961,11 +2965,21 @@ tunnel_status_rows() {
         label="$(tunnel_label_for_peer "$p")"
 
         notes=""
-        if tunnel_job_is_loaded "$label"; then job="running"; else job="not-running"; fi
+        case "$(tunnel_job_state "$label" "$store")" in
+            running)          job="running";    job_disabled=0 ;;
+            running-disabled) job="running";    job_disabled=1 ;;
+            stopped)          job="stopped";    job_disabled=1 ;;
+            *)                job="not-running"; job_disabled=0 ;;
+        esac
         if tunnel_hosts_has_mapping "$hostname"; then hosts_state="present"; else hosts_state="missing"; fi
 
+        # deliberate stop: the parked state matches intent, so the stale-hosts
+        # degradation does not apply (the URL refusing connections IS the truth)
         if [ "$job" = "not-running" ] && [ "$hosts_state" = "present" ]; then
             notes="stale hosts entry (browser gets connection refused) — repair: tailroute tunnel restart $p"
+        fi
+        if [ "$job_disabled" -eq 1 ] && [ "$job" = "running" ]; then
+            notes="${notes:+$notes; }disabled flag set — will not survive next login; reconcile: tailroute tunnel start $p (keep) or tailroute tunnel stop $p (park)"
         fi
         if [ -f "$TUNNEL_LOG_DIR/tunnel-$p.log" ] && tail -20 "$TUNNEL_LOG_DIR/tunnel-$p.log" 2>/dev/null | grep -Eq "Permission denied|Host key verification failed"; then
             notes="${notes:+$notes; }ssh auth failing — key rotated? re-run: tailroute tunnel add $p"
@@ -2984,13 +2998,16 @@ tunnel_status_rows() {
             fi
         fi
 
-        # T-435: registry says this tunnel exists — its plist must too
+        # T-435: registry says this tunnel exists — its plist must too. A
+        # missing plist keeps the physical job truth (never "stopped": the
+        # parked state without a job definition is a repair case, exit 1).
         local plist_state
         if [ -f "$(tunnel_plist_path_for_peer "$p")" ]; then
             plist_state="present"
         else
             plist_state="missing"
             notes="${notes:+$notes; }plist missing — repair: tailroute tunnel remove $p && tailroute tunnel add $p"
+            if tunnel_job_is_loaded "$label"; then job="running"; else job="not-running"; fi
         fi
 
         # One row per forward (T-436): identity is (peer, localPort, remotePort)
@@ -3004,8 +3021,8 @@ tunnel_status_rows() {
             else
                 backend="not accepting"
             fi
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state" "$ssh_alias"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state" "$ssh_alias" "$job_disabled"
         done
     done <<EOF
 $(tunnel_registry_entries)
@@ -3108,11 +3125,13 @@ for line in sys.stdin:
     if len(parts) < 11: continue
     p, hostname, lport, rport, listener, backend, tls, job, hosts, notes, plist = parts[:11]
     ssh_alias = parts[11] if len(parts) > 11 else ""
+    job_disabled = parts[12] if len(parts) > 12 else "0"
     if p not in tunnels:
         order.append(p)
         tunnels[p] = {"peer": p, "hostname": hostname, "localPort": int(lport), "remotePort": int(rport),
                       "sshAlias": ssh_alias,
-                      "job": job, "hosts": hosts, "plist": plist, "notes": notes, "forwards": []}
+                      "job": job, "hosts": hosts, "plist": plist, "notes": notes, "forwards": [],
+                      "stopped": job == "stopped", "disabled": job_disabled == "1"}
     fwd = {"localPort": int(lport), "remotePort": int(rport), "listener": listener,
            "backend": backend, "tls": tls}
     # backend n/a (--skip-remote-check) is unknown, not unhealthy
@@ -3121,9 +3140,16 @@ for line in sys.stdin:
 out = []
 for p in order:
     t = tunnels[p]
-    t["healthy"] = (t["job"] == "running" and t["hosts"] == "present"
-                    and t["plist"] == "present"
-                    and all(f["listener"] == "listening" for f in t["forwards"]))
+    if t["job"] == "stopped":
+        # parked by request: healthy means state matches intent (hosts + plist
+        # intact); the closed listeners are the point, not a fault
+        t["healthy"] = t["hosts"] == "present" and t["plist"] == "present"
+    elif t["job"] == "running" and not t["disabled"]:
+        t["healthy"] = (t["hosts"] == "present" and t["plist"] == "present"
+                        and all(f["listener"] == "listening" for f in t["forwards"]))
+    else:
+        # not-running is degraded; running-disabled does not match intent
+        t["healthy"] = False
     out.append(t)
 orphans = []
 for line in os.environ.get("T435_ORPHANS", "").splitlines():
@@ -3140,7 +3166,17 @@ for line in sys.stdin:
     parts = line.rstrip("\n").split("\t")
     if len(parts) < 11: continue
     listener, job, hosts, plist = parts[4], parts[7], parts[8], parts[10]
-    if job != "running" or hosts != "present" or listener != "listening" or plist != "present":
+    job_disabled = parts[12] if len(parts) > 12 else "0"
+    if job == "stopped":
+        # parked by request: only the intact-registration bits count
+        if hosts != "present" or plist != "present":
+            degraded = True
+    elif job == "running":
+        # running-disabled does not match intent; a healthy running tunnel
+        # still needs hosts, plist, and a listener per forward
+        if job_disabled == "1" or hosts != "present" or listener != "listening" or plist != "present":
+            degraded = True
+    else:
         degraded = True
 sys.exit(1 if degraded else 0)
 ' || return 1
@@ -3149,14 +3185,14 @@ sys.exit(1 if degraded else 0)
 
     echo "Adaptive path: $adaptive"
     echo ""
-    local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias prev_peer=""
+    local worst=0 p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias job_disabled prev_peer=""
     if printf '%s\n' "$rows" | grep -q '^.'; then
         # v0.8.3: read collapses CONSECUTIVE whitespace-IFS delimiters, so an
         # empty notes field (tab-tab in the row) shifted every later field one
         # left — the alias vanished and the plist state leaked into a ghost
         # "Notes: present" line. Translate tabs to \037 (unit separator, not
         # IFS whitespace) so empty fields survive the read.
-        while IFS=$'\037' read -r p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias; do
+        while IFS=$'\037' read -r p hostname lport rport listener backend tls job hosts_state notes plist_state ssh_alias job_disabled; do
             [ -n "$p" ] || continue
             if [ "$p" != "$prev_peer" ]; then
                 [ -n "$prev_peer" ] && echo ""
@@ -3167,14 +3203,26 @@ sys.exit(1 if degraded else 0)
                 if [ -n "$ssh_alias" ] && [ "$ssh_alias" != "$p" ]; then
                     echo "  Alias:    $ssh_alias"
                 fi
-                echo "  Job:      $job"
+                if [ "$job" = "stopped" ]; then
+                    echo "  Job:      stopped (by request)"
+                elif [ "${job_disabled:-0}" = "1" ]; then
+                    echo "  Job:      $job (disabled)"
+                else
+                    echo "  Job:      $job"
+                fi
                 echo "  Hosts:    $hosts_state"
                 echo "  Forwards:"
                 [ -n "$notes" ] && echo "  Notes:    $notes"
                 prev_peer="$p"
             fi
             echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
-            if [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
+            if [ "$job" = "stopped" ]; then
+                # closed listeners are the point of a deliberate stop; only the
+                # intact-registration bits can degrade it (mirrors the JSON exit)
+                if [ "$hosts_state" != "present" ] || [ "$plist_state" != "present" ]; then
+                    worst=1
+                fi
+            elif [ "${job_disabled:-0}" = "1" ] || [ "$job" != "running" ] || [ "$hosts_state" != "present" ] || [ "$listener" != "listening" ]; then
                 worst=1
             fi
         done <<EOF
