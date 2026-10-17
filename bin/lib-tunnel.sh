@@ -2725,9 +2725,103 @@ tunnel_journal_gate_strict() {
     return 1
 }
 
+# Park one tunnel. Caller holds the per-user lock; <store> is the
+# print-disabled text read once for the whole invocation.
+_t810_stop_one() { # <peer> <store>
+    local peer="$1" store="$2" label state
+    label="$(tunnel_label_for_peer "$peer")"
+    state="$(tunnel_job_state "$label" "$store")"
+    if [ "$state" = "stopped" ]; then
+        echo "Already stopped: $peer"
+        return 0
+    fi
+
+    local entry="" plist missing="no" hostname
+    plist="$(tunnel_plist_path_for_peer "$peer")"
+    if entry="$(tunnel_registry_get "$peer" 2>/dev/null)"; then
+        hostname="$(tunnel_registry_field "$entry" hostname)"
+    else
+        missing="yes"
+    fi
+    [ -f "$plist" ] || missing="yes"
+
+    if ! tunnel_job_disable "$label"; then
+        [ -n "$TUNNEL_LAUNCHCTL_ERR" ] && echo "ERROR: $peer: $TUNNEL_LAUNCHCTL_ERR" >&2
+        return 1
+    fi
+    if tunnel_job_is_loaded "$label" && ! tunnel_job_bootout "$label"; then
+        echo "ERROR: $peer: disabled but still loaded — retry: tailroute tunnel stop $peer · undo: tailroute tunnel start $peer" >&2
+        return 1
+    fi
+
+    if [ "$missing" = "yes" ]; then
+        echo "WARN: plist missing at $plist — repair: tailroute tunnel remove $peer && tailroute tunnel add $peer" >&2
+        return 1
+    fi
+
+    local fwd_pairs pair lport
+    fwd_pairs="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) for f in json.load(sys.stdin)["forwards"]))')"
+    echo "Stopped: $peer"
+    for lport in $fwd_pairs; do
+        echo "  URL: https://$hostname:$lport"
+    done
+    return 0
+}
+
 tunnel_do_stop() {
-    echo "ERROR: tunnel stop is not available yet" >&2
-    return 2
+    local peer="" all_form=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --all) all_form=1; shift ;;
+            -*) echo "ERROR: unknown tunnel stop flag '$1'" >&2; return 2 ;;
+            *)
+                [ -z "$peer" ] || { echo "ERROR: unexpected argument '$1'" >&2; return 2; }
+                peer="$1"; shift ;;
+        esac
+    done
+    if [ -n "$peer" ] && [ "$all_form" -eq 1 ]; then
+        echo "ERROR: tunnel stop takes either <peer> or --all, not both" >&2
+        return 2
+    fi
+    if [ -n "$peer" ]; then
+        peer="$(tunnel_normalize_lower "$peer")"
+        peer="$(tunnel_resolve_peer "$peer")" || return $?
+    fi
+
+    tunnel_lock_acquire || return 1
+    if ! tunnel_journal_gate_strict; then
+        tunnel_lock_release
+        return 1
+    fi
+
+    local rc=0 store
+    store="$(tunnel_disabled_store 2>/dev/null)" || store=""
+    if [ -n "$peer" ]; then
+        if ! tunnel_registry_get "$peer" >/dev/null 2>&1; then
+            echo "ERROR: tunnel for '$peer' not found" >&2
+            tunnel_registry_index_hint >&2
+            tunnel_lock_release
+            return 3
+        fi
+        _t810_stop_one "$peer" "$store" || rc=1
+    else
+        local entry any=0 p
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            p="$(tunnel_registry_field "$entry" peer)"
+            any=1
+            _t810_stop_one "$p" "$store" || rc=1
+        done <<EOF
+$(tunnel_registry_entries)
+EOF
+        if [ "$any" -eq 0 ]; then
+            echo "No tunnels configured."
+            tunnel_lock_release
+            return 0
+        fi
+    fi
+    tunnel_lock_release
+    return "$rc"
 }
 
 tunnel_do_start() {
