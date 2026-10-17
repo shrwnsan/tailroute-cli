@@ -2007,6 +2007,10 @@ tunnel_do_check() {
     fi
 
     echo "$peer: probing the browser path for $hostname (read-only — nothing is applied, the peer is not contacted)"
+    # a deliberately parked tunnel's closed listener is the point, not a fault:
+    # name it and point at start instead of "the tunnel job is down"
+    local stopped="no"
+    [ "$(tunnel_job_state "$(tunnel_label_for_peer "$peer")")" = "stopped" ] && stopped="yes"
     local failed="" pair lport rport http_code
     # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pairs
     for pair in $pairs; do
@@ -2023,6 +2027,11 @@ tunnel_do_check() {
         fi
         if tunnel_port_in_use "$lport"; then
             echo "    listener: 127.0.0.1:$lport accepting"
+        elif [ "$stopped" = "yes" ]; then
+            echo "    listener: 127.0.0.1:$lport closed — stopped by request"
+            echo "              repair: tailroute tunnel start $peer"
+            failed="listener closed on 127.0.0.1:$lport"
+            continue
         else
             echo "    listener: 127.0.0.1:$lport closed — the tunnel job is down"
             echo "              repair: tailroute tunnel restart $peer"
@@ -3342,6 +3351,12 @@ tunnel_do_open() { # <peer>
     hostname="$(tunnel_registry_field "$entry" hostname)"
     lport="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c 'import json,sys; print(json.load(sys.stdin)["forwards"][0]["localPort"])')"
     url="https://$hostname:$lport"
+    # a parked tunnel would only serve the browser a refused connection —
+    # name it instead of launching into the error page
+    if [ "$(tunnel_job_state "$(tunnel_label_for_peer "$peer")")" = "stopped" ]; then
+        echo "ERROR: tunnel is stopped — start it first: tailroute tunnel start $peer" >&2
+        return 1
+    fi
     if ! "$OPEN_CMD" "$url"; then
         echo "ERROR: could not open $url in a browser" >&2
         return 1
