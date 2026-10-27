@@ -304,6 +304,18 @@
     <div><span class="p">$</span> tailroute tunnel add mypeer <button data-copy="tailroute tunnel add mypeer">copy</button></div>
   </div>
   <p class="note indent">→ https://mypeer.yourtailnet.ts.net:8443</p>
+  <p>Need a tunnel gone for a while? <code>tailroute tunnel stop mypeer</code> parks
+     it without tearing anything down: the URL refuses connections, but the
+     registry entry and hosts mapping survive, and the parked state outlasts
+     logins and reboots. <code>tailroute tunnel start mypeer</code> resumes it
+     with the same local port and the same URL—no sudo, no re-registration.
+     Both take <code>--all</code>; <code>tunnel status</code> shows a parked
+     tunnel as <code>stopped (by request)</code>, and <code>tunnel restart</code>
+     refuses to implicitly start one.</p>
+  <div class="synopsis">
+    <div><span class="p">$</span> tailroute tunnel stop mypeer <button data-copy="tailroute tunnel stop mypeer">copy</button></div>
+    <div><span class="p">$</span> tailroute tunnel start mypeer <button data-copy="tailroute tunnel start mypeer">copy</button></div>
+  </div>
 
   <h2 id="what-it-cannot-fix">What it cannot fix</h2>
   <p>VPN Network Extensions may still block traffic to Tailscale's CGNAT range
@@ -321,7 +333,7 @@
         (<code>/var/db/tailroute/installed.checksums</code>) verified before any library loads.</li>
     <li>No telemetry, no external network calls, no account, no traffic logging.</li>
     <li>Interface names validated against <code>utun[0-9]+</code>; absolute paths only.</li>
-    <li>417 tests as of v0.8.17. Source: <a href="https://github.com/shrwnsan/tailroute-cli">github.com/shrwnsan/tailroute-cli</a></li>
+    <li>529 tests as of v0.9.0. Source: <a href="https://github.com/shrwnsan/tailroute-cli">github.com/shrwnsan/tailroute-cli</a></li>
   </ul>
 
   <h2 id="diagnostics">Diagnostics</h2>
