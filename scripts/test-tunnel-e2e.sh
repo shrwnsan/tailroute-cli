@@ -106,6 +106,19 @@ if [ -n "$LIFECYCLE_PEER" ]; then
     echo ""
     echo "Lifecycle round trip for '$LIFECYCLE_PEER' via $TAILROUTE_BIN (park → resume; nothing added or removed)"
 
+    # Refuse to drive a CLI that predates the lifecycle verbs. A stale brew
+    # install still has `tunnel remove`/`add` — without this guard the round
+    # trip would silently verify (and park a tunnel with) the wrong binary.
+    # Capability probe, not a version check: the checkout's own VERSION
+    # string stays at the last release until the release task bumps it.
+    if ! "$TAILROUTE_BIN" tunnel --help 2>/dev/null | grep -qF 'stop [<peer>|--all]'; then
+        echo "FAIL: $TAILROUTE_BIN predates 'tunnel stop' — set TAILROUTE_BIN to a lifecycle-capable build (e.g. this checkout's bin/tailroute.sh)" >&2
+        fail=$((fail + 1))
+        echo ""
+        echo "Result: $pass passed, $fail failed"
+        exit 1
+    fi
+
     # L1. stop parks the tunnel
     if "$TAILROUTE_BIN" tunnel stop "$LIFECYCLE_PEER" >/dev/null 2>&1; then
         ok "L1/6 tunnel stop $LIFECYCLE_PEER"
