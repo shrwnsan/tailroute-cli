@@ -1,6 +1,6 @@
 # tailroute-cli
 
-> tailroute is a fail-safe macOS daemon that keeps Tailscale and commercial VPNs (NordVPN, Mullvad, corporate VPN apps) working simultaneously. When a VPN connects it disables Tailscale's MagicDNS so internet keeps flowing through the VPN, and serves Tailscale peers through a local SOCKS5 proxy (127.0.0.1:1055) and launchd-managed browser tunnels with valid .ts.net TLS. Apache-2.0, no telemetry, no account.
+> tailroute is a fail-safe macOS daemon that keeps Tailscale and commercial VPNs (NordVPN, Mullvad, corporate VPN apps) working simultaneously. When a VPN connects it disables Tailscale's MagicDNS so internet keeps flowing through the VPN, and serves Tailscale peers through a local SOCKS5 proxy (127.0.0.1:1055) and launchd-managed browser tunnels with valid .ts.net TLS—`tunnel stop` parks a tunnel without tearing it down (it stays parked across reboots), `tunnel start` resumes it with the same URL. Apache-2.0, no telemetry, no account.
 
 The tool answers one question: "How do I keep Tailscale and my VPN working at the same time on a Mac?" Install is two commands, it needs no configuration, and it reverses itself when the VPN disconnects.
 
@@ -14,7 +14,7 @@ The tool answers one question: "How do I keep Tailscale and my VPN working at th
 
 - [Landing page](https://tailroute.app/): product overview, honest limits, FAQ
 - [Manual page](https://tailroute.app/docs/): the full tailroute manual—states, tunnels, security, diagnostics
-- [GitHub repository](https://github.com/shrwnsan/tailroute-cli): source, ~7,400 auditable lines of bash and Go
+- [GitHub repository](https://github.com/shrwnsan/tailroute-cli): source, ~7,900 auditable lines of bash and Go
 - [Changelog](https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md): per-release history with test counts
 - [Issues](https://github.com/shrwnsan/tailroute-cli/issues): bug reports and VPN compatibility reports
 
