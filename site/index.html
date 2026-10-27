@@ -56,7 +56,7 @@
     "name": "tailroute-cli",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "macOS",
-    "softwareVersion": "0.8.17",
+    "softwareVersion": "0.9.0",
     "license": "https://www.apache.org/licenses/LICENSE-2.0",
     "url": "https://tailroute.app/",
     "description": "A fail-safe macOS daemon that toggles Tailscale's MagicDNS when your VPN connects—internet through the VPN, peers through the mesh. No telemetry. Apache-2.0 CLI.",
@@ -187,8 +187,8 @@
       </div>
 
       <dl class="band reveal">
-        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>31</i></dd></div>
-        <div class="stat"><dt>shell tests · 348 → 417 in five weeks</dt><dd>417</dd></div>
+        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>32</i></dd></div>
+        <div class="stat"><dt>shell tests · 348 → 529 in eight weeks</dt><dd>529</dd></div>
         <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
         <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
       </dl>
@@ -251,7 +251,7 @@
           <div class="resp"><h3><i>03</i>Self-verifying install</h3>
             <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
             refuse to start, and say what changed. Strict validation, absolute paths, fail-safe on ambiguity,
-            417 tests and counting.</p></div>
+            529 tests and counting.</p></div>
         </div>
 
         <div class="b-card b12 reveal d1">
@@ -292,13 +292,13 @@
         <div class="chart-card reveal d1">
           <div class="chart-head">
             <span class="chart-title">Tagged releases—cumulative</span>
-            <span class="chart-hi">29 of 31 releases shipped since Aug 24</span>
+            <span class="chart-hi">30 of 32 releases shipped since Aug 24</span>
           </div>
-          <svg viewBox="0 0 640 250" role="img" aria-label="Cumulative tagged releases, March to October 2026: two releases in spring, then 29 more from late August, ending at 31">
-            <line class="axis" x1="46" y1="214" x2="616" y2="214"/>
-            <line class="axis" x1="46" y1="150.1" x2="616" y2="150.1" opacity="0.5"/>
-            <line class="axis" x1="46" y1="86.1" x2="616" y2="86.1" opacity="0.5"/>
-            <line class="axis" x1="46" y1="22.4" x2="616" y2="22.4" opacity="0.5"/>
+          <svg viewBox="0 -10 728 260" role="img" aria-label="Cumulative tagged releases, March to October 2026: two releases in spring, then 30 more from late August, ending at 32">
+            <line class="axis" x1="46" y1="214" x2="702" y2="214"/>
+            <line class="axis" x1="46" y1="150.1" x2="702" y2="150.1" opacity="0.5"/>
+            <line class="axis" x1="46" y1="86.1" x2="702" y2="86.1" opacity="0.5"/>
+            <line class="axis" x1="46" y1="22.4" x2="702" y2="22.4" opacity="0.5"/>
             <text class="axtext" x="38" y="217" text-anchor="end">0</text>
             <text class="axtext" x="38" y="153" text-anchor="end">10</text>
             <text class="axtext" x="38" y="89" text-anchor="end">20</text>
@@ -307,11 +307,11 @@
             <text class="axtext" x="290" y="232" text-anchor="middle">Jun</text>
             <text class="axtext" x="520" y="232" text-anchor="middle">Sep 1</text>
             <text class="axtext" x="612" y="232" text-anchor="end">Oct</text>
-            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16 L612.3,214 L46,214 Z" fill="rgba(116,164,26,0.10)" stroke="none"/>
-            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16" fill="none" stroke="var(--mark)" stroke-width="2" stroke-linejoin="round"/>
-            <circle cx="612.3" cy="16" r="4.5" fill="var(--mark)" stroke="var(--card)" stroke-width="2"/>
-            <text x="612" y="10" text-anchor="end" style="font-family:var(--mono);font-size:11px;font-weight:600" fill="var(--text)">31</text>
-            <line id="xhair" x1="0" y1="16" x2="0" y2="214" stroke="var(--line2)" stroke-width="1" opacity="0"/>
+            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16 L698,9.6 L698,214 L46,214 Z" fill="rgba(116,164,26,0.10)" stroke="none"/>
+            <path d="M46,207.6 L84.8,201.2 L493.6,194.8 L514.5,188.4 L520.2,143.8 L525.9,67.1 L531.6,47.9 L555.5,41.5 L588.3,35.1 L591.4,28.7 L594.4,22.4 L612.3,16 L698,9.6" fill="none" stroke="var(--mark)" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="698" cy="9.6" r="4.5" fill="var(--mark)" stroke="var(--card)" stroke-width="2"/>
+            <text x="698" y="3.6" text-anchor="end" style="font-family:var(--mono);font-size:11px;font-weight:600" fill="var(--text)">32</text>
+            <line id="xhair" x1="0" y1="9.6" x2="0" y2="214" stroke="var(--line2)" stroke-width="1" opacity="0"/>
             <circle id="hoverdot" r="4" fill="var(--text)" stroke="var(--card)" stroke-width="2" opacity="0"/>
           </svg>
           <div class="chart-tip" id="chart-tip"></div>
@@ -332,6 +332,7 @@
                 <tr><td>2026-09-23</td><td>29</td></tr>
                 <tr><td>2026-09-24</td><td>30</td></tr>
                 <tr><td>2026-09-30</td><td>31</td></tr>
+                <tr><td>2026-10-27</td><td>32</td></tr>
               </tbody>
             </table>
           </details>
@@ -339,11 +340,11 @@
 
         <div class="reveal d2">
           <div class="feed">
+            <div class="feed-item"><span class="feed-v">0.9.0</span><div><p class="feed-t"><b><code>tunnel stop</code> / <code>tunnel start</code></b>—park a tunnel without tearing it down: it stays parked across reboots, and start restores the same port and URL.</p><p class="feed-d">2026-10-27 · tests 528 → 529</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.17</span><div><p class="feed-t"><b>Log rotation actually rotates</b>—staged at daemon startup for every layout; integrity manifest now layout-aware.</p><p class="feed-d">2026-09-30 · tests 408 → 417</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.16</span><div><p class="feed-t"><b>Second peers stay removable</b>—hosts mappings land inside the managed block.</p><p class="feed-d">2026-09-24 · tests 406 → 408</p></div></div>
             <div class="feed-item"><span class="feed-v">0.8.15</span><div><p class="feed-t"><b>Proxy registry self-heals against reality</b>—and the auth key no longer leaks through argv.</p><p class="feed-d">2026-09-23 · tests 383 → 405</p></div></div>
-            <div class="feed-item"><span class="feed-v">0.8.14</span><div><p class="feed-t"><b>Every tunnel verb accepts the ssh alias</b>—no more dead ends on <code>tunnel check prime</code>.</p><p class="feed-d">2026-09-23 · tests 367 → 383</p></div></div>
-            <div class="feed-item last"><span class="feed-v">0.8.11</span><div><p class="feed-t"><b><code>tunnel check</code></b>—the browser&rsquo;s truth: hosts → listener → TLS → HTTP, zero ssh.</p><p class="feed-d">2026-09-03 · read-only by construction</p></div></div>
+            <div class="feed-item last"><span class="feed-v">0.8.14</span><div><p class="feed-t"><b>Every tunnel verb accepts the ssh alias</b>—no more dead ends on <code>tunnel check prime</code>.</p><p class="feed-d">2026-09-23 · tests 367 → 383</p></div></div>
           </div>
           <p class="sprint"><b>22 releases in 72 hours</b> (Sep 1–3)—the v0.7→v0.8 hardening sprint: a burst of fixes after the 0.8.0 rewrite, each one tagged and tested. Full history: <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md ↗</a></p>
         </div>
@@ -456,7 +457,7 @@
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
             <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
             strict input validation, absolute paths only, fail-safe on ambiguous state.
-            The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
+            The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~7,900 lines of auditable bash and Go (7,733 sh + 217 Go, wc -l, Oct 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q reveal d2">
           <summary>What happens when I quit the VPN or uninstall? <span class="pm" aria-hidden="true">+</span></summary>
@@ -534,7 +535,7 @@
         "name": "It runs as root—why should I trust it?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, fail-safe on ambiguous state. The whole thing is ~7,400 lines of auditable bash and Go (7,194 sh + 217 Go, wc -l, Oct 2026). Prefer the manual? Read the full man page, shipped with this site."
+          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, fail-safe on ambiguous state. The whole thing is ~7,900 lines of auditable bash and Go (7,733 sh + 217 Go, wc -l, Oct 2026). Prefer the manual? Read the full man page, shipped with this site."
         }
       },
       {
