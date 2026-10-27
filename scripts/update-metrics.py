@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Inject live release metrics into site/index.html at deploy time.
+"""Inject live release metrics into the site at deploy time.
 
 Counts CLI tagged releases (excludes app-v* releases, which are the menu bar
 app's separate tag space) and the latest CLI version from the GitHub API, then
-updates the stat card and JSON-LD in place. A failure leaves the page as-is:
-slightly stale numbers are this page's failure mode, a broken deploy is not.
-Idempotent. Stdlib only.
+updates the pages in place: the landing's stat card and JSON-LD, and the
+manual page's JSON-LD plus its version badge. A failure leaves the pages
+as-is: slightly stale numbers are this site's failure mode, a broken deploy
+is not. Idempotent. Stdlib only.
 """
 import json
 import os
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 
 REPO = "shrwnsan/tailroute-cli"
 PAGE = os.path.join(os.path.dirname(__file__), "..", "site", "index.html")
+DOCS_PAGE = os.path.join(os.path.dirname(__file__), "..", "site", "docs", "index.html")
 
 
 def fetch_releases():
@@ -33,25 +35,35 @@ def main():
     count = len(releases)
     latest = releases[0]["tag_name"].lstrip("v") if releases else None
     if not (0 < count < 500) or not latest:
-        print(f"update-metrics: implausible metrics (count={count}, latest={latest}) — leaving page as-is")
+        print(f"update-metrics: implausible metrics (count={count}, latest={latest}) — leaving pages as-is")
         return 0
-
-    with open(PAGE) as f:
-        html = f.read()
-    original = html
-
-    html = _replace_releases(html, count)
-    html = _replace_version(html, latest)
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    html = _replace_span(html, "updated", f" \u00b7 site updated {today}")
 
-    if html == original:
-        print(f"update-metrics: page already current (releases={count}, version={latest})")
+    def landing(html):
+        html = _replace_releases(html, count)
+        html = _replace_version(html, latest)
+        return _replace_span(html, "updated", f" \u00b7 site updated {today}")
+
+    def manual(html):
+        html = _replace_version(html, latest)
+        return _replace_span(html, "cli-version", f"v{latest}")
+
+    touched = 0
+    for path, inject in ((PAGE, landing), (DOCS_PAGE, manual)):
+        with open(path) as f:
+            html = f.read()
+        updated = inject(html)
+        if updated == html:
+            continue
+        with open(path, "w") as f:
+            f.write(updated)
+        touched += 1
+
+    if not touched:
+        print(f"update-metrics: pages already current (releases={count}, version={latest})")
         return 0
-    with open(PAGE, "w") as f:
-        f.write(html)
-    print(f"update-metrics: injected releases={count}, version={latest}, updated={today}")
+    print(f"update-metrics: injected releases={count}, version={latest}, updated={today} ({touched} page(s))")
     return 0
 
 
@@ -75,7 +87,7 @@ def _replace_version(html, version):
 
 def _replace_span(html, name, text):
     import re
-    pattern = re.compile(rf'(<span data-metric="{name}">)(.*?)(</span>)', re.S)
+    pattern = re.compile(rf'(<span[^>]*\sdata-metric="{name}"[^>]*>)(.*?)(</span>)', re.S)
     if not pattern.search(html):
         print(f"update-metrics: WARNING span {name!r} not found")
         return html
