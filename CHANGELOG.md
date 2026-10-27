@@ -2,7 +2,7 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
-## [Unreleased]
+## [0.9.0] - 2026-10-27
 
 ### Added
 - **`tunnel stop [<peer>|--all]` parks a tunnel without tearing it down** — until now the only ways to stop one were a destructive remove/re-add (two sudo prompts for the hosts edit, TLS re-verification, and a fresh local-port allocation that could silently move the bookmarked URL) or a raw `launchctl bootout` that status then misreported as a failure. Stop records the intent in launchd's per-user disabled-services store (`disable` then `bootout`, in that order — a bootout alone would be undone by `RunAtLoad` at the next login), so the tunnel stays parked across logins and reboots while the registry entry and hosts mapping survive untouched: `start` restores the same label, same local port, and same bookmarked URL with no sudo and no re-registration. The disabled store is upsert-only and `enable` writes an explicit `enabled` line that nothing ever deletes, so the parked state is detected by exact whole-line match against `"<label>" => disabled` — presence-greps would misread running tunnels as stopped, and unanchored greps collide on label prefixes (`web` matches `web-2`'s line). Failure branches are explicit: a failed disable surfaces launchctl's stderr; a job that survives bootout reports `disabled but still loaded — retry: stop · undo: start`; a missing plist still parks the label (fail-safe against a restored plist resurrecting at login) and points at `remove && add`. Idempotent both ways (`Already stopped` / `Already running`), empty registry is a clean no-op, and the not-found contract matches `remove` (exit 3 with the registered-tunnels hint).
