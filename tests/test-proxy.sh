@@ -225,40 +225,140 @@ test_status_plain_not_running_when_daemon_not_installed() {
 # Canonical binary location and version awareness (#42 defect 3)
 # =============================================================================
 
-# Fixture "binaries" are /bin/sh stubs that answer --version.
+# Fixture "binaries" are /bin/sh stubs that answer --version. A leading
+# "v" (Go binary style, real-world) and a bare version (CLI style) are
+# both exercised below.
 
-test_install_flags_version_skew_between_binary_and_cli() {
+# _check_proxy_binary_version must not flag a binary whose version matches
+# the CLI just because one prints a leading "v" and the other does not —
+# that was the v0.9.0 false-positive skew trap.
+test_check_version_accepts_match_with_v_prefix() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy v%s"\n' "$VERSION" > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+
+    local out
+    out=$(_check_proxy_binary_version "$PROXY_BIN_PATH" 2>&1)
+    assert_contains "matches CLI" "$out"
+    if [[ "$out" == *"Version skew"* ]]; then
+        _assert_fail "v-prefix + matching bare version must not skew: $out"
+    fi
+}
+
+# Skew against a genuine older version still surfaces.
+test_check_version_flags_skew_with_older_version() {
     _setup_proxy_sandbox
     printf '#!/bin/sh\necho "tailroute-proxy 0.2.2"\n' > "$PROXY_BIN_PATH"
     chmod +x "$PROXY_BIN_PATH"
-    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }   # keep /usr/local/bin out of it
 
     local out
-    out=$(do_proxy_install 2>&1)
+    out=$(_check_proxy_binary_version "$PROXY_BIN_PATH" 2>&1)
     assert_contains "Version skew" "$out"
     assert_contains "0.2.2" "$out"
 }
 
-test_install_accepts_matching_version() {
+# Skew with a v-prefix on the binary side still trips the warning, which
+# is the trigger tell do_proxy_install uses to self-heal.
+test_check_version_flags_skew_with_v_prefix() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy v0.2.2"\n' > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+
+    local out
+    out=$(_check_proxy_binary_version "$PROXY_BIN_PATH" 2>&1)
+    assert_contains "Version skew" "$out"
+    assert_contains "v0.2.2" "$out"    # raw string is preserved in the display
+}
+
+# do_proxy_install self-heals on a mismatched binary instead of warning.
+# The "rm ~/.tailroute/bin/tailroute-proxy first" workaround is gone —
+# `proxy install` re-downloads on its own now.
+test_install_self_heals_on_version_mismatch() {
+    _setup_proxy_sandbox
+    printf '#!/bin/sh\necho "tailroute-proxy v0.2.2"\n' > "$PROXY_BIN_PATH"
+    chmod +x "$PROXY_BIN_PATH"
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+
+    # curl / get_proxy_download_url stub: simulate a download that writes
+    # a fake binary reporting v$VERSION (matching CLI), then return success.
+    curl() {
+        printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "v$VERSION" > "$PROXY_BIN_PATH"
+        chmod +x "$PROXY_BIN_PATH"
+        return 0
+    }
+    get_proxy_download_url() { echo "https://example.invalid/skip"; }
+
+    local out
+    out=$(do_proxy_install 2>&1)
+    assert_contains "Replacing proxy binary" "$out"
+
+    # The replacement must have actually landed — read back via the new file.
+    local new_ver
+    new_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
+    assert_eq "v$VERSION" "$new_ver" \
+        "self-heal must overwrite the binary with a matching-version one"
+}
+
+# do_proxy_install on a matching version is a no-op: no download attempted.
+test_install_no_op_on_matching_version() {
     _setup_proxy_sandbox
     printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$VERSION" > "$PROXY_BIN_PATH"
     chmod +x "$PROXY_BIN_PATH"
     _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
 
+    # If curl ever runs, this counter goes above zero.
+    local curl_runs=0
+    curl() { curl_runs=$((curl_runs + 1)); return 0; }
+    get_proxy_download_url() { echo "https://example.invalid/never"; }
+
     local out
     out=$(do_proxy_install 2>&1)
     assert_contains "matches CLI" "$out"
+    assert_eq 0 "$curl_runs" "matching version must skip the download entirely"
 }
 
-test_install_flags_unversioned_legacy_binary() {
+# FORCE_INSTALL=1 (set by the `proxy install --force` dispatcher) re-downloads
+# even on match — recovers from a corrupted-but-version-matched binary.
+test_install_force_refreshes_even_when_match() {
     _setup_proxy_sandbox
-    printf '#!/bin/sh\nexit 0\n' > "$PROXY_BIN_PATH"        # answers nothing
+    printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$VERSION" > "$PROXY_BIN_PATH"
     chmod +x "$PROXY_BIN_PATH"
     _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
 
+    curl() {
+        # "Fresh" binary — different version, so file content visibly changes.
+        printf '#!/bin/sh\necho "tailroute-proxy v%s+rc"\n' "$VERSION" > "$PROXY_BIN_PATH"
+        chmod +x "$PROXY_BIN_PATH"
+        return 0
+    }
+    get_proxy_download_url() { echo "https://example.invalid/skip"; }
+
     local out
-    out=$(do_proxy_install 2>&1)
-    assert_contains "did not report a version" "$out"
+    out=$(FORCE_INSTALL=1 do_proxy_install 2>&1)
+    local new_ver
+    new_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
+    assert_eq "v$VERSION+rc" "$new_ver" \
+        "FORCE_INSTALL=1 must replace the binary even on a clean version match"
+}
+
+# Fresh-install path still works under FORCE_INSTALL=1 (no binary present).
+test_install_force_still_installs_when_binary_absent() {
+    _setup_proxy_sandbox
+    # No stub binary at PROXY_BIN_PATH — fresh install path.
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+    curl() {
+        printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "v$VERSION" > "$PROXY_BIN_PATH"
+        chmod +x "$PROXY_BIN_PATH"
+        return 0
+    }
+    get_proxy_download_url() { echo "https://example.invalid/skip"; }
+
+    local out
+    out=$(FORCE_INSTALL=1 do_proxy_install 2>&1)
+    assert_contains "Installed:" "$out"
+    if [[ ! -x "$PROXY_BIN_PATH" ]]; then
+        _assert_fail "binary must be present after install"
+    fi
 }
 
 test_install_retires_legacy_system_binary() {
