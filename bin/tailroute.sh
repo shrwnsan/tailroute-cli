@@ -737,7 +737,7 @@ do_proxy() {
             echo "  start      Start SOCKS5 proxy (downloads if not installed)"
             echo "  stop       Stop running proxy"
             echo "  status     Show proxy status"
-            echo "  install    Download proxy binary (~20MB)"
+            echo "  install    Download proxy binary (~20MB, --force to refresh)"
             echo "  uninstall  Remove proxy binary"
             echo ""
             echo "The proxy routes traffic through Tailscale mesh while VPN is active."
@@ -756,7 +756,18 @@ do_proxy() {
             do_proxy_auth
             ;;
         install)
-            do_proxy_install
+            # `proxy install --force` re-downloads even when the installed
+            # binary already matches CLI version (e.g. to recover a corrupted
+            # binary). Without --force, `do_proxy_install` self-heals on
+            # version mismatch and is otherwise a no-op.
+            local force=0
+            while (( $# )); do
+                case "$1" in
+                    --force|-f) force=1; shift ;;
+                    *) shift ;;                          # ignore unknowns
+                esac
+            done
+            FORCE_INSTALL=$force do_proxy_install
             ;;
         uninstall)
             do_proxy_uninstall
@@ -854,14 +865,19 @@ do_proxy_auth() {
 }
 
 _check_proxy_binary_version() {
-    local bin="$1" ver
-    ver=$("$bin" --version 2>/dev/null | tail -n 1 | awk '{print $NF}' || true)
+    local bin="$1" raw_ver ver
+    # Go binaries report "v0.9.0" (with v); CLI VERSION is bare "0.9.0".
+    # Normalize for the comparison so the two compare equal; surface the
+    # raw version text in the user-facing line so users see exactly what
+    # their binary reports.
+    raw_ver=$("$bin" --version 2>/dev/null | tail -n 1 | awk '{print $NF}' || true)
+    ver="${raw_ver#v}"
     if [[ -z "$ver" ]]; then
         echo "⚠️  Binary did not report a version (pre-0.5 generation?) — reinstall to align"
     elif [[ "$ver" != "$VERSION" ]]; then
-        echo "⚠️  Version skew: binary $ver, CLI v$VERSION — reinstall to align"
+        echo "⚠️  Version skew: binary $raw_ver, CLI v$VERSION — reinstall to align"
     else
-        echo "Version: $ver (matches CLI)"
+        echo "Version: $raw_ver (matches CLI)"
     fi
 }
 
@@ -883,11 +899,21 @@ _retire_legacy_system_proxy() {
 }
 
 do_proxy_install() {
+    # Read the override from env (set by the `proxy install` dispatcher), so
+    # this function stays arg-free and `tailroute proxy start`'s auto-install
+    # path doesn't need any plumbing.
+    local force="${FORCE_INSTALL:-0}"
+
     if is_proxy_installed; then
-        echo "Proxy already installed at $PROXY_BIN_PATH"
-        _check_proxy_binary_version "$PROXY_BIN_PATH"
-        _retire_legacy_system_proxy
-        return 0
+        local installed_ver
+        installed_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
+        installed_ver="${installed_ver#v}"            # strip Go's v prefix
+        if (( force == 0 )) && [[ "$installed_ver" == "$VERSION" ]]; then
+            echo "Proxy already installed at $PROXY_BIN_PATH (v$VERSION, matches CLI)"
+            _retire_legacy_system_proxy
+            return 0
+        fi
+        echo "Replacing proxy binary at $PROXY_BIN_PATH (was v${installed_ver:-unset}, want v$VERSION)."
     fi
     
     local url
@@ -904,17 +930,23 @@ do_proxy_install() {
     
     mkdir -p "$PROXY_INSTALL_DIR"
     
+    # On replace, write to a sibling temp file and atomically mv it into place
+    # (rename-on-same-filesystem is atomic), so a half-written download never
+    # overwrites a working proxy binary.
+    local bin_tmp="${PROXY_BIN_PATH}.new"
     if command -v curl >/dev/null 2>&1; then
-        if ! curl -fSL --progress-bar "$url" -o "$PROXY_BIN_PATH"; then
+        if ! curl -fSL --progress-bar "$url" -o "$bin_tmp"; then
             echo "ERROR: Download failed. Release may not exist yet." >&2
             echo "For local development, build from source:" >&2
             echo "  cd proxy && ./build.sh" >&2
             echo "  cp build/tailroute-proxy $PROXY_BIN_PATH" >&2
+            rm -f "$bin_tmp"
             exit 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if ! wget -q --show-progress "$url" -O "$PROXY_BIN_PATH"; then
+        if ! wget -q --show-progress "$url" -O "$bin_tmp"; then
             echo "ERROR: Download failed." >&2
+            rm -f "$bin_tmp"
             exit 1
         fi
     else
@@ -922,7 +954,8 @@ do_proxy_install() {
         exit 1
     fi
     
-    chmod +x "$PROXY_BIN_PATH"
+    chmod +x "$bin_tmp"
+    mv -f "$bin_tmp" "$PROXY_BIN_PATH"
     echo "Installed: $PROXY_BIN_PATH"
     _check_proxy_binary_version "$PROXY_BIN_PATH"
     _retire_legacy_system_proxy
@@ -959,11 +992,15 @@ do_proxy_start() {
         echo "Listen: $PROXY_SOCKS_ADDR"
         # Check if installed binary is newer than running process
         local installed_ver running_ver
-        installed_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | awk '{print $2}')
+        # Match the parser in _check_proxy_binary_version: last word of the
+        # --version line, with an optional leading v stripped.
+        installed_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
+        installed_ver="${installed_ver#v}"
         running_ver=$(cat "$HOME/.tailroute/proxy.log" 2>/dev/null | grep -m1 "tailroute-proxy" | awk '{print $NF}')
+        running_ver="${running_ver#v}"
         if [[ -n "$installed_ver" && -n "$running_ver" && "$installed_ver" != "$running_ver" ]]; then
             echo ""
-            echo "⚠️  Version mismatch: running $running_ver, installed $installed_ver"
+            echo "⚠️  Version mismatch: running v$running_ver, installed v$installed_ver"
             echo "   Restart to use the new version:"
             echo "   tailroute proxy stop && tailroute proxy start"
         fi
