@@ -8,13 +8,12 @@ set -euo pipefail
 
 # Source logging library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib-log.sh
+# shellcheck source=lib-log.sh disable=SC1091
 source "$SCRIPT_DIR/lib-log.sh"
 
 # Paths to system commands (absolute for security)
 MKDIR_CMD="/bin/mkdir"
 RM_CMD="/bin/rm"
-KILL_CMD="/bin/kill"
 PS_CMD="/bin/ps"
 
 # -----------------------------------------------------------------------------

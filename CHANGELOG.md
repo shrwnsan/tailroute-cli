@@ -2,6 +2,12 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **`proxy-config shell` lists your Tailscale peers again.** The status JSON was piped into `python3 -` while the same command also supplied the script as a heredoc; the heredoc replaced the pipe, so python never saw the JSON and the "Available peers" line always fell back to "see 'tailscale status'". The JSON is now passed as an argument.
+- **`shellcheck bin/*.sh` passes with zero findings** (it reported 1 error, 4 warnings, and 22 notes). Besides the peer-list bug above, the changes are behavior-preserving: declare-then-assign for two `local x="$(...)"` sites, quoting in the LaunchAgents glob and label-prefix strip, an unused constant and variable removed, `SC1091` suppressed at the 16 `source` sites (the gate runs without `-x`), and the intentional patterns annotated where they occur.
+
 ## [0.9.3] - 2026-11-03
 
 ### Fixed

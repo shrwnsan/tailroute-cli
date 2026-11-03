@@ -158,11 +158,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && "${1:-}" == "daemon" ]]; then
 fi
 
 # Source all required libraries
-# shellcheck source=lib-log.sh
+# shellcheck source=lib-log.sh disable=SC1091
 source "$LIB_DIR/lib-log.sh"
-# shellcheck source=lib-event-loop.sh
+# shellcheck source=lib-event-loop.sh disable=SC1091
 source "$LIB_DIR/lib-event-loop.sh"
-# shellcheck source=lib-tunnel.sh
+# shellcheck source=lib-tunnel.sh disable=SC1091
 source "$LIB_DIR/lib-tunnel.sh"
 
 # =============================================================================
@@ -378,7 +378,8 @@ ensure_log_rotation() {
     else
         src_dir="$(cd "$(dirname "$self")" && pwd)"
     fi
-    local project_root="$(cd "$src_dir/.." && pwd)"
+    local project_root
+    project_root="$(cd "$src_dir/.." && pwd)" || project_root=""
 
     local src="${TAILROUTE_NEWSYSLOG_SRC:-$project_root/etc/newsyslog.d/tailroute.conf}"
     local dest_dir="${TAILROUTE_NEWSYSLOG_DIR:-/etc/newsyslog.d}"
@@ -426,7 +427,8 @@ do_install() {
     fi
     
     # Find project root (go up from bin/ to project root)
-    local project_root="$(cd "$script_dir/.." && pwd)"
+    local project_root
+    project_root="$(cd "$script_dir/.." && pwd)" || project_root=""
     
     # Copy binary to /usr/local/bin (only if newer)
     echo "  Installing /usr/local/bin/tailroute..."
@@ -592,7 +594,7 @@ do_uninstall() {
         target_uid=$(/usr/bin/id -u "$target_user") || target_uid=""
         if [[ -n "$target_uid" ]]; then
             local launchd_labels
-            launchd_labels=$(launchctl print gui/$target_uid 2>/dev/null | grep -o 'com\.tailroute\.tunnel\.[^ ]*' || true)
+            launchd_labels=$(launchctl print gui/"$target_uid" 2>/dev/null | grep -o 'com\.tailroute\.tunnel\.[^ ]*' || true)
             local label
             for label in $launchd_labels; do
                 echo "  Unloading $label (uid $target_uid)..."
@@ -1566,12 +1568,12 @@ do_proxy_config_shell() {
     
     local peer_list=""
     if ts_status=$(tailscale status --json 2>/dev/null); then
-        peer_list=$(echo "$ts_status" | python3 - <<'PY'
+        peer_list=$(python3 - "$ts_status" <<'PY'
 import sys
 import json
 
 try:
-    data = json.load(sys.stdin)
+    data = json.loads(sys.argv[1])
 except Exception:
     sys.exit(0)
 

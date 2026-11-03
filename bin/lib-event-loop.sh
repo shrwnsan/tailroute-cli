@@ -14,13 +14,13 @@ set -euo pipefail
 
 # Source required libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib-log.sh
+# shellcheck source=lib-log.sh disable=SC1091
 source "$SCRIPT_DIR/lib-log.sh"
-# shellcheck source=lib-reconcile.sh
+# shellcheck source=lib-reconcile.sh disable=SC1091
 source "$SCRIPT_DIR/lib-reconcile.sh"
-# shellcheck source=lib-lock.sh
+# shellcheck source=lib-lock.sh disable=SC1091
 source "$SCRIPT_DIR/lib-lock.sh"
-# shellcheck source=lib-dns.sh
+# shellcheck source=lib-dns.sh disable=SC1091
 source "$SCRIPT_DIR/lib-dns.sh"
 
 # Paths to system commands (absolute for security)
@@ -214,6 +214,7 @@ start_poll() {
      (
          _POLL_STOP=0
          _POLL_SLEEP_PID=""
+         # shellcheck disable=SC2329  # invoked indirectly via the trap below
          _poll_halt() {
              _POLL_STOP=1
              if [[ -n "$_POLL_SLEEP_PID" ]]; then
