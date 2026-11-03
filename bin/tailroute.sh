@@ -1600,7 +1600,17 @@ Commands:
         preflight — start restores an already-verified configuration, and
         the local port never moves. Refuses while an interrupted add's
         recovery journal is pending; a missing plist points at
-        'remove && add'. Exit codes as for stop.
+        'tunnel repair'. Exit codes as for stop.
+  repair <peer> [--dry-run]
+        Rebuild a missing launchd plist from the registry entry. Forwards,
+        ssh alias, and hosts mapping are used exactly as stored, so URLs do
+        not move. This is the only correct fix for a missing plist: removing
+        and re-adding the tunnel deletes the registry row that holds the
+        forward map, and the rebuild then allocates fresh local ports.
+        Refuses when the plist already exists — use restart for a job that
+        is merely unhealthy. --dry-run prints what would be rebuilt and
+        writes nothing. Exit codes: 0 ok, 1 failed or journal gate refused,
+        2 usage, 3 not found.
   journal clear [--force]
         Clear a recovery journal left by an interrupted add, update, or
         remove (print it, then state the stranded op). An interrupted add
@@ -1638,6 +1648,10 @@ EOF
         remove)
             shift
             tunnel_do_remove "$@"
+            ;;
+        repair)
+            shift
+            tunnel_do_repair "$@"
             ;;
         status)
             shift

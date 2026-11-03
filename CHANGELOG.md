@@ -2,6 +2,14 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`tunnel repair <peer> [--dry-run]` rebuilds a missing launchd plist from the registry.** A lost plist used to be "repaired" with `tunnel remove && tunnel add`, which is not a repair: `remove` deletes the registry row holding the forward map, and `add` then rebuilds blind — lowest free local port, remote ports from Serve detection, locals allocated sequentially from that base. The stored `local:remote` pairing is never consulted because the row holding it is already gone, so bookmarked URLs change even when detection succeeds, and the rebuild can abort on a neighbouring port *after* the remove has deleted everything. The registry row survives a lost plist, so everything needed is still on disk: repair renders the plist from that row and leaves the forwards, ssh alias, hosts mapping, and registry entry untouched. It refuses when the plist already exists (that is `restart`'s job) and when the row has no forwards; `--dry-run` prints what would be rebuilt and writes nothing. The rebuilt job is enabled before bootstrap, so a repaired tunnel does not come up disabled and die at the next login.
+
+### Changed
+- **Plist-missing advice now points at `tunnel repair`** instead of the destructive remove-and-re-add sequence — in `tunnel start`'s refuse path, `tunnel restart`'s preflight, and `tunnel status`'s repair note. The `remove && add` advice that remains (stale forwards in `drift`, a missing hosts entry in `check`, an interrupted `update` journal) is genuinely a re-registration: those conditions need the forward set or hosts mapping rebuilt, which a plist repair cannot do.
+
 ## [0.9.0] - 2026-10-27
 
 ### Added
