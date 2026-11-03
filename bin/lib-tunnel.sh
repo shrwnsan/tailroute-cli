@@ -2632,6 +2632,121 @@ tunnel_do_remove() {
 }
 
 # -----------------------------------------------------------------------------
+# tunnel repair — rebuild a missing launchd plist from the registry
+# -----------------------------------------------------------------------------
+# A missing plist used to be repaired with `tunnel remove && tunnel add`, which
+# is not a repair: remove deletes the registry row that holds the forward
+# map, and add then rebuilds blind — lowest free local port, remote ports from
+# Serve detection, locals allocated sequentially from that base. The pairing
+# is never consulted because the row holding it is already gone, so URLs
+# change on success and the rebuild can abort on a neighbouring port *after*
+# the remove has deleted everything.
+#
+# The registry row survives a lost plist, so everything needed to rebuild is
+# still on disk. This verb renders the plist from that row and leaves the
+# forward map, hosts entry, and registry entry untouched.
+tunnel_do_repair() {
+    local peer="" dry_run=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry_run=1; shift ;;
+            -*) echo "ERROR: unknown tunnel repair flag '$1'" >&2; return 2 ;;
+            *)
+                [ -z "$peer" ] || { echo "ERROR: unexpected argument '$1'" >&2; return 2; }
+                peer="$1"; shift ;;
+        esac
+    done
+    [ -n "$peer" ] || { echo "ERROR: tunnel repair requires <peer>" >&2; return 2; }
+    peer="$(tunnel_normalize_lower "$peer")"
+    peer="$(tunnel_resolve_peer "$peer")" || return $?
+
+    tunnel_lock_acquire || return 1
+    if ! tunnel_journal_gate_strict; then
+        tunnel_lock_release
+        return 1
+    fi
+
+    local entry
+    entry="$(tunnel_registry_get "$peer" 2>/dev/null)" || {
+        echo "ERROR: tunnel for '$peer' not found" >&2
+        tunnel_registry_index_hint >&2
+        tunnel_lock_release; return 3
+    }
+
+    local ip host alias plist label log_path forwards pair fwd_count
+    ip="$(tunnel_registry_field "$entry" tailscaleIP)"
+    host="$(tunnel_registry_field "$entry" hostname)"
+    alias="$(tunnel_registry_field "$entry" sshAlias)"
+    plist="$(tunnel_plist_path_for_peer "$peer")"
+    label="$(tunnel_label_for_peer "$peer")"
+    log_path="$TUNNEL_LOG_DIR/tunnel-$peer.log"
+
+    # Rebuild the pair list from the registry, in stored order. --dry-run stops
+    # here: it answers "what would be rebuilt" without writing anything.
+    forwards="$(printf '%s' "$entry" | "$PYTHON3_CMD" -c '
+import json, sys
+try:
+    e = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+pairs = []
+for f in e.get("forwards") or []:
+    pairs.append("%d:%d" % (f["localPort"], f["remotePort"]))
+print(" ".join(pairs))
+')" || { echo "ERROR: cannot read forwards for '$peer' from the registry" >&2; tunnel_lock_release; return 1; }
+    if [ -z "$forwards" ]; then
+        echo "ERROR: registry entry for '$peer' has no forwards — nothing to rebuild" >&2
+        tunnel_lock_release; return 1
+    fi
+
+    fwd_count=0
+    for pair in $forwards; do fwd_count=$((fwd_count + 1)); done
+
+    if [ "$dry_run" -eq 1 ]; then
+        echo "Would rebuild the launchd plist for $peer from the registry:"
+        echo "  Job:      $label"
+        echo "  Plist:    $plist"
+        echo "  Forwards: $forwards"
+        echo "  URL:      https://$host:${forwards%%:*}"
+        echo "Nothing written (--dry-run)."
+        tunnel_lock_release; return 0
+    fi
+
+    if [ -f "$plist" ]; then
+        echo "ERROR: $plist already exists — 'repair' is for a missing plist." >&2
+        echo "  Use 'tailroute tunnel restart $peer' for a job that is merely unhealthy." >&2
+        tunnel_lock_release; return 1
+    fi
+
+    mkdir -p "$TUNNEL_LOG_DIR"; chmod 0700 "$TUNNEL_LOG_DIR" 2>/dev/null || true
+
+    # shellcheck disable=SC2086  # $forwards intentionally word-splits into l:r pair args
+    if ! tunnel_generate_plist "$peer" "$ip" "$log_path" "${alias:-$peer}" $forwards > "$plist" \
+        || ! tunnel_plist_lint "$plist"; then
+        echo "ERROR: could not rebuild $plist — nothing changed; run 'tailroute tunnel status' to inspect" >&2
+        rm -f "$plist"
+        tunnel_lock_release; return 1
+    fi
+    chmod 0644 "$plist"
+
+    # A repair targets a peer that is expected to be serving, so clear any
+    # lingering disable flag before bootstrap — a rebuilt job must not come up
+    # disabled and die at next login.
+    tunnel_job_enable "$label" || true
+    if ! tunnel_job_bootstrap "$plist"; then
+        echo "ERROR: rebuilt the plist but launchd refused to bootstrap $label" >&2
+        echo "  Plist left in place at $plist; retry with 'tailroute tunnel restart $peer'." >&2
+        tunnel_lock_release; return 1
+    fi
+
+    echo "Tunnel repaired: $peer (plist rebuilt from the registry, ${fwd_count} forward(s) unchanged)"
+    echo "  URL:      https://$host:${forwards%%:*}"
+    echo "  Plist:    $plist"
+    tunnel_lock_release
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # T-437: `tunnel journal clear` — first-class recovery for a stranded journal
 # -----------------------------------------------------------------------------
 # Recovery is a command, not magic.  Per-op rules for an INCOMPLETE entry:
@@ -2815,7 +2930,7 @@ _t810_stop_one() { # <peer> <store>
     fi
 
     if [ "$missing" = "yes" ]; then
-        echo "WARN: plist missing at $plist — repair: tailroute tunnel remove $peer && tailroute tunnel add $peer" >&2
+        echo "WARN: plist missing at $plist — repair: tailroute tunnel repair $peer" >&2
         return 1
     fi
 
@@ -2902,7 +3017,7 @@ _t811_start_one() { # <peer>
     label="$(tunnel_label_for_peer "$peer")"
     plist="$(tunnel_plist_path_for_peer "$peer")"
     if [ ! -f "$plist" ]; then
-        echo "WARN: plist missing at $plist — repair: tailroute tunnel remove $peer && tailroute tunnel add $peer" >&2
+        echo "WARN: plist missing at $plist — repair: tailroute tunnel repair $peer" >&2
         return 1
     fi
 
@@ -3066,7 +3181,7 @@ tunnel_status_rows() {
             plist_state="present"
         else
             plist_state="missing"
-            notes="${notes:+$notes; }plist missing — repair: tailroute tunnel remove $p && tailroute tunnel add $p"
+            notes="${notes:+$notes; }plist missing — repair: tailroute tunnel repair $p"
             if tunnel_job_is_loaded "$label"; then job="running"; else job="not-running"; fi
         fi
 

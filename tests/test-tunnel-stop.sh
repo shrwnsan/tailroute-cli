@@ -146,7 +146,7 @@ test_stop_missing_plist_still_parks_but_fails() {
     local rc=0 out
     out="$(tunnel_do_stop web 2>&1)" || rc=$?
     assert_eq "1" "$rc" "missing plist fails the peer"
-    assert_contains "repair: tailroute tunnel remove web && tailroute tunnel add web" "$out"
+    assert_contains "repair: tailroute tunnel repair web" "$out"
     # the park itself still landed: fail-safe against a restored plist
     assert_contains "\"$WEB_LABEL\" => disabled" "$($LAUNCHCTL_CMD print-disabled gui/$UID)"
     assert_fail "$LAUNCHCTL_CMD" print "gui/$UID/$WEB_LABEL"
@@ -161,7 +161,7 @@ test_stop_all_form_reports_per_peer_and_exits_1_on_any_failure() {
     out="$(tunnel_do_stop --all 2>&1)" || rc=$?
     assert_eq "1" "$rc" "one failing peer fails the all-form"
     assert_contains "Stopped: web" "$out"
-    assert_contains "repair: tailroute tunnel remove web2 && tailroute tunnel add web2" "$out"
+    assert_contains "repair: tailroute tunnel repair web2" "$out"
     assert_contains "\"$WEB_LABEL\" => disabled" "$($LAUNCHCTL_CMD print-disabled gui/$UID)"
     assert_contains "\"com.tailroute.tunnel.web2\" => disabled" "$($LAUNCHCTL_CMD print-disabled gui/$UID)"
 }

@@ -132,7 +132,7 @@ test_start_missing_plist_fails_before_any_launchctl_call() {
     local rc=0 out
     out="$(tunnel_do_start web 2>&1)" || rc=$?
     assert_eq "1" "$rc" "missing plist rc"
-    assert_contains "repair: tailroute tunnel remove web && tailroute tunnel add web" "$out"
+    assert_contains "repair: tailroute tunnel repair web" "$out"
     # the store is byte-identical: enable never ran
     assert_eq "$store_before" "$(cat "$LAUNCHCTL_DISABLED_STATE")" "store untouched"
 }
@@ -181,6 +181,6 @@ test_start_all_form_reports_per_peer_and_exits_1_on_any_failure() {
     out="$(tunnel_do_start --all 2>&1)" || rc=$?
     assert_eq "1" "$rc" "one failing peer fails the all-form"
     assert_contains "Started: web2" "$out"
-    assert_contains "repair: tailroute tunnel remove web && tailroute tunnel add web" "$out"
+    assert_contains "repair: tailroute tunnel repair web" "$out"
     assert_contains "\"com.tailroute.tunnel.web2\" => enabled" "$($LAUNCHCTL_CMD print-disabled gui/$UID)"
 }
