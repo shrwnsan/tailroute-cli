@@ -25,6 +25,11 @@ readonly VERSION="0.9.2"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Every lib-*.sh reassigns SCRIPT_DIR to its own directory, so the executable's
+# own location is kept separately: sibling files are resolved against it (a
+# Homebrew install links `tailroute-proxy` beside `tailroute` in the prefix's
+# bin, while the libs land in the prefix's lib).
+TAILROUTE_BIN_DIR="$SCRIPT_DIR"
 # Libraries sit beside this script (source checkout) or in ../lib (Homebrew)
 if [ -f "$SCRIPT_DIR/lib-log.sh" ]; then
     LIB_DIR="$SCRIPT_DIR"
@@ -664,6 +669,87 @@ is_proxy_installed() {
     [[ -x "$PROXY_BIN_PATH" ]]
 }
 
+# The proxy binary shipped alongside this script. Every package layout that
+# carries both files puts them in one bin dir (Homebrew links `tailroute` and
+# `tailroute-proxy` from the same prefix), so the script's own directory finds
+# the proxy without hardcoding a prefix — /opt/homebrew/bin on Apple Silicon,
+# /usr/local/bin on Intel, or anything else.
+_proxy_sibling_bin() {
+    echo "${TAILROUTE_BIN_DIR:-$SCRIPT_DIR}/$PROXY_BIN_NAME"
+}
+
+# First usable proxy binary as an absolute path; returns 1 when none exists.
+# Discovery only — `proxy install` still owns $PROXY_INSTALL_DIR.
+#
+# The managed copy wins so a user who ran `proxy install` keeps the binary that
+# self-heals on version drift. The sibling covers package-manager installs,
+# the legacy system path covers older source installs, and PATH is the last
+# resort for a proxy placed elsewhere on purpose.
+resolve_proxy_bin() {
+    local candidate
+    for candidate in "$PROXY_BIN_PATH" "$(_proxy_sibling_bin)" "$(_system_proxy_bin)"; do
+        [[ -n "$candidate" && -x "$candidate" ]] || continue
+        echo "$candidate"
+        return 0
+    done
+    candidate=$(command -v "$PROXY_BIN_NAME" 2>/dev/null || true)
+    [[ -n "$candidate" && -x "$candidate" ]] || return 1
+    echo "$candidate"
+}
+
+# Where a resolved proxy came from, for the status report.
+_proxy_bin_origin() {
+    local bin="$1"
+    if [[ "$bin" == "$PROXY_BIN_PATH" ]]; then
+        echo "managed"
+    elif [[ "$bin" == "$(_proxy_sibling_bin)" ]]; then
+        echo "ships with the CLI"
+    elif [[ "$bin" == "$(_system_proxy_bin)" ]]; then
+        echo "legacy system-wide install"
+    else
+        echo "found on PATH"
+    fi
+}
+
+# One message for every "no binary" path, so a GUI or scripted caller sees the
+# same actionable text whether it asked for start, auth, or status.
+_proxy_missing_binary_message() {
+    echo "Proxy binary not installed." >&2
+    echo "Install it with 'tailroute proxy install' (~20MB download)." >&2
+}
+
+# Handle a missing proxy binary, honouring --yes/--no and TTY availability.
+# Never prompts a caller that cannot answer: under a GUI or a script stdin is
+# not a TTY, and a bare `read` there reads EOF and aborts the script through
+# `set -e` with the reason only on stdout — which is how "Start does nothing"
+# looked from the app.
+_proxy_offer_install() {
+    case "${PROXY_START_INSTALL:-}" in
+        yes)
+            do_proxy_install
+            return 0
+            ;;
+        no)
+            _proxy_missing_binary_message
+            exit 1
+            ;;
+    esac
+
+    if [[ ! -t 0 ]]; then
+        _proxy_missing_binary_message
+        exit 1
+    fi
+
+    echo "Proxy binary not installed."
+    local confirm=""
+    read -r -p "Download tailroute-proxy (~20MB)? [Y/n] " confirm || confirm=""
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+        echo "Skipped. Run 'tailroute proxy install' to download later." >&2
+        exit 1
+    fi
+    do_proxy_install
+}
+
 # The pid holding the SOCKS listener, if any. Empty when nothing is listening
 # or lsof is unavailable (the ownership check is then skipped, not failed).
 _socks_listener_pid() {
@@ -734,7 +820,8 @@ do_proxy() {
             echo ""
             echo "Commands:"
             echo "  auth       Authenticate proxy with Tailscale (get auth URL)"
-            echo "  start      Start SOCKS5 proxy (downloads if not installed)"
+            echo "  start      Start SOCKS5 proxy (downloads if absent; --yes/--no"
+            echo "             answers the download prompt, never prompts off a TTY)"
             echo "  stop       Stop running proxy"
             echo "  status     Show proxy status"
             echo "  install    Download proxy binary (~20MB, --force to refresh)"
@@ -744,7 +831,18 @@ do_proxy() {
             echo "Listen address: $PROXY_SOCKS_ADDR"
             ;;
         start)
-            do_proxy_start
+            # --yes/--no make the missing-binary decision explicit so a GUI or
+            # scripted caller never lands on an interactive prompt.
+            local install_choice=""
+            shift
+            while (( $# )); do
+                case "$1" in
+                    --yes|-y) install_choice="yes"; shift ;;
+                    --no|-n) install_choice="no"; shift ;;
+                    *) shift ;;                          # ignore unknowns
+                esac
+            done
+            PROXY_START_INSTALL="$install_choice" do_proxy_start
             ;;
         stop)
             do_proxy_stop
@@ -831,15 +929,10 @@ do_proxy_auth() {
         do_proxy_stop
     fi
     
-    # Find the binary (same logic as do_proxy_start)
+    # Find the binary (same resolution as do_proxy_start)
     local bin_path
-    if is_proxy_installed; then
-        bin_path="$PROXY_BIN_PATH"
-    elif [[ -x "$(_system_proxy_bin)" ]]; then
-        bin_path=$(_system_proxy_bin)
-    else
-        echo "ERROR: Proxy binary not installed."
-        echo "Run 'tailroute proxy install' first."
+    if ! bin_path=$(resolve_proxy_bin); then
+        _proxy_missing_binary_message
         exit 1
     fi
     
@@ -972,11 +1065,23 @@ do_proxy_uninstall() {
         echo "Removed: $PROXY_BIN_PATH"
     else
         echo "Proxy not installed."
+        # Only the managed copy is ours to delete. A proxy that ships with a
+        # package (or sits on PATH) belongs to its package manager.
+        local other=""
+        other=$(resolve_proxy_bin) || other=""
+        if [[ -n "$other" && "$other" != "$PROXY_BIN_PATH" ]]; then
+            echo "A proxy binary remains at $other ($(_proxy_bin_origin "$other"));"
+            echo "remove it with whatever installed it."
+        fi
     fi
     
-    # Optionally clean state
+    # Optionally clean state. Off a TTY the prompt cannot be answered, so keep
+    # the state: deleting proxy auth is not something to guess at.
     if [[ -d "$PROXY_STATE_DIR" ]]; then
-        read -p "Remove proxy state (Tailscale auth)? [y/N] " confirm
+        local confirm=""
+        if [[ -t 0 ]]; then
+            read -r -p "Remove proxy state (Tailscale auth)? [y/N] " confirm || confirm=""
+        fi
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             rm -rf "$PROXY_STATE_DIR"
             echo "Removed: $PROXY_STATE_DIR"
@@ -990,11 +1095,12 @@ do_proxy_start() {
         pid=$(get_proxy_pid)
         echo "Proxy already running (pid $pid)"
         echo "Listen: $PROXY_SOCKS_ADDR"
-        # Check if installed binary is newer than running process
-        local installed_ver running_ver
+        # Check if installed binary is newer than running process.
+        local installed_ver running_ver installed_bin=""
+        installed_bin=$(resolve_proxy_bin) || installed_bin=""
         # Match the parser in _check_proxy_binary_version: last word of the
         # --version line, with an optional leading v stripped.
-        installed_ver=$("$PROXY_BIN_PATH" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
+        installed_ver=$("${installed_bin:-$PROXY_BIN_PATH}" --version 2>/dev/null | tail -n 1 | awk '{print $NF}')
         installed_ver="${installed_ver#v}"
         running_ver=$(cat "$HOME/.tailroute/proxy.log" 2>/dev/null | grep -m1 "tailroute-proxy" | awk '{print $NF}')
         running_ver="${running_ver#v}"
@@ -1006,23 +1112,23 @@ do_proxy_start() {
         fi
         return 0
     fi
-    
-    # Check if installed, offer to download
-    if ! is_proxy_installed; then
-        # Check for system-wide install
-        if [[ -x "$(_system_proxy_bin)" ]]; then
-            PROXY_BIN_PATH=$(_system_proxy_bin)
-            echo "⚠️  Using legacy proxy at $PROXY_BIN_PATH — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
-        else
-            echo "Proxy binary not installed."
-            read -p "Download tailroute-proxy (~20MB)? [Y/n] " confirm
-            if [[ ! "$confirm" =~ ^[Nn]$ ]]; then
-                do_proxy_install
-            else
-                echo "Skipped. Run 'tailroute proxy install' to download later."
-                exit 1
-            fi
+
+    # Resolve the binary before anything else. Package-installed copies live
+    # beside this script, so a missing $PROXY_INSTALL_DIR alone is not enough
+    # to conclude the proxy is absent. Kept in a local: PROXY_BIN_PATH stays
+    # the managed location so `_proxy_bin_origin` keeps telling them apart.
+    local proxy_bin=""
+    proxy_bin=$(resolve_proxy_bin) || proxy_bin=""
+    if [[ -n "$proxy_bin" ]]; then
+        # Warn only on the layout that `proxy install` should replace. A proxy
+        # beside the script is the normal package layout and needs no warning
+        # on every start.
+        if [[ "$(_proxy_bin_origin "$proxy_bin")" == "legacy system-wide install" ]]; then
+            echo "⚠️  Using legacy proxy at $proxy_bin — 'tailroute proxy install' places the managed one in $PROXY_INSTALL_DIR"
         fi
+    else
+        _proxy_offer_install
+        proxy_bin="$PROXY_BIN_PATH"
     fi
     
     # Create state directory
@@ -1034,12 +1140,12 @@ do_proxy_start() {
     # (tsnet reads it natively): --auth-key on argv exposed the key to
     # every local user via ps (#42 defect 4).
     if [[ -n "${TS_AUTHKEY:-}" ]]; then
-        TS_AUTHKEY="$TS_AUTHKEY" "$PROXY_BIN_PATH" \
+        TS_AUTHKEY="$TS_AUTHKEY" "$proxy_bin" \
             --socks-addr "$PROXY_SOCKS_ADDR" \
             --state-dir "$PROXY_STATE_DIR" \
             >"$HOME/.tailroute/proxy.log" 2>&1 &
     else
-        "$PROXY_BIN_PATH" \
+        "$proxy_bin" \
             --socks-addr "$PROXY_SOCKS_ADDR" \
             --state-dir "$PROXY_STATE_DIR" \
             >"$HOME/.tailroute/proxy.log" 2>&1 &
@@ -1106,10 +1212,10 @@ do_proxy_status() {
     echo "SOCKS5 Proxy"
     echo "============"
     
-    if is_proxy_installed; then
-        echo "Binary:   $PROXY_BIN_PATH"
-    elif [[ -x "$(_system_proxy_bin)" ]]; then
-        echo "Binary:   $(_system_proxy_bin) (system)"
+    local bin_path=""
+    bin_path=$(resolve_proxy_bin) || bin_path=""
+    if [[ -n "$bin_path" ]]; then
+        echo "Binary:   $bin_path ($(_proxy_bin_origin "$bin_path"))"
     else
         echo "Binary:   Not installed"
         echo "          Run 'tailroute proxy install' to download"
