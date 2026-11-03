@@ -2,7 +2,7 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
-## [Unreleased]
+## [0.9.3] - 2026-11-03
 
 ### Fixed
 - **The CLI can find a Homebrew-installed `tailroute-proxy`.** Proxy paths were hardcoded to `~/.tailroute/bin` and `/usr/local/bin`, but Homebrew installs both binaries into its own prefix (`/opt/homebrew/bin` on Apple Silicon). On any Apple Silicon brew install the proxy sat beside the CLI and `proxy status` still reported `Binary: Not installed`, `proxy start` refused, and `proxy auth` claimed the binary was absent. Discovery now checks the managed copy first, then the directory the executable itself lives in, then the legacy system path, then `PATH`, so a package install is found without hardcoding a prefix. The sibling directory is captured before the libs load because every `lib-*.sh` reassigns `SCRIPT_DIR` to its own directory — under Homebrew that is the prefix's `lib`, next to but not the same as the `bin` holding both binaries. `proxy status` now names the origin (`managed`, `ships with the CLI`, `legacy system-wide install`, `found on PATH`), and `proxy uninstall` leaves a package-owned copy alone while saying where it remains.
