@@ -15,9 +15,9 @@ if [[ ! "$SCRIPT_DIR" =~ ^(/usr/local/(bin|lib)|/opt/.*/(bin|lib)|.*tailroute/(b
     echo "WARNING: Script loaded from unexpected location: $SCRIPT_DIR" >&2
 fi
 
-# shellcheck source=lib-log.sh
+# shellcheck source=lib-log.sh disable=SC1091
 source "$SCRIPT_DIR/lib-log.sh"
-# shellcheck source=lib-state.sh
+# shellcheck source=lib-state.sh disable=SC1091
 source "$SCRIPT_DIR/lib-state.sh"
 
 # Paths to system commands (absolute for security)

@@ -8,13 +8,13 @@ set -euo pipefail
 
 # Source required libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib-log.sh
+# shellcheck source=lib-log.sh disable=SC1091
 source "$SCRIPT_DIR/lib-log.sh"
-# shellcheck source=lib-detect.sh
+# shellcheck source=lib-detect.sh disable=SC1091
 source "$SCRIPT_DIR/lib-detect.sh"
-# shellcheck source=lib-dns.sh
+# shellcheck source=lib-dns.sh disable=SC1091
 source "$SCRIPT_DIR/lib-dns.sh"
-# shellcheck source=lib-state.sh
+# shellcheck source=lib-state.sh disable=SC1091
 source "$SCRIPT_DIR/lib-state.sh"
 
 # =============================================================================

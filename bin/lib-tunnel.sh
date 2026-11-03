@@ -1276,7 +1276,7 @@ _tun_tls_verify() { # <hostname> <port>
     fi
 
     # Extract the CN and SAN from the certificate
-    local subject san
+    local san
     # Extract SAN from the certificate (modern certs use this)
     san="$(printf '%s' "$cert_out" | grep -A1 '^ ' | grep 'DNS:' | sed 's/.*DNS:\([^,]*\).*/\1/' | head -1)"
     # Extract CN from subject line as fallback
@@ -2326,6 +2326,7 @@ tunnel_do_add() {
                 echo "ERROR: $peer is loaded but disabled — reconcile: tailroute tunnel start $peer (keep) or tailroute tunnel stop $peer (park)" >&2
                 tunnel_lock_release; return 1
             fi
+            # shellcheck disable=SC2086  # $raw_remote intentionally word-splits into remote-port args
             tunnel_update_add_forward "$peer" $raw_remote || { tunnel_lock_release; return 1; }
             tunnel_lock_release
             # tunnel_update_add_forward already printed the URL list and the
@@ -3227,11 +3228,12 @@ $(awk -F'\t' '/^# BEGIN tailroute-tunnel$/{inblk=1;next} /^# END tailroute-tunne
 EOF
     fi
     if [ -d "$TUNNEL_LAUNCHAGENTS_DIR" ]; then
-        for pl in "$TUNNEL_LAUNCHAGENTS_DIR"/$TUNNEL_LABEL_PREFIX.*.plist; do
+        for pl in "$TUNNEL_LAUNCHAGENTS_DIR"/"$TUNNEL_LABEL_PREFIX".*.plist; do
             [ -f "$pl" ] || continue
             label="$(basename "$pl" .plist)"
-            p="${label#$TUNNEL_LABEL_PREFIX.}"
+            p="${label#"$TUNNEL_LABEL_PREFIX".}"
             case " $reg_peers " in *" $p "*) continue ;; esac
+            # shellcheck disable=SC2016  # $UID must expand when the user runs the printed repair command
             printf 'job\t%s\tlaunchctl bootout gui/$UID/%s 2>/dev/null; rm %s\n' "$label" "$label" "$pl"
         done
     fi

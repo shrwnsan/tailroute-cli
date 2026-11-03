@@ -658,3 +658,28 @@ test_auth_without_binary_reports_on_stderr() {
     assert_contains "Proxy binary not installed" "$stderr"
 }
 
+
+# `proxy-config shell` piped the status JSON into `python3 -` while the same
+# command also supplied a heredoc, and the heredoc won: python read its script
+# from stdin, never saw the JSON, and the peer list silently stayed empty.
+test_proxy_config_shell_lists_peers_from_tailscale_status() {
+    _setup_proxy_sandbox
+    SHELL=/bin/bash
+    tailscale() {
+        printf '%s' '{"CurrentTailnet":{"MagicDNSSuffix":"example.ts.net"},"Peer":{"a":{"DNSName":"alpha.example.ts.net."},"b":{"HostName":"beta"}}}'
+    }
+
+    local out
+    out=$(do_proxy_config_shell "127.0.0.1:1055" 2>&1)
+    assert_contains "Available peers: alpha.example.ts.net beta.example.ts.net" "$out"
+}
+
+test_proxy_config_shell_falls_back_when_status_is_unreadable() {
+    _setup_proxy_sandbox
+    SHELL=/bin/bash
+    tailscale() { printf 'not json'; }
+
+    local out
+    out=$(do_proxy_config_shell "127.0.0.1:1055" 2>&1)
+    assert_contains "see 'tailscale status'" "$out"
+}

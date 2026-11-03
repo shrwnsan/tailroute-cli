@@ -14,7 +14,7 @@ set -euo pipefail
 
 # Source validation library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib-validate.sh
+# shellcheck source=lib-validate.sh disable=SC1091
 source "$SCRIPT_DIR/lib-validate.sh"
 
 # Paths to system commands (absolute for security)
