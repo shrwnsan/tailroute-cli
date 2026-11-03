@@ -499,3 +499,162 @@ test_status_reports_needslogin_when_running() {
     assert_contains "Needs login" "$out"
     assert_contains "proxy auth" "$out"
 }
+
+# =============================================================================
+# Binary discovery and the non-interactive missing-binary path (UAT 2026-11-01)
+# =============================================================================
+# A Homebrew install links `tailroute` and `tailroute-proxy` into one bin dir
+# (/opt/homebrew/bin on Apple Silicon, /usr/local/bin on Intel). The CLI only
+# ever looked in $HOME/.tailroute/bin and /usr/local/bin, so on Apple Silicon it
+# reported "Binary: Not installed" over a proxy sitting beside itself, and
+# `proxy start` from the app hit an interactive prompt that could not answer.
+
+# Nothing outside the scratch dir may resolve as a proxy binary. Also drops
+# /opt/homebrew/bin from PATH so a real installed proxy cannot satisfy a
+# "missing binary" test on a developer machine.
+_isolate_proxy_bin_paths() {
+    local empty="$PROXY_TEST_HOME/no-proxy-on-path"
+    mkdir -p "$empty"
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+    _proxy_sibling_bin() { echo "$PROXY_TEST_HOME/none"; }
+    PATH="$empty:/usr/bin:/bin"
+}
+
+_install_fake_proxy() {
+    local path="$1" version="${2:-$VERSION}"
+    mkdir -p "$(dirname "$path")"
+    printf '#!/bin/sh\necho "tailroute-proxy %s"\n' "$version" > "$path"
+    chmod +x "$path"
+}
+
+test_resolve_proxy_bin_prefers_the_managed_copy() {
+    _setup_proxy_sandbox
+    _install_fake_proxy "$PROXY_BIN_PATH"
+    _proxy_sibling_bin() { echo "$PROXY_TEST_HOME/sibling/tailroute-proxy"; }
+    _install_fake_proxy "$PROXY_TEST_HOME/sibling/tailroute-proxy"
+
+    assert_eq "$PROXY_BIN_PATH" "$(resolve_proxy_bin)" \
+        "the managed copy must win so version self-heal keeps working"
+}
+
+test_resolve_proxy_bin_finds_the_binary_beside_the_script() {
+    _setup_proxy_sandbox
+    local sibling="$PROXY_TEST_HOME/sibling/tailroute-proxy"
+    _install_fake_proxy "$sibling"
+    _proxy_sibling_bin() { echo "$sibling"; }
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+
+    assert_eq "$sibling" "$(resolve_proxy_bin)" \
+        "a package install puts the proxy next to the tailroute script"
+}
+
+test_resolve_proxy_bin_falls_back_to_path() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+    local onpath="$PROXY_TEST_HOME/on-path/tailroute-proxy"
+    _install_fake_proxy "$onpath"
+    PATH="$(dirname "$onpath"):/usr/bin:/bin"
+
+    assert_eq "$onpath" "$(resolve_proxy_bin)"
+}
+
+# Each lib-*.sh reassigns SCRIPT_DIR to its own directory, so by the time the
+# proxy is resolved SCRIPT_DIR points at <prefix>/lib, not the bin dir holding
+# the executable. The sibling lookup must use the dir captured before the libs
+# loaded, or it misses the proxy in exactly the layout it was added for.
+test_sibling_lookup_ignores_the_script_dir_clobber() {
+    _setup_proxy_sandbox
+    local real_bin_dir="$PROXY_TEST_HOME/prefix/bin"
+    mkdir -p "$real_bin_dir"
+    TAILROUTE_BIN_DIR="$real_bin_dir"
+    SCRIPT_DIR="$PROXY_TEST_HOME/prefix/lib"        # what the libs leave behind
+
+    assert_eq "$real_bin_dir/tailroute-proxy" "$(_proxy_sibling_bin)" \
+        "sibling resolution must not follow the libs' SCRIPT_DIR rewrite"
+}
+
+test_resolve_proxy_bin_reports_nothing_when_absent() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+    if resolve_proxy_bin >/dev/null; then
+        _assert_fail "resolve_proxy_bin must fail when no binary exists anywhere"
+    fi
+}
+
+test_status_names_a_proxy_that_ships_with_the_cli() {
+    _setup_proxy_sandbox
+    local sibling="$PROXY_TEST_HOME/sibling/tailroute-proxy"
+    _install_fake_proxy "$sibling"
+    _proxy_sibling_bin() { echo "$sibling"; }
+    _system_proxy_bin() { echo "$PROXY_TEST_HOME/none"; }
+
+    local out
+    out=$(do_proxy_status 2>&1)
+    assert_contains "$sibling" "$out"
+    assert_contains "ships with the CLI" "$out"
+    if [[ "$out" == *"Not installed"* ]]; then
+        _assert_fail "a binary beside the script must not report as Not installed"
+    fi
+}
+
+# The shape the app lives in: no TTY, so stdin is EOF. It must fail with the
+# reason on stderr — stdout-only text is what the app was discarding.
+test_start_without_binary_fails_on_stderr_when_stdin_is_not_a_tty() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+
+    local rc=0 stdout="" stderr=""
+    stderr=$( (do_proxy_start 2>&1 >/dev/null </dev/null) ) || rc=$?
+    stdout=$( (do_proxy_start 2>/dev/null </dev/null) ) || true
+
+    assert_eq 1 "$rc" "a missing binary with no TTY must exit non-zero"
+    assert_contains "Proxy binary not installed" "$stderr"
+    assert_contains "proxy install" "$stderr"
+    if [[ "$stderr" == *"Download tailroute-proxy"* ]]; then
+        _assert_fail "must not prompt a caller whose stdin is not a TTY"
+    fi
+    if [[ "$stdout" == *"Proxy binary not installed"* ]]; then
+        _assert_fail "the reason belongs on stderr so a GUI caller can show it"
+    fi
+}
+
+test_start_honours_no_without_prompting() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+
+    local rc=0 out=""
+    out=$(PROXY_START_INSTALL=no do_proxy_start 2>&1 </dev/null) || rc=$?
+
+    assert_eq 1 "$rc" "--no must refuse instead of downloading"
+    assert_contains "proxy install" "$out"
+    if [[ "$out" == *"Download tailroute-proxy"* ]]; then
+        _assert_fail "--no must never fall through to the prompt"
+    fi
+}
+
+test_start_yes_installs_then_starts() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+    curl() { _install_fake_proxy "$PROXY_BIN_PATH"; return 0; }
+    get_proxy_download_url() { echo "https://example.invalid/skip"; }
+
+    local out=""
+    out=$(PROXY_START_INSTALL=yes do_proxy_start 2>&1 </dev/null) || true
+
+    assert_contains "Installed: $PROXY_BIN_PATH" "$out"
+    if [[ -x "$PROXY_BIN_PATH" ]]; then :; else
+        _assert_fail "--yes must download the binary before starting"
+    fi
+}
+
+test_auth_without_binary_reports_on_stderr() {
+    _setup_proxy_sandbox
+    _isolate_proxy_bin_paths
+
+    local rc=0 stderr=""
+    stderr=$( (do_proxy_auth 2>&1 >/dev/null) ) || rc=$?
+
+    assert_eq 1 "$rc"
+    assert_contains "Proxy binary not installed" "$stderr"
+}
+
