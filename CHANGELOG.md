@@ -5,6 +5,7 @@ All notable changes to tailroute CLI are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **`tunnel status` and `tunnel add` no longer call an unreachable peer "not accepting".** The remote backend probe treated every non-zero exit alike, so an ssh failure (peer unreachable, auth, host key) read as a closed port, and JSON consumers saw a false `not accepting`. The probe now returns three states: `accepting`, `not accepting` (ssh ran and the port refused), and `unknown` (ssh itself failed, exit 255). `status` prints `backend unknown` with a hint that the backend may be starting or down, `add` warns that the check could not run, and `unknown` does not mark a forward unhealthy in `--json`, matching `--skip-remote-check`.
 - **`proxy-config shell` lists your Tailscale peers again.** The status JSON was piped into `python3 -` while the same command also supplied the script as a heredoc; the heredoc replaced the pipe, so python never saw the JSON and the "Available peers" line always fell back to "see 'tailscale status'". The JSON is now passed as an argument.
 - **`shellcheck bin/*.sh` passes with zero findings** (it reported 1 error, 4 warnings, and 22 notes). Besides the peer-list bug above, the changes are behavior-preserving: declare-then-assign for two `local x="$(...)"` sites, quoting in the LaunchAgents glob and label-prefix strip, an unused constant and variable removed, `SC1091` suppressed at the 16 `source` sites (the gate runs without `-x`), and the intentional patterns annotated where they occur.
 

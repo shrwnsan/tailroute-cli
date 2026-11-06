@@ -1461,6 +1461,43 @@ test_probe_fallback_honors_refusing_target() {
     assert_contains "backend not accepting" "$out"
 }
 
+test_status_backend_unknown_when_probe_ssh_fails() {
+    # ssh failing says nothing about the backend: report unknown, never a false
+    # "not accepting", and hint that the backend may be starting or down
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    FAKE_REMOTE_PROBE_SSH_FAIL=1; export FAKE_REMOTE_PROBE_SSH_FAIL
+    local out
+    out="$(tunnel_do_status "$FX_PEER" 2>&1 || true)"
+    assert_contains "backend unknown" "$out"
+    assert_contains "may be starting or the backend is down" "$out"
+    if printf '%s' "$out" | grep -q "not accepting"; then
+        _assert_fail "ssh failure reported as not accepting: $out"
+    fi
+}
+
+test_status_json_backend_unknown_is_not_unhealthy() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    FAKE_REMOTE_PROBE_SSH_FAIL=1; export FAKE_REMOTE_PROBE_SSH_FAIL
+    FAKE_NC_OPEN="8443"; export FAKE_NC_OPEN
+    local out
+    out="$(tunnel_do_status --json "$FX_PEER" 2>&1 || true)"
+    assert_contains '"backend": "unknown"' "$out"
+    assert_contains '"healthy": true' "$out"
+}
+
+test_add_warns_unknown_not_closed_when_probe_ssh_fails() {
+    _tunnel_setup_sandbox
+    FAKE_REMOTE_PROBE_SSH_FAIL=1; export FAKE_REMOTE_PROBE_SSH_FAIL
+    local out
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || { echo "add failed: $out"; return 1; }
+    assert_contains "WARN: could not check remote port 443 on $FX_PEER" "$out"
+    if printf '%s' "$out" | grep -q "not accepting"; then
+        _assert_fail "ssh failure reported as not accepting: $out"
+    fi
+}
+
 test_status_shows_alias_line_when_alias_differs() {
     _tunnel_setup_sandbox
     tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "shorty")" >/dev/null

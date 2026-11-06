@@ -1235,13 +1235,21 @@ EOF
 # 127 and read every healthy target as down — so fall back to bash's /dev/tcp
 # when nc is absent. ip/port are pre-validated (CGNAT ip, numeric port), so the
 # interpolations cannot break out of the command string.
+# Returns 0 accepting, 1 not accepting, 2 unknown. ssh exits 255 when it could
+# not run the command at all (unreachable, auth, host key), which says nothing
+# about the backend, so that is unknown rather than a closed port.
 tunnel_check_remote_backend() { # <peer> <port> <ssh-alias> <peer-ts-ip>
-    local alias="${3:-$1}"
+    local alias="${3:-$1}" rc=0
     # v0.8.7: </dev/null — ssh consumes stdin, and this runs inside loops
     # that read registry rows from stdin; without it the probe swallows
     # every entry after the first and status shows only one tunnel.
     "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$alias" \
-        "if command -v nc >/dev/null 2>&1; then nc -z $4 $2; else bash -c 'exec 3<>/dev/tcp/$4/$2' 2>/dev/null; fi" >/dev/null 2>&1 </dev/null
+        "if command -v nc >/dev/null 2>&1; then nc -z $4 $2; else bash -c 'exec 3<>/dev/tcp/$4/$2' 2>/dev/null; fi" >/dev/null 2>&1 </dev/null || rc=$?
+    case "$rc" in
+        0) return 0 ;;
+        255) return 2 ;;
+        *) return 1 ;;
+    esac
 }
 
 # TLS identity verification (T-430): after the SSH tunnel is up and /etc/hosts
@@ -2434,8 +2442,13 @@ tunnel_do_add() {
     lport="${pair%%:*}"
     rport="${pair##*:}"
 
-    tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip" || \
-        echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2
+    local backend_rc=0
+    tunnel_check_remote_backend "$peer" "$rport" "${ssh_alias:-$peer}" "$ip" || backend_rc=$?
+    case "$backend_rc" in
+        0) ;;
+        2) echo "WARN: could not check remote port $rport on $peer — ssh to the peer failed, so the backend state is unknown" >&2 ;;
+        *) echo "WARN: remote port $rport not accepting on $peer — Serve may not be configured there" >&2 ;;
+    esac
     echo "NOTE: the /etc/hosts mapping is system-wide — it affects every user of this Mac." >&2
 
     # --- Transaction: registry → hosts → plist (+lint) → bootstrap → TLS verify ---
@@ -3192,10 +3205,14 @@ tunnel_status_rows() {
             if tunnel_port_in_use "$lport"; then listener="listening"; else listener="closed"; fi
             if [ "$skip_remote" = "yes" ]; then
                 backend="n/a"
-            elif tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}" "$ip"; then
-                backend="accepting"
             else
-                backend="not accepting"
+                local probe_rc=0
+                tunnel_check_remote_backend "$p" "$rport" "${ssh_alias:-$p}" "$ip" || probe_rc=$?
+                case "$probe_rc" in
+                    0) backend="accepting" ;;
+                    2) backend="unknown" ;;
+                    *) backend="not accepting" ;;
+                esac
             fi
             printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$p" "$hostname" "$lport" "$rport" "$listener" "$backend" "$allow_tls" "$job" "$hosts_state" "$notes" "$plist_state" "$ssh_alias" "$job_disabled"
@@ -3311,7 +3328,7 @@ for line in sys.stdin:
                       "stopped": job == "stopped", "disabled": job_disabled == "1"}
     fwd = {"localPort": int(lport), "remotePort": int(rport), "listener": listener,
            "backend": backend, "tls": tls}
-    # backend n/a (--skip-remote-check) is unknown, not unhealthy
+    # backend n/a (--skip-remote-check) and unknown (ssh probe failed) are not unhealthy
     fwd["healthy"] = listener == "listening" and backend != "not accepting"
     tunnels[p]["forwards"].append(fwd)
 out = []
@@ -3393,6 +3410,9 @@ sys.exit(1 if degraded else 0)
                 prev_peer="$p"
             fi
             echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
+            if [ "$backend" = "unknown" ]; then
+                echo "      ssh to the peer failed — it may be starting or the backend is down"
+            fi
             if [ "$job" = "stopped" ]; then
                 # closed listeners are the point of a deliberate stop; only the
                 # intact-registration bits can degrade it (mirrors the JSON exit)

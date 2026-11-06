@@ -59,6 +59,7 @@ _tunnel_setup_sandbox() {
     export FAKE_PROBE_LOG="$TUNNEL_SANDBOX/probes.log"
     : > "$FAKE_PROBE_LOG"
     export FAKE_REMOTE_NC_REFUSE=""
+    export FAKE_REMOTE_PROBE_SSH_FAIL=0
     export FAKE_REMOTE_NO_NC=0
     : > "$LAUNCHCTL_STATE"
     : > "$LAUNCHCTL_DISABLED_STATE"
@@ -181,6 +182,9 @@ for _mock_last; do :; done
 case "${_mock_last:-}" in
     *"nc -z "*)
         [ -n "${FAKE_PROBE_LOG:-}" ] && printf '%s\n' "$_mock_last" >> "$FAKE_PROBE_LOG"
+        # FAKE_REMOTE_PROBE_SSH_FAIL=1: ssh itself fails (255) before the remote
+        # command runs, so the probe learns nothing about the backend
+        [ "${FAKE_REMOTE_PROBE_SSH_FAIL:-0}" = "1" ] && exit 255
         # target sits directly after 'nc -z ' in both command shapes
         _mock_probe="$(printf '%s' "$_mock_last" | sed -n 's/.*nc -z \([0-9.]* [0-9][0-9]*\).*/\1/p')"
         [ -n "$_mock_probe" ] || _mock_probe="${_mock_last##*nc -z }"
