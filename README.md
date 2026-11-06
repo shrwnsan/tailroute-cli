@@ -57,6 +57,38 @@ tailroute proxy start          # Start proxy on 127.0.0.1:1055
 tailroute proxy-config ssh     # Generate SSH config helpers
 ```
 
+## Browser tunnels
+
+Register a peer's Tailscale Serve dashboard once, then open it in any browser at a stable URL with a valid `.ts.net` certificate. Tunnels are launchd-managed SSH forwards and adapt to the network: through the SOCKS5 proxy while a VPN is up, direct otherwise.
+
+```bash
+tailroute tunnel add mypeer     # → https://mypeer.<tailnet>.ts.net:8443
+tailroute tunnel open mypeer    # open it in your default browser
+tailroute tunnel peers          # every tunnel and its URL, at a glance
+```
+
+`add` needs `sudo` only for the `/etc/hosts` mapping, which applies to every user of the Mac. It checks that the certificate presented at the URL matches the peer's name and unwinds everything if it does not. `--allow-unverified-tls` skips that check; the choice is recorded, and `open`, `list`, and `status` keep warning about the tunnel until you re-add it without the flag. Tunnel jobs never prompt, so the peer's SSH host key must already be trusted. If it is not, `add` tells you the one `ssh` command to run.
+
+Pause and resume without losing the URL:
+
+```bash
+tailroute tunnel stop mypeer    # parked across logins and reboots; registry and hosts mapping stay
+tailroute tunnel start mypeer   # same port, same URL, no sudo
+```
+
+When something looks wrong:
+
+| Command | Answers |
+|---|---|
+| `tunnel status [peer]` | Inventory and health: job, hosts, plist, and per-forward listener, backend, and TLS state |
+| `tunnel check <peer>` | What a browser would see, naming the first layer that breaks and its fix |
+| `tunnel drift [peer]` | Whether the peer's Serve config still matches what you registered |
+| `tunnel restart [peer]` | Restart an unhealthy job (refuses a stopped one; use `start`) |
+| `tunnel repair <peer>` | Rebuild a missing launchd plist from the registry, keeping ports and URLs |
+| `tunnel journal clear` | Recover after an add, update, or remove was interrupted |
+
+`tailroute tunnel --help` lists every option, and `tunnel remove <peer>` cleans up the hosts entry, job, and registry row.
+
 ## Requirements
 
 - macOS 15+ (Sequoia or later)
