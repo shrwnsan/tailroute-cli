@@ -56,6 +56,7 @@ TUNNEL_HOSTS_END="# END tailroute-tunnel"
 
 # Commands (absolute paths; overridable for tests; TUNNEL_SUDO_CMD="" runs
 # the privileged code path unprivileged against a test hosts file)
+STAT_CMD="${STAT_CMD:-/usr/bin/stat}"
 DSCL_CMD="${DSCL_CMD:-/usr/bin/dscl}"
 ID_CMD="${ID_CMD:-/usr/bin/id}"
 TAILSCALE_CMD="${TAILSCALE_CMD:-/opt/homebrew/bin/tailscale}"
@@ -81,43 +82,106 @@ fi
 # their home directory so that per-user state (config, tunnels, launchd)
 # is cleaned up correctly.
 #
-# Sets _TR_TARGET_USER and _TR_TARGET_HOME on success.
-# Returns 0 on success, 1 on error (message printed to stderr).
-# Overridable for tests: DSCL_CMD, ID_CMD.
+# Order: $SUDO_USER; else, for a root shell with no sudo, the console user
+# (only when unambiguous); else the current user.
+#
+# Sets _TR_TARGET_USER, _TR_TARGET_HOME, _TR_TARGET_UID, and _TR_TARGET_GUI
+# (yes when launchd has a gui/<uid> domain for the user, no otherwise: per-user
+# jobs cannot be unloaded without one).
+# Returns 0 on success, 1 on error (message printed to stderr), 2 when a root
+# shell has no unambiguous console user (nothing is guessed; the target stays
+# empty).
+# Overridable for tests: DSCL_CMD, ID_CMD, STAT_CMD, LAUNCHCTL_CMD.
 _tr_resolve_target_user() {
     _TR_TARGET_USER=""
     _TR_TARGET_HOME=""
+    _TR_TARGET_UID=""
+    _TR_TARGET_GUI="no"
 
-    # Not under sudo — use current environment
-    if [ -z "${SUDO_USER:-}" ]; then
-        _TR_TARGET_USER="${USER:-$(id -un)}"
-        _TR_TARGET_HOME="$HOME"
-        return 0
-    fi
+    local user="${SUDO_USER:-}"
 
-    # SUDO_USER=root is an error (someone did sudo -u root)
-    if [ "$SUDO_USER" = "root" ]; then
+    if [ -z "$user" ]; then
+        # Not root: the current environment is already the right user
+        if [ "$("$ID_CMD" -u 2>/dev/null)" != "0" ]; then
+            _TR_TARGET_USER="${USER:-$(id -un)}"
+            _TR_TARGET_HOME="$HOME"
+            return 0
+        fi
+        # Root without sudo (su, a root login): $HOME is root's. The console
+        # owner is the only candidate that is not a guess, and only when it is
+        # a real account.
+        user="$("$STAT_CMD" -f %Su /dev/console 2>/dev/null || true)"
+        case "$user" in
+            ""|root|loginwindow|_*)
+                echo "NOTE: running as root with no sudo user and no signed-in console user — per-user tunnels cannot be located" >&2
+                return 2 ;;
+        esac
+    elif [ "$user" = "root" ]; then
+        # SUDO_USER=root is an error (someone did sudo -u root)
         echo "ERROR: SUDO_USER=root — cannot determine the real user" >&2
         return 1
     fi
 
-    _TR_TARGET_USER="$SUDO_USER"
+    # The name reaches dscl and sudo -u: accept account-name characters only
+    case "$user" in
+        -*|*[!A-Za-z0-9._-]*)
+            echo "ERROR: refusing unusual user name '$user'" >&2
+            return 1 ;;
+    esac
 
     # Look up home directory via dscl (authoritative on macOS)
     local dscl_home
-    dscl_home="$("$DSCL_CMD" . -read "/Users/$SUDO_USER" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory:[[:space:]]*//')" || true
+    dscl_home="$("$DSCL_CMD" . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory:[[:space:]]*//')" || true
 
     if [ -n "$dscl_home" ]; then
         _TR_TARGET_HOME="$dscl_home"
-    elif [ -d "/Users/$SUDO_USER" ]; then
+    elif [ -d "/Users/$user" ]; then
         # Fallback: conventional home path
-        _TR_TARGET_HOME="/Users/$SUDO_USER"
+        _TR_TARGET_HOME="/Users/$user"
     else
-        echo "ERROR: user '$SUDO_USER' does not exist or has no home directory" >&2
+        echo "ERROR: user '$user' does not exist or has no home directory" >&2
         return 1
     fi
 
+    local uid
+    uid="$("$ID_CMD" -u "$user" 2>/dev/null)" || uid=""
+    case "$uid" in
+        ""|*[!0-9]*|0)
+            _TR_TARGET_HOME=""
+            echo "ERROR: user '$user' has no usable uid" >&2
+            return 1 ;;
+    esac
+
+    _TR_TARGET_USER="$user"
+    _TR_TARGET_UID="$uid"
+    if "$LAUNCHCTL_CMD" print "gui/$uid" >/dev/null 2>&1; then
+        _TR_TARGET_GUI="yes"
+    fi
     return 0
+}
+
+# Other users' tunnel registries, for the end of `uninstall`. Uninstall only
+# cleans the invoking user's tunnels; their launchd jobs and /etc/hosts
+# entries would otherwise outlive the uninstall without a word. Prints
+# nothing when there are none. Overridable for tests: TR_USERS_DIR.
+_tr_report_other_user_registries() { # <target-home>
+    local skip_home="${1:-}" home reg name count found=0 lines=""
+    for home in "${TR_USERS_DIR:-/Users}"/*; do
+        [ -d "$home" ] || continue
+        [ "$home" != "$skip_home" ] || continue
+        reg="$home/.config/tailroute/tunnels.json"
+        [ -f "$reg" ] && [ ! -L "$reg" ] || continue
+        count="$(grep -o '"peer"' "$reg" 2>/dev/null | wc -l | tr -d ' ')"
+        [ "${count:-0}" -gt 0 ] || continue
+        name="${home##*/}"
+        found=1
+        lines="$lines    $name: $count tunnel$([ "$count" -eq 1 ] || echo s)
+"
+    done
+    [ "$found" -eq 1 ] || return 0
+    printf '  Other users on this Mac still have browser tunnels:\n%s' "$lines"
+    printf '  Their launchd jobs and /etc/hosts entries were not touched. Each of them\n'
+    printf '  should run: tailroute tunnel remove-all\n'
 }
 
 # Tunnel ssh options: forwards must fail loudly, and the tunnel must never

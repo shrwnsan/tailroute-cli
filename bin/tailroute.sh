@@ -543,14 +543,22 @@ do_uninstall() {
         exit 1
     fi
 
-    # Resolve the real user when running under sudo
-    if ! _tr_resolve_target_user; then
+    # Resolve the real user when running under sudo (or the console user for a
+    # plain root shell). rc 2 = nobody identifiable: uninstall the daemon, skip
+    # per-user cleanup rather than guess.
+    local resolve_rc=0
+    _tr_resolve_target_user || resolve_rc=$?
+    if [[ "$resolve_rc" -eq 1 ]]; then
         exit 1
     fi
     local target_user="$_TR_TARGET_USER"
     local target_home="$_TR_TARGET_HOME"
     echo "Uninstalling tailroute daemon..."
-    echo "  Target user: $target_user (home: $target_home)"
+    if [[ -n "$target_user" ]]; then
+        echo "  Target user: $target_user (home: $target_home)"
+    else
+        echo "  Target user: none identified — per-user tunnels will not be removed"
+    fi
     echo ""
 
     # Unload daemon (system-level, unchanged)
@@ -574,7 +582,7 @@ do_uninstall() {
     # Remove user tunnels (per-user state; run as the invoking user).
     # When under sudo, use the resolved target user — not $SUDO_USER
     # directly, to ensure correctness even if the env is unusual.
-    if [[ "$target_user" != "root" ]] && command -v sudo >/dev/null 2>&1; then
+    if [[ -n "$target_user" && "$target_user" != "root" ]] && command -v sudo >/dev/null 2>&1; then
         echo "  Removing browser tunnels (user: $target_user)..."
         sudo -u "$target_user" \
             TUNNEL_CONFIG_DIR="$target_home/.config/tailroute" \
@@ -590,9 +598,10 @@ do_uninstall() {
 
         # Also unload any per-user launchd tunnel jobs that may not be
         # tracked in the registry (belt-and-suspenders)
-        local target_uid
-        target_uid=$(/usr/bin/id -u "$target_user") || target_uid=""
-        if [[ -n "$target_uid" ]]; then
+        local target_uid="$_TR_TARGET_UID"
+        if [[ "$_TR_TARGET_GUI" != "yes" ]]; then
+            echo "  Note: $target_user has no GUI session — no per-user launchd jobs to unload"
+        elif [[ -n "$target_uid" ]]; then
             local launchd_labels
             launchd_labels=$(launchctl print gui/"$target_uid" 2>/dev/null | grep -o 'com\.tailroute\.tunnel\.[^ ]*' || true)
             local label
@@ -620,6 +629,7 @@ do_uninstall() {
     echo ""
     echo "✓ tailroute daemon uninstalled"
     echo ""
+    _tr_report_other_user_registries "$target_home"
 }
 
 # =============================================================================
