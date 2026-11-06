@@ -29,7 +29,7 @@
   "operatingSystem": "macOS 15+",
   "applicationCategory": "UtilitiesApplication",
   "description": "Fail-safe macOS daemon that toggles Tailscale MagicDNS when a VPN connects—internet through the VPN, peers through the mesh. Includes a SOCKS5 mesh proxy and launchd-managed browser tunnels.",
-  "softwareVersion": "0.9.1",
+  "softwareVersion": "0.9.4",
   "license": "https://github.com/shrwnsan/tailroute-cli/blob/main/LICENSE",
   "url": "https://tailroute.app/docs/",
   "codeRepository": "https://github.com/shrwnsan/tailroute-cli",
@@ -203,7 +203,7 @@
   <div class="title-row">
     <h1><a href="../" aria-label="tailroute home">tailroute<span class="dot">.</span></a></h1>
     <span class="badge" title="pre-v1.0 software">alpha</span>
-    <span data-metric="cli-version" class="badge free">v0.9.1</span>
+    <span data-metric="cli-version" class="badge free">v0.9.4</span>
   </div>
   <p class="meta">tailroute-cli manual · apache-2.0 · macOS 15+ · free &amp; open source</p>
   <p class="toc"><span class="toc-label">On this page</span> ·
@@ -316,6 +316,21 @@
     <div><span class="p">$</span> tailroute tunnel stop mypeer <button data-copy="tailroute tunnel stop mypeer">copy</button></div>
     <div><span class="p">$</span> tailroute tunnel start mypeer <button data-copy="tailroute tunnel start mypeer">copy</button></div>
   </div>
+  <p><code>tunnel add</code> verifies that the certificate served at the URL matches
+     the peer's name and unwinds if it does not. <code>--allow-unverified-tls</code>
+     skips that check; the choice is recorded in the registry, and
+     <code>tunnel open</code>, <code>tunnel list</code>, and <code>tunnel status</code>
+     warn about the tunnel until it is re-added without the flag. Tunnel jobs never
+     prompt, so the peer's SSH host key must already be trusted; <code>add</code> prints
+     the one <code>ssh</code> command to run when it is not.</p>
+  <p>Three read-only commands answer different questions:
+     <code>tunnel status</code> is the inventory, <code>tunnel drift</code> compares the
+     peer's live Serve config with what you registered, and <code>tunnel check</code>
+     probes the path a browser takes and names the first layer that breaks. If a
+     tunnel's launchd plist goes missing, <code>tunnel repair mypeer</code> rebuilds it
+     from the registry with the same ports and URL; removing and re-adding would
+     allocate new ports. After an interrupted add, update, or remove,
+     <code>tunnel journal clear</code> recovers.</p>
 
   <h2 id="what-it-cannot-fix">What it cannot fix</h2>
   <p>VPN Network Extensions may still block traffic to Tailscale's CGNAT range
