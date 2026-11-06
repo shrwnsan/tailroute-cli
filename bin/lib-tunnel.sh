@@ -197,6 +197,9 @@ tunnel_privileged_run() {
 # -----------------------------------------------------------------------------
 # Transaction lock (user-space, mkdir-based — same pattern as lib-lock.sh)
 # -----------------------------------------------------------------------------
+# Contention retries before declaring the per-user lock busy (overridable for tests)
+TUNNEL_LOCK_TRIES="${TUNNEL_LOCK_TRIES:-10}"
+
 tunnel_lock_acquire() {
     local waited=0 lock_pid
     while true; do
@@ -210,7 +213,7 @@ tunnel_lock_acquire() {
             continue
         fi
         waited=$((waited + 1))
-        if [ "$waited" -ge 10 ]; then
+        if [ "$waited" -ge "$TUNNEL_LOCK_TRIES" ]; then
             echo "ERROR: another tailroute tunnel operation is in progress ($TUNNEL_LOCK_DIR)" >&2
             return 1
         fi
@@ -238,6 +241,17 @@ tunnel_lock_release() {
 
 TUNNEL_JOURNAL_PATH="${TUNNEL_JOURNAL_PATH:-$TUNNEL_CONFIG_DIR/tunnels.journal}"
 
+# _tun_fsync <file-or-dir> — flush to disk. macOS ships no fsync(1), so go
+# through python's os.fsync (python3 is already a hard dependency).
+_tun_fsync() {
+    "$PYTHON3_CMD" -c 'import os, sys
+fd = os.open(sys.argv[1], os.O_RDONLY)
+try:
+    os.fsync(fd)
+finally:
+    os.close(fd)' "$1"
+}
+
 # _tun_journal_write <op> <peer> <steps-json> <completed-json>
 # Writes or updates the journal entry atomically.
 _tun_journal_write() {
@@ -251,8 +265,14 @@ _tun_journal_write() {
         "$op" "$peer" "$steps" "$completed" "$$" \
         "$(TZ=UTC date '+%Y-%m-%dT%H:%M:%SZ')" > "$journal_tmp"
     chmod 0600 "$journal_tmp"
-    # Atomic rename (no fsync needed for journal — it's recovered, not trusted)
-    mv -f "$journal_tmp" "$TUNNEL_JOURNAL_PATH"
+    # The journal is what recovery trusts after a crash, so its content must be
+    # on disk before the rename publishes it.
+    if ! _tun_fsync "$journal_tmp"; then
+        rm -f "$journal_tmp"
+        return 1
+    fi
+    mv -f "$journal_tmp" "$TUNNEL_JOURNAL_PATH" || return 1
+    _tun_fsync "$journal_dir" || true
 }
 
 # _tun_journal_read — prints the journal JSON on stdout, empty string if absent
@@ -325,12 +345,14 @@ tunnel_hosts_lock_acquire() {
         acquired=0
         if mkdir "$lock_dir" 2>/dev/null; then
             acquired=1
-        elif [ "$fallback_tried" -eq 0 ]; then
+        elif [ "$fallback_tried" -eq 0 ] && [ ! -e "$lock_dir" ]; then
             # v0.7.4: the lock may live under a root-owned parent (e.g. /var/db/tailroute);
             # use the cached sudo (do_add runs `sudo -v` up front) to create it and hand it
-            # to the acquiring user - once per acquire call.
+            # to the acquiring user - once per acquire call. Only the parent gets `-p`:
+            # the lock dir itself must come from a plain mkdir, which fails when another
+            # holder owns it (`mkdir -p` succeeds on an existing dir and would steal the lock).
             fallback_tried=1
-            if tunnel_privileged_run "mkdir -p '$lock_dir' && chown '$(id -un)' '$lock_dir' && chmod 0755 '$lock_dir'" 2>/dev/null; then
+            if tunnel_privileged_run "mkdir -p '$(dirname "$lock_dir")' && mkdir '$lock_dir' && chown '$(id -un)' '$lock_dir' && chmod 0755 '$lock_dir'" 2>/dev/null; then
                 acquired=1
             fi
         fi
@@ -489,6 +511,8 @@ def save(data):
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, sort_keys=True)
             fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
         os.chmod(tmp, 0o600)
         bak = path + ".bak"
         if os.path.islink(bak):
@@ -496,6 +520,12 @@ def save(data):
         if os.path.exists(path):
             os.replace(path, bak)
         os.replace(tmp, path)
+        # the rename is only durable once the directory entry is flushed too
+        dfd = os.open(d, os.O_RDONLY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
