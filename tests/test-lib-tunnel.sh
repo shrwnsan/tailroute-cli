@@ -2899,3 +2899,129 @@ test_incremental_add_accepts_the_ssh_alias() {
     fwd="$(tunnel_registry_get "$FX_PEER" | "$PYTHON3_CMD" -c 'import json,sys; print(" ".join(str(f["localPort"]) + ":" + str(f["remotePort"]) for f in json.load(sys.stdin)["forwards"]))')"
     assert_eq "8443:443 8444:8080" "$fwd"
 }
+
+# =============================================================================
+# Durable writes and crash boundaries (T-431)
+# =============================================================================
+
+# Interposes os.fsync for every python3 the lib starts: sitecustomize runs at
+# interpreter startup, so the registry writer and the fsync helper both log.
+# Lines are "file" or "dir" by the kind of descriptor flushed. FAKE_FSYNC_FAIL=1
+# makes every flush fail with EIO.
+_t431_fsync_spy() {
+    FSYNC_LOG="$TUNNEL_SANDBOX/fsync.log"; : > "$FSYNC_LOG"
+    mkdir -p "$TUNNEL_SANDBOX/pyspy"
+    cat > "$TUNNEL_SANDBOX/pyspy/sitecustomize.py" <<'PY'
+import os, stat
+_real = os.fsync
+def _spy(fd):
+    log = os.environ.get("FSYNC_LOG")
+    if log:
+        kind = "dir" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+        with open(log, "a") as fh:
+            fh.write(kind + "\n")
+    if os.environ.get("FAKE_FSYNC_FAIL") == "1":
+        raise OSError(5, "simulated EIO")
+    return _real(fd)
+os.fsync = _spy
+PY
+    export FSYNC_LOG
+    PYTHONPATH="$TUNNEL_SANDBOX/pyspy"; export PYTHONPATH
+}
+
+test_t431_registry_write_fsyncs_file_and_directory() {
+    _tunnel_setup_sandbox
+    _t431_fsync_spy
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    local log; log="$(cat "$FSYNC_LOG")"
+    unset PYTHONPATH
+    assert_contains "file" "$log" "registry temp file must be flushed before the rename"
+    assert_contains "dir" "$log" "registry directory must be flushed after the rename"
+}
+
+test_t431_journal_write_fsyncs_before_publishing() {
+    _tunnel_setup_sandbox
+    _t431_fsync_spy
+    _tun_journal_write add "$FX_PEER" '["registry"]' '[]'
+    local log; log="$(cat "$FSYNC_LOG")"
+    unset PYTHONPATH
+    assert_contains "file" "$log"
+    assert_contains "dir" "$log"
+    assert_contains '"op":"add"' "$(cat "$TUNNEL_JOURNAL_PATH")"
+}
+
+test_t431_journal_write_fails_closed_when_fsync_fails() {
+    _tunnel_setup_sandbox
+    _t431_fsync_spy
+    FAKE_FSYNC_FAIL=1; export FAKE_FSYNC_FAIL
+    local rc=0
+    _tun_journal_write add "$FX_PEER" '["registry"]' '[]' 2>/dev/null || rc=$?
+    unset PYTHONPATH FAKE_FSYNC_FAIL
+    assert_eq 1 "$rc" "an unflushed journal must not be reported as written"
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || _assert_fail "unflushed journal was published"
+    local strays
+    strays="$(ls "$(dirname "$TUNNEL_JOURNAL_PATH")" | grep -c 'tunnels.journal\.' || true)"
+    assert_eq 0 "$strays" "temp file left behind after a failed flush"
+}
+
+# A process that dies between two transaction steps runs no rollback. The
+# journal must record exactly the steps that completed, and every later
+# command must refuse to build on top of the half-finished state.
+test_t431_termination_after_registry_step_leaves_recoverable_journal() {
+    _tunnel_setup_sandbox
+    ( tunnel_hosts_apply() { exit 137; }; tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 ) || true
+    assert_contains '"completed":["registry"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
+    assert_contains "\"peer\": \"$FX_PEER\"" "$(tunnel_registry_get "$FX_PEER" 2>&1)"
+    if grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" 2>/dev/null; then
+        _assert_fail "hosts mapping written although the process died before the hosts step"
+    fi
+    rm -rf "$TUNNEL_LOCK_DIR"   # the dead process's lock; stale-pid reclaim covers a real death
+    local out rc=0
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "add must not rebuild on top of a half-finished add"
+    out="$(tunnel_do_status 2>&1 || true)"
+    assert_contains "INCOMPLETE JOURNAL" "$out"
+}
+
+test_t431_termination_after_hosts_step_records_both_steps() {
+    _tunnel_setup_sandbox
+    ( tunnel_generate_plist() { exit 137; }; tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 ) || true
+    assert_contains '"completed":["registry","hosts"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
+    grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" || _assert_fail "hosts mapping missing after the hosts step completed"
+}
+
+# Cross-user hosts edit: another tailroute user holds the machine-wide hosts
+# lock. The add must back out its registry entry and leave /etc/hosts alone,
+# not push through the held lock.
+test_t431_add_respects_a_held_hosts_lock() {
+    _tunnel_setup_sandbox
+    export TUNNEL_HOSTS_LOCK_TRIES=1
+    mkdir -p "$TUNNEL_HOSTS_LOCK_DIR"
+    printf '%s\n' "$$" > "$TUNNEL_HOSTS_LOCK_DIR/pid"
+    local before out rc=0
+    before="$(cat "$TUNNEL_HOSTS_FILE")"
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "add must not proceed while the hosts lock is held"
+    assert_contains "ROLLED BACK: registry entry (hosts lock busy)" "$out"
+    assert_eq "$before" "$(cat "$TUNNEL_HOSTS_FILE")" "hosts file changed under a held lock"
+    assert_fail tunnel_registry_get "$FX_PEER"
+    [ -f "$TUNNEL_HOSTS_LOCK_DIR/pid" ] || _assert_fail "the other holder's lock was removed"
+    [ ! -f "$TUNNEL_JOURNAL_PATH" ] || _assert_fail "journal left behind after a clean rollback"
+}
+
+# Two same-user operations never interleave: while one holds the per-user
+# lock, a second add refuses and changes nothing.
+test_t431_second_add_refuses_while_user_lock_is_held() {
+    _tunnel_setup_sandbox
+    export TUNNEL_LOCK_TRIES=1
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    assert_ok tunnel_lock_acquire
+    local out rc=0
+    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || rc=$?
+    tunnel_lock_release
+    assert_eq 1 "$rc" "a second add must not run beside the lock holder"
+    assert_contains "another tailroute tunnel operation is in progress" "$out"
+    assert_fail tunnel_registry_get "$FX_PEER"
+    grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" && _assert_fail "hosts file touched by the refused add"
+    return 0
+}
