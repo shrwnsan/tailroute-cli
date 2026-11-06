@@ -431,6 +431,50 @@ WRAP
     assert_contains "SOCKS5 proxy" "$(cat "$TUNNEL_SSH_WRAPPER")"
 }
 
+# A rewrite replaces a file the user may have edited, so the old content is
+# kept next to it (private, original bytes) before anything is overwritten.
+_t433_perm() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+
+test_t433_legacy_migration_keeps_a_private_backup() {
+    _tunnel_setup_sandbox
+    printf '#!/bin/sh\nif /usr/bin/nc -z 127.0.0.1 1055; then exec /usr/bin/nc -X 5 -x 127.0.0.1:1055 "$@"; fi\nexec /usr/bin/nc "$@"\n' > "$TUNNEL_SSH_WRAPPER"
+    cp "$TUNNEL_SSH_WRAPPER" "$TUNNEL_SANDBOX/original.sh"
+    assert_ok tunnel_install_ssh_wrapper no
+    [ -f "$TUNNEL_SSH_WRAPPER.bak" ] || { _assert_fail "no backup written before the migration"; return 0; }
+    assert_eq "$(cat "$TUNNEL_SANDBOX/original.sh")" "$(cat "$TUNNEL_SSH_WRAPPER.bak")" "backup must hold the original content"
+    assert_eq 600 "$(_t433_perm "$TUNNEL_SSH_WRAPPER.bak")" "backup must be private"
+}
+
+test_t433_explicit_replace_keeps_a_private_backup() {
+    _tunnel_setup_sandbox
+    printf '#!/bin/sh\n# my hand-tuned wrapper\nexec /usr/bin/nc "$@"\n' > "$TUNNEL_SSH_WRAPPER"
+    assert_ok tunnel_install_ssh_wrapper yes
+    assert_contains "my hand-tuned wrapper" "$(cat "$TUNNEL_SSH_WRAPPER.bak")"
+    assert_eq 600 "$(_t433_perm "$TUNNEL_SSH_WRAPPER.bak")"
+}
+
+test_t433_no_backup_when_nothing_is_rewritten() {
+    _tunnel_setup_sandbox
+    assert_ok tunnel_install_ssh_wrapper no          # fresh install: nothing to back up
+    [ ! -e "$TUNNEL_SSH_WRAPPER.bak" ] || _assert_fail "backup created for a fresh install"
+    assert_ok tunnel_install_ssh_wrapper no          # identical content: no rewrite
+    [ ! -e "$TUNNEL_SSH_WRAPPER.bak" ] || _assert_fail "backup created for an identical wrapper"
+    printf '#!/bin/sh\nexec /bin/custom\n' > "$TUNNEL_SSH_WRAPPER"
+    assert_fail tunnel_install_ssh_wrapper no        # refused: file stays as it was
+    [ ! -e "$TUNNEL_SSH_WRAPPER.bak" ] || _assert_fail "backup created for a refused replace"
+    assert_contains "/bin/custom" "$(cat "$TUNNEL_SSH_WRAPPER")"
+}
+
+test_t433_backup_does_not_follow_a_symlink() {
+    _tunnel_setup_sandbox
+    printf 'precious\n' > "$TUNNEL_SANDBOX/victim"
+    printf '#!/bin/sh\nexec /bin/custom\n' > "$TUNNEL_SSH_WRAPPER"
+    ln -s "$TUNNEL_SANDBOX/victim" "$TUNNEL_SSH_WRAPPER.bak"
+    assert_ok tunnel_install_ssh_wrapper yes
+    assert_eq "precious" "$(cat "$TUNNEL_SANDBOX/victim")" "backup write followed a symlink"
+    assert_contains "/bin/custom" "$(cat "$TUNNEL_SSH_WRAPPER.bak")"
+}
+
 # =============================================================================
 # SOCKS5 target-aware probe — behavioral (T-433)
 # =============================================================================

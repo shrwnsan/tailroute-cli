@@ -1074,17 +1074,11 @@ PY
 }
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-
 # Adaptive SSH wrapper (T-410 / T-433)
-
 # -----------------------------------------------------------------------------
 
 # Legacy wrapper fingerprint - used for migration detection (T-433)
-
 TUNNEL_LEGACY_WRAPPER_FINGERPRINT='nc -z 127.0.0.1 1055'
-
-
 
 tunnel_ssh_wrapper_content() {
     cat <<'EOF'
@@ -1112,52 +1106,27 @@ exec /usr/bin/nc "$@"
 EOF
 }
 
-
 # tunnel_ssh_wrapper_is_legacy - returns 0 if the wrapper uses the old
-
 # port-open probe (nc -z) instead of the SOCKS5 handshake.
-
 tunnel_ssh_wrapper_is_legacy() {
-
     [ -f "$TUNNEL_SSH_WRAPPER" ] || return 1
-
     grep -qF "$TUNNEL_LEGACY_WRAPPER_FINGERPRINT" "$TUNNEL_SSH_WRAPPER" 2>/dev/null
-
 }
 
-
-
-# tunnel_migrate_legacy_wrapper - if the installed wrapper uses the old
-
-# port-open probe (nc -z), regenerate it with the target-aware SOCKS5
-
-# handshake.  Logs the migration.  Returns 0 (success or nothing to do).
-
-tunnel_migrate_legacy_wrapper() {
-
-    if ! tunnel_ssh_wrapper_is_legacy; then
-
-        return 0
-
-    fi
-
-    echo "Migrating legacy proxy wrapper: $TUNNEL_SSH_WRAPPER" >&2
-
-    tunnel_install_ssh_wrapper yes || {
-
-        echo "WARNING: legacy wrapper migration failed" >&2
-
-        return 1
-
-    }
-
-    echo "Legacy wrapper migrated to target-aware SOCKS5 probe" >&2
-
+# Keep the file about to be rewritten as <wrapper>.bak (0600, original bytes).
+# The wrapper is user-editable, so a rewrite must never be the only copy. A
+# symlink at the backup path is removed, not followed.
+_tun_wrapper_backup() {
+    local bak="$TUNNEL_SSH_WRAPPER.bak"
+    [ ! -L "$bak" ] || rm -f "$bak"
+    ( umask 077; cp "$TUNNEL_SSH_WRAPPER" "$bak" ) || return 1
+    chmod 0600 "$bak"
 }
 
 # Install the wrapper; an existing file with different content is never
 # clobbered silently — caller passes replace=yes after prompting.
-# Auto-migrates legacy (nc -z) wrappers (T-433).
+# Auto-migrates legacy (nc -z) wrappers (T-433). Any rewrite of an existing
+# file is preceded by a backup; a failed backup aborts the rewrite.
 tunnel_install_ssh_wrapper() {
     local replace="${1:-no}"
     local dir
@@ -1178,6 +1147,11 @@ tunnel_install_ssh_wrapper() {
             echo "Re-run with --replace-wrapper to overwrite." >&2
             return 1
         fi
+        if ! _tun_wrapper_backup; then
+            echo "ERROR: could not back up $TUNNEL_SSH_WRAPPER — leaving it untouched" >&2
+            return 1
+        fi
+        echo "NOTE: previous wrapper saved to $TUNNEL_SSH_WRAPPER.bak" >&2
     fi
     tunnel_ssh_wrapper_content > "$TUNNEL_SSH_WRAPPER"
     chmod 0755 "$TUNNEL_SSH_WRAPPER"
