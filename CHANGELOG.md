@@ -4,6 +4,8 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-07
+
 ### Fixed
 - **A tunnel added with `--allow-unverified-tls` stays visibly unverified.** Only `add` warned; `open` launched the browser silently, `list` dumped the registry, and `status` showed a bare word in the forward line. `open` now warns on stderr before opening, `list` warns on stderr per unverified tunnel while stdout stays the same JSON rows, and `status` adds a note ("certificate identity not verified"). Nothing is blocked by the warning.
 - **A changed ssh host key is no longer treated like first-time trust.** The `add` pre-flight answered every `Host key verification failed` with "run `ssh proxy-<alias> true` to establish trust", which for a `REMOTE HOST IDENTIFICATION HAS CHANGED` failure invites accepting an impostor. It now says the key changed, to stop unless a rebuild was expected, and to remove the old entry with `ssh-keygen -R` before trusting the new one. Tests now cover the unknown and changed host key paths, the plist's `StrictHostKeyChecking=yes`/`BatchMode=yes` (never `accept-new`), literal `~` in plist paths and adopted plists, and the login-startup keys.
