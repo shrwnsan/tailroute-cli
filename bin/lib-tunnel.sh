@@ -1253,7 +1253,7 @@ EOF
         echo "WARN: ssh config does not use the adaptive wrapper — run 'tailroute proxy-config ssh'" >&2
     fi
 
-    local pf_err
+    local pf_err changed_key=0
     pf_err="$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true 2>&1 >/dev/null)"
     if ! "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=5 "proxy-$ssh_alias" true >/dev/null 2>&1; then
         echo "ERROR: ssh proxy-$ssh_alias failed (auth or host-key not trusted)." >&2
@@ -1264,10 +1264,17 @@ EOF
                 echo "        Fix on the peer (sudo tailscale set --ssh=false) or grant an ssh rule in the tailnet ACL." >&2 ;;
             *"Permission denied"*)
                 echo "  Hint: key authentication failed - is the key loaded (ssh-add) and authorized on the peer?" >&2 ;;
+            *"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+                # trusting blindly is the wrong advice here: the peer is not the
+                # machine on record, which is a rebuild or an impostor
+                changed_key=1
+                echo "  Hint: host key changed - the peer does not match the key on record." >&2
+                echo "        If you did not expect a rebuild, stop. Otherwise remove the old entry" >&2
+                echo "        (ssh-keygen -R <host>), then run: ssh proxy-$ssh_alias true" >&2 ;;
             *"Host key verification"*)
                 echo "  Hint: host key not trusted yet - run: ssh proxy-$ssh_alias true" >&2 ;;
         esac
-        echo "  Establish trust first:  ssh proxy-$ssh_alias true" >&2
+        [ "$changed_key" -eq 1 ] || echo "  Establish trust first:  ssh proxy-$ssh_alias true" >&2
         if [ -n "$ssh_alias" ] && [ "$ssh_alias" != "$peer" ]; then
             echo "  Then re-run:         tailroute tunnel add $peer --ssh-alias $ssh_alias" >&2
         else
@@ -3238,6 +3245,9 @@ tunnel_status_rows() {
         if [ "$job_disabled" -eq 1 ] && [ "$job" = "running" ]; then
             notes="${notes:+$notes; }disabled flag set — will not survive next login; reconcile: tailroute tunnel start $p (keep) or tailroute tunnel stop $p (park)"
         fi
+        if [ "$allow_tls" = "unverified" ]; then
+            notes="${notes:+$notes; }certificate identity not verified (added with --allow-unverified-tls)"
+        fi
         if [ -f "$TUNNEL_LOG_DIR/tunnel-$p.log" ] && tail -20 "$TUNNEL_LOG_DIR/tunnel-$p.log" 2>/dev/null | grep -Eq "Permission denied|Host key verification failed"; then
             notes="${notes:+$notes; }ssh auth failing — key rotated? re-run: tailroute tunnel add $p"
         fi
@@ -3512,8 +3522,29 @@ EOF
     return "$worst"
 }
 
+# T-430: a tunnel added with --allow-unverified-tls has no certificate identity
+# check, so every command that hands it back to the user says so.
+_tun_entry_is_unverified() { # <entry-json>
+    printf '%s' "$1" | "$PYTHON3_CMD" -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("allowUnverifiedTLS") else 1)' 2>/dev/null
+}
+
+_tun_warn_unverified() { # <hostname>
+    echo "WARN: $1 has no certificate identity check (added with --allow-unverified-tls); re-add without the flag to verify it" >&2
+}
+
+# The registry rows stay on stdout untouched (machine-readable); warnings go to stderr.
 tunnel_do_list() {
-    tunnel_registry_entries
+    local entries entry
+    entries="$(tunnel_registry_entries)" || return $?
+    [ -z "$entries" ] || printf '%s\n' "$entries"
+    while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        if _tun_entry_is_unverified "$entry"; then
+            _tun_warn_unverified "$(tunnel_registry_field "$entry" hostname)"
+        fi
+    done <<EOF
+$entries
+EOF
 }
 
 # v0.8.4: quick human index of registered tunnels — registry read only,
@@ -3561,6 +3592,9 @@ tunnel_do_open() { # <peer>
     if [ "$(tunnel_job_state "$(tunnel_label_for_peer "$peer")")" = "stopped" ]; then
         echo "ERROR: tunnel is stopped — start it first: tailroute tunnel start $peer" >&2
         return 1
+    fi
+    if _tun_entry_is_unverified "$entry"; then
+        _tun_warn_unverified "$hostname"
     fi
     if ! "$OPEN_CMD" "$url"; then
         echo "ERROR: could not open $url in a browser" >&2

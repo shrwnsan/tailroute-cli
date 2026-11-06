@@ -3069,3 +3069,171 @@ test_t431_second_add_refuses_while_user_lock_is_held() {
     grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" && _assert_fail "hosts file touched by the refused add"
     return 0
 }
+
+# =============================================================================
+# Unverified-TLS warnings on every surface (T-430)
+# =============================================================================
+# A tunnel added with --allow-unverified-tls has no certificate identity check.
+# The add path warns once; the other commands that touch it must not let the
+# state go quiet.
+
+_t430_register_unverified() {
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1" "$FX_PEER" yes)" >/dev/null
+}
+
+test_t430_open_warns_for_an_unverified_tunnel_and_still_opens() {
+    _tunnel_setup_sandbox
+    _t430_register_unverified
+    local out err rc=0
+    err="$(tunnel_do_open "$FX_PEER" 2>&1 >"$TUNNEL_SANDBOX/open.out")" || rc=$?
+    out="$(cat "$TUNNEL_SANDBOX/open.out")"
+    assert_eq 0 "$rc" "a warning must not block the open"
+    assert_contains "WARN: $FX_HOSTNAME has no certificate identity check" "$err" "the warning belongs on stderr"
+    assert_contains "--allow-unverified-tls" "$err"
+    assert_contains "https://$FX_HOSTNAME:8443" "$(cat "$FAKE_OPEN_LOG")"
+    assert_contains "Opened https://$FX_HOSTNAME:8443" "$out"
+}
+
+test_t430_open_is_quiet_for_a_verified_tunnel() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    local out
+    out="$(tunnel_do_open "$FX_PEER" 2>&1)"
+    case "$out" in *WARN*) _assert_fail "verified tunnel produced a warning: $out" ;; esac
+}
+
+test_t430_list_warns_on_stderr_and_keeps_stdout_json() {
+    _tunnel_setup_sandbox
+    _t430_register_unverified
+    local err rc=0
+    err="$(tunnel_do_list 2>&1 >"$TUNNEL_SANDBOX/list.out")" || rc=$?
+    assert_eq 0 "$rc"
+    assert_contains "WARN: $FX_HOSTNAME has no certificate identity check" "$err"
+    "$PYTHON3_CMD" -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$TUNNEL_SANDBOX/list.out" \
+        || _assert_fail "list stdout is no longer JSON: $(cat "$TUNNEL_SANDBOX/list.out")"
+}
+
+test_t430_list_is_quiet_when_everything_is_verified() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    local err
+    err="$(tunnel_do_list 2>&1 >/dev/null)"
+    assert_eq "" "$err"
+}
+
+test_t430_status_notes_the_missing_identity_check() {
+    _tunnel_setup_sandbox
+    _t430_register_unverified
+    local out
+    out="$(tunnel_do_status "$FX_PEER" --skip-remote-check 2>&1 || true)"
+    assert_contains "Notes:" "$out"
+    assert_contains "certificate identity not verified" "$out"
+}
+
+test_t430_status_has_no_tls_note_for_a_verified_tunnel() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    local out
+    out="$(tunnel_do_status "$FX_PEER" --skip-remote-check 2>&1 || true)"
+    case "$out" in *"certificate identity not verified"*) _assert_fail "verified tunnel carries the TLS note: $out" ;; esac
+}
+
+# =============================================================================
+# Host-key, tilde, and login-startup failure paths (T-432)
+# =============================================================================
+
+_t432_preflight_with_ssh_stderr() { # <stderr-text>; sets T432_OUT, T432_RC
+    printf 'Host proxy-shorty\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_IP" >> "$TUNNEL_SSH_CONFIG"
+    local lookup
+    lookup="$(tunnel_lookup_peer "$FX_PEER")"
+    FAKE_SSH_STDERR="$1"; export FAKE_SSH_STDERR
+    T432_RC=0
+    T432_OUT="$(tunnel_preflight "$FX_PEER" "$lookup" shorty 2>&1)" || T432_RC=$?
+}
+
+test_t432_unknown_host_key_refuses_add_and_points_at_trust() {
+    _tunnel_setup_sandbox
+    _t432_preflight_with_ssh_stderr "Host key verification failed."
+    assert_eq 1 "$T432_RC" "an untrusted host key must stop the add"
+    assert_contains "host key not trusted yet - run: ssh proxy-shorty true" "$T432_OUT"
+}
+
+test_t432_changed_host_key_refuses_and_does_not_say_to_just_trust_it() {
+    _tunnel_setup_sandbox
+    _t432_preflight_with_ssh_stderr "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+Host key verification failed."
+    assert_eq 1 "$T432_RC" "a changed host key must stop the add"
+    assert_contains "host key changed" "$T432_OUT"
+    assert_contains "ssh-keygen -R" "$T432_OUT"
+    case "$T432_OUT" in
+        *"Establish trust first"*|*"host key not trusted yet"*)
+            _assert_fail "a changed key must not be waved through as first-time trust: $T432_OUT" ;;
+    esac
+}
+
+test_t432_refused_add_on_bad_host_key_changes_nothing() {
+    _tunnel_setup_sandbox
+    printf 'Host proxy-%s\n    HostName %s\n    ProxyCommand ~/.ssh/tailroute-proxy.sh %%h %%p\n' "$FX_PEER" "$FX_IP" >> "$TUNNEL_SSH_CONFIG"
+    FAKE_SSH_STDERR="Host key verification failed."; export FAKE_SSH_STDERR
+    local before rc=0
+    before="$(cat "$TUNNEL_HOSTS_FILE")"
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 || rc=$?
+    [ "$rc" -ne 0 ] || _assert_fail "add succeeded despite an untrusted host key"
+    assert_eq "$before" "$(cat "$TUNNEL_HOSTS_FILE")" "hosts file touched"
+    assert_fail tunnel_registry_get "$FX_PEER"
+    [ ! -f "$(tunnel_plist_path_for_peer "$FX_PEER")" ] || _assert_fail "plist written"
+}
+
+test_t432_job_never_accepts_or_prompts_for_host_keys() {
+    _tunnel_setup_sandbox
+    local plist
+    plist="$(tunnel_generate_plist "$FX_PEER" "$FX_IP" "/tmp/fake-home/log" "$FX_PEER" 8443:443)"
+    assert_contains "<string>StrictHostKeyChecking=yes</string>" "$plist"
+    assert_contains "<string>BatchMode=yes</string>" "$plist"
+    case "$plist" in
+        *accept-new*|*"StrictHostKeyChecking=no"*|*UserKnownHostsFile*)
+            _assert_fail "the job must not weaken host key checking" ;;
+    esac
+}
+
+test_t432_status_flags_a_host_key_failure_in_the_job_log() {
+    _tunnel_setup_sandbox
+    tunnel_registry_add "$FX_PEER" "$(tunnel_build_entry_json "$FX_PEER" "$FX_IP" "$FX_HOSTNAME" "$FX_SUFFIX" "$FX_FWD1")" >/dev/null
+    mkdir -p "$TUNNEL_LOG_DIR"
+    printf 'WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\nHost key verification failed.\n' > "$TUNNEL_LOG_DIR/tunnel-$FX_PEER.log"
+    local out
+    out="$(tunnel_do_status "$FX_PEER" --skip-remote-check 2>&1 || true)"
+    assert_contains "ssh auth failing" "$out"
+}
+
+test_t432_generated_plist_has_no_literal_tilde() {
+    # launchd does not expand ~, so a tilde in a ProgramArguments or log path
+    # would make the job fail at load
+    _tunnel_setup_sandbox
+    tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1
+    local plist
+    plist="$(tunnel_plist_path_for_peer "$FX_PEER")"
+    [ -f "$plist" ] || { _assert_fail "no plist written"; return 0; }
+    if grep -q '<string>~' "$plist" || grep -q '~/' "$plist"; then
+        _assert_fail "literal ~ in the plist: $(grep -n '~' "$plist")"
+    fi
+}
+
+test_t432_adoption_rejects_a_tilde_identity_file() {
+    _tunnel_setup_sandbox
+    _adopt_fixture
+    /usr/bin/sed -i '' 's|<string>proxy-prime</string>|<string>-i</string><string>~/.ssh/id_ed25519</string><string>proxy-prime</string>|' "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
+    assert_fail tunnel_parse_existing_plist "$TUNNEL_LAUNCHAGENTS_DIR/com.tailroute.tunnel.prime.plist"
+}
+
+test_t432_job_starts_at_login_and_is_kept_alive() {
+    _tunnel_setup_sandbox
+    tunnel_generate_plist "$FX_PEER" "$FX_IP" "/tmp/fake-home/log" "$FX_PEER" 8443:443 > "$TUNNEL_SANDBOX/login.plist"
+    "$PYTHON3_CMD" - "$TUNNEL_SANDBOX/login.plist" <<'INNER' || _assert_fail "plist does not start at login / restart on exit"
+import plistlib, sys
+d = plistlib.load(open(sys.argv[1], "rb"))
+assert d["RunAtLoad"] is True, "RunAtLoad"
+assert d["KeepAlive"] is True, "KeepAlive"
+assert d["ThrottleInterval"] >= 10, "ThrottleInterval"
+INNER
+}
