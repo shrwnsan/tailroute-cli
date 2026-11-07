@@ -274,6 +274,10 @@
     <code>brew install --cask shrwnsan/tap/tailroute</code></p>
   <p class="note">No Homebrew? <a href="https://github.com/shrwnsan/tailroute-cli/releases/latest" target="_blank" rel="noopener">Download the DMG ↗</a>
     · sha256 published on the release · unsigned—macOS will ask you to approve the first launch</p>
+  <p class="note">The app is not notarized yet, so macOS blocks its first launch and may ask again after an upgrade.
+    Open System Settings → Privacy &amp; Security and choose Open Anyway next to the message about Tailroute.
+    If the dialog offers Move to Trash, choose Done instead, because Move to Trash deletes the app.
+    If the app disappears from Applications, run <code>brew reinstall --cask shrwnsan/tap/tailroute</code>.</p>
 
   <h2 id="description">Description</h2>
   <p><b>tailroute</b> is a launchd daemon that watches the macOS routing table. When a
