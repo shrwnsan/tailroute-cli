@@ -17,6 +17,8 @@ Menu bar app (same engine, native UI, free during early access):
 brew install --cask shrwnsan/tap/tailroute
 ```
 
+The app is not notarized yet, so macOS blocks its first launch and may ask again after an upgrade. Open System Settings → Privacy & Security and choose Open Anyway next to the message about Tailroute. If the dialog offers Move to Trash, choose Done instead, because Move to Trash deletes the app. If the app disappears from Applications, run `brew reinstall --cask shrwnsan/tap/tailroute`.
+
 Or let the installer do both steps for you:
 
 ```bash
