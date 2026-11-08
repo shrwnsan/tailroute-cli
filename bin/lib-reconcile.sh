@@ -86,7 +86,8 @@ _reconcile_log() {
 #   TS + VPN active → disable MagicDNS (VPN needs internet access)
 #   TS active, no VPN → enable MagicDNS (safe to use, no conflicts)
 #   No TS → no action (state is per-Tailscale-session, resets on reconnect)
-#   Multiple VPNs → log warning, do nothing (ambiguous state)
+#   Multiple VPNs → the first non-Tailscale utun with an IPv4 default route
+#                   counts as the one active VPN (MagicDNS disabled)
 #
 # Returns:
 #   0 - Reconciliation completed successfully (including unchanged-mode skip)
