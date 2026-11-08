@@ -31,6 +31,13 @@ All notable changes to tailroute CLI are documented in this file.
 ### Changed
 - **Plist-missing advice now points at `tunnel repair`** instead of the destructive remove-and-re-add sequence — in `tunnel start`'s refuse path, `tunnel restart`'s preflight, and `tunnel status`'s repair note. The `remove && add` advice that remains (stale forwards in `drift`, a missing hosts entry in `check`, an interrupted `update` journal) is genuinely a re-registration: those conditions need the forward set or hosts mapping rebuilt, which a plist repair cannot do.
 
+## [0.9.1] - 2026-11-01
+
+### Fixed
+- **The proxy version-skew warning no longer fires on identical binaries.** Go release builds print a leading `v` (`v0.9.0`) while the CLI version constant has none (`0.9.0`), and both the startup skew check and the running-binary mismatch report compared the two raw. Both now strip an optional leading `v` before comparing, and the messages still show the version text exactly as the binary printed it.
+- **`proxy install` re-downloads on a version mismatch instead of only warning.** Refreshing the proxy used to require deleting `~/.tailroute/bin/tailroute-proxy` first. The download is staged to a sibling temp file and renamed into place atomically, so a half-written download never replaces a working binary. A matching version is still a no-op.
+- **`proxy install --force` (`-f`) re-downloads even when the versions match.**
+
 ## [0.9.0] - 2026-10-27
 
 ### Added
