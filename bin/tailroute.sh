@@ -575,7 +575,9 @@ do_uninstall() {
 
         if [[ "$last_line" == *"disable"* ]]; then
             echo "  Restoring MagicDNS..."
-            /usr/local/bin/tailscale set --accept-dns=true 2>/dev/null || true
+            if ! restore_magicdns_on_uninstall; then
+                echo "  ⚠ Could not restore MagicDNS. Run: tailscale set --accept-dns=true"
+            fi
         fi
     fi
 

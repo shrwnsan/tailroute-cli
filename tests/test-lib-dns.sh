@@ -116,3 +116,45 @@ test_enable_magicdns_when_enabled() {
     # Should be idempotent — return 0 without calling tailscale
     assert_ok enable_magicdns
 }
+
+# =============================================================================
+# restore_magicdns_on_uninstall tests
+# =============================================================================
+
+test_restore_magicdns_on_uninstall_uses_detected_binary() {
+    local dir saved_cmd="$TAILSCALE_CMD" rc=0
+    dir="$(mktemp -d)"
+    printf '#!/bin/sh\necho "$@" > "%s/args"\n' "$dir" > "$dir/tailscale"
+    chmod +x "$dir/tailscale"
+
+    TAILSCALE_CMD="$dir/tailscale"
+    restore_magicdns_on_uninstall || rc=$?
+    TAILSCALE_CMD="$saved_cmd"
+
+    assert_eq "0" "$rc"
+    assert_eq "set --accept-dns=true" "$(cat "$dir/args")"
+    rm -rf "$dir"
+}
+
+test_restore_magicdns_on_uninstall_reports_failure() {
+    local dir saved_cmd="$TAILSCALE_CMD" rc=0
+    dir="$(mktemp -d)"
+    printf '#!/bin/sh\nexit 1\n' > "$dir/tailscale"
+    chmod +x "$dir/tailscale"
+
+    TAILSCALE_CMD="$dir/tailscale"
+    restore_magicdns_on_uninstall || rc=$?
+    TAILSCALE_CMD="$saved_cmd"
+
+    assert_eq "1" "$rc"
+    rm -rf "$dir"
+}
+
+test_restore_magicdns_on_uninstall_missing_binary_fails() {
+    local saved_cmd="$TAILSCALE_CMD" rc=0
+    TAILSCALE_CMD="/nonexistent/tailscale"
+    restore_magicdns_on_uninstall || rc=$?
+    TAILSCALE_CMD="$saved_cmd"
+
+    assert_eq "1" "$rc"
+}

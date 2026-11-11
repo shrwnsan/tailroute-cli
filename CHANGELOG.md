@@ -4,6 +4,9 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **`uninstall` restores MagicDNS with the Tailscale it finds.** The restore step called `/usr/local/bin/tailscale`, which does not exist on a Homebrew install on Apple silicon (`/opt/homebrew/bin`), and hid the failure, so a Mac whose daemon had turned MagicDNS off could finish uninstalling with it still off. It now uses the same detected binary as the daemon and prints the one command to run (`tailscale set --accept-dns=true`) if the restore fails. Three tests cover the binary used, a failing `set`, and a missing binary.
+
 ### Documentation
 - **README explains why a healthy tunnel can still fail in a browser.** VPN browser extensions, proxy extensions, and the browser's secure-DNS setting resolve names themselves and skip `/etc/hosts`, so the tunnel hostname never maps. The note says how to spot it and confirm with `curl`.
 
