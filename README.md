@@ -91,6 +91,8 @@ When something looks wrong:
 
 `tailroute tunnel --help` lists every option, and `tunnel remove <peer>` cleans up the hosts entry, job, and registry row.
 
+If `tunnel check` passes but the browser still cannot load the URL, the browser is probably skipping `/etc/hosts`. A VPN's browser extension (for example NordVPN's), a proxy extension, or the browser's own "Use secure DNS" setting resolves names itself, so the tunnel's hostname never reaches the local mapping. Turn that feature off for the tunnel URL, or switch to a browser without it, and reload. `curl -I https://mypeer.<tailnet>.ts.net:8443` goes through `/etc/hosts` and is a quick way to confirm the tunnel itself works.
+
 ## Requirements
 
 - macOS 15+ (Sequoia or later)

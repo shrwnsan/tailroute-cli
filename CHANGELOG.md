@@ -4,6 +4,9 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+- **README explains why a healthy tunnel can still fail in a browser.** VPN browser extensions, proxy extensions, and the browser's secure-DNS setting resolve names themselves and skip `/etc/hosts`, so the tunnel hostname never maps. The note says how to spot it and confirm with `curl`.
+
 ## [0.9.4] - 2026-11-07
 
 ### Fixed
