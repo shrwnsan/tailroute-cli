@@ -371,3 +371,17 @@ enable_magicdns() {
         fi
     fi
 }
+
+# -----------------------------------------------------------------------------
+# restore_magicdns_on_uninstall — Turn MagicDNS back on during uninstall
+# -----------------------------------------------------------------------------
+# Runs as root with the daemon already stopped, so it skips the state manifest
+# and console-user handling of enable_magicdns. Uses the detected binary: the
+# Homebrew location on Apple silicon is /opt/homebrew/bin, not /usr/local/bin.
+#
+# Returns 0 on success, 1 when tailscale is missing or `set` fails.
+# -----------------------------------------------------------------------------
+restore_magicdns_on_uninstall() {
+    [[ -x "$TAILSCALE_CMD" ]] || return 1
+    "$TAILSCALE_CMD" set --accept-dns=true >/dev/null 2>&1 || return 1
+}
