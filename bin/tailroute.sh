@@ -304,7 +304,7 @@ do_status() {
     
     # Show proxy status
     local proxy_pid proxy_addr="127.0.0.1:1055"
-    proxy_pid=$(pgrep -f "tailroute-proxy" 2>/dev/null | head -1) || proxy_pid=""
+    proxy_pid=$(get_proxy_pid 2>/dev/null) || proxy_pid=""
     
     echo ""
     if [[ -n "$proxy_pid" ]]; then
@@ -805,12 +805,15 @@ resolve_proxy_pid() {
         fi
         rm -f "$PROXY_PID_FILE"
     fi
-    pid=$(pgrep -f "$PROXY_BIN_NAME" 2>/dev/null | head -n 1) || true
-    if _proxy_pid_is_ours "$pid"; then
-        printf '%s\n' "$pid" > "$PROXY_PID_FILE" 2>/dev/null || true
-        echo "$pid"
-        return 0
-    fi
+    # pgrep -f also matches any command line that merely mentions the name,
+    # so check every hit rather than trusting the first.
+    while IFS= read -r pid; do
+        if _proxy_pid_is_ours "$pid"; then
+            printf '%s\n' "$pid" > "$PROXY_PID_FILE" 2>/dev/null || true
+            echo "$pid"
+            return 0
+        fi
+    done < <(pgrep -f "$PROXY_BIN_NAME" 2>/dev/null || true)
     return 1
 }
 
