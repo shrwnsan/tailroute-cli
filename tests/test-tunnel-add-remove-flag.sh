@@ -43,7 +43,7 @@ test_remove_then_readd_bootstraps() {
     local rc=0 out
     out="$(tunnel_do_add prime --yes 2>&1)" || rc=$?
     assert_eq "0" "$rc" "re-add after remove"
-    assert_contains "Tunnel added: prime" "$out"
+    assert_contains "/etc/hosts entry · registry updated" "$out"
     grep -qx "$PRIME_LABEL" "$LAUNCHCTL_STATE" || { echo "re-added job not bootstrapped"; return 1; }
 }
 
@@ -74,7 +74,7 @@ PLIST
     local rc=0 out
     out="$(tunnel_do_add prime --yes --adopt 2>&1)" || rc=$?
     assert_eq "0" "$rc" "adoption of a disabled prototype"
-    assert_contains "Tunnel added: prime" "$out"
+    assert_contains "/etc/hosts entry · registry updated" "$out"
     grep -qx "$PRIME_LABEL" "$LAUNCHCTL_STATE" || { echo "adopted job not bootstrapped"; return 1; }
     assert_eq "enabled" "$(_store_state "$PRIME_LABEL")" "adoption cleared the flag"
 }
