@@ -232,6 +232,46 @@ test_top_level_status_reports_the_real_proxy_pid() {
 # (label unloaded, launchd throttling), a bare "Not running" gives no
 # repair path. The plist's presence is the tell.
 
+# pgrep -f matches any command line that merely contains "tailroute daemon" —
+# a shell one-liner, an editor, a grep. status must check what the process is,
+# not just that the text matched.
+test_status_ignores_a_foreign_pgrep_match_for_the_daemon() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+    fake_pgrep $PPID
+    fake_comm $PPID "/bin/sh -c cd /work && tailroute daemon --help"
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "Daemon:         Not running" "$out"
+}
+
+test_status_reports_the_real_daemon_after_a_foreign_pgrep_match() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+    fake_pgrep $$ $PPID
+    fake_comm $$ "vim notes-on-tailroute daemon.txt"
+    fake_comm $PPID "bash /opt/homebrew/opt/tailroute-cli/bin/tailroute daemon"
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "Daemon:         Running (PID $PPID)" "$out"
+}
+
+test_status_accepts_the_daemon_launched_directly_or_as_a_script() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+    fake_pgrep $PPID
+    fake_comm $PPID "/bin/bash /usr/local/bin/tailroute.sh daemon"
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "Daemon:         Running (PID $PPID)" "$out"
+}
+
 test_status_hints_bootstrap_when_daemon_installed_but_not_running() {
     _setup_proxy_sandbox
     launchctl() { return 1; }                    # no user-domain label, pgrep empty
