@@ -213,6 +213,87 @@ test_ui_url_underline_without_color_codes() {
 }
 
 # =============================================================================
+# ui_url — OSC 8 hyperlinks (TERM_PROGRAM heuristic + TAILROUTE_LINKS)
+# =============================================================================
+
+test_ui_url_osc8_wraps_in_supported_terminal() {
+    local out
+    out="$(CLICOLOR_FORCE=1 TERM_PROGRAM=iTerm.app ui_url "https://prime.tailnet.ts.net:8443")"
+    # open carries the URL as its target, close is the empty-URL form
+    assert_contains "$(printf '\033]8;;https://prime.tailnet.ts.net:8443\033\\')" "$out"
+    assert_contains "$(printf '\033]8;;\033\\')" "$out"
+    # the SGR-4 underline rides along inside the hyperlink
+    assert_contains "$(printf '\033[4m')" "$out"
+}
+
+test_ui_url_osc8_label_is_the_underlined_url() {
+    local out n
+    out="$(CLICOLOR_FORCE=1 TERM_PROGRAM=ghostty ui_url "https://prime.tailnet.ts.net:8443")"
+    # the visible label is exactly the URL: SGR4 + URL + SGR0, byte-contiguous
+    assert_contains "$(printf '\033[4mhttps://prime.tailnet.ts.net:8443\033[0m')" "$out"
+    # the URL bytes appear exactly twice: OSC 8 target + visible label
+    n="$(printf '%s' "$out" | grep -o 'https://prime\.tailnet\.ts\.net:8443' | wc -l | tr -d ' ')"
+    assert_eq 2 "$n" "label must be the URL itself, not a different string"
+}
+
+test_ui_url_osc8_all_listed_term_programs() {
+    local tp out
+    for tp in iTerm.app vscode ghostty WezTerm; do
+        out="$(CLICOLOR_FORCE=1 TERM_PROGRAM=$tp ui_url "https://x.test")"
+        assert_contains "$(printf '\033]8;;')" "$out"
+    done
+}
+
+test_ui_url_osc8_tolerates_version_suffix() {
+    local out
+    out="$(CLICOLOR_FORCE=1 TERM_PROGRAM='iTerm.app:3.5.11' ui_url "https://x.test")"
+    assert_contains "$(printf '\033]8;;')" "$out"
+}
+
+test_ui_url_no_osc8_in_unsupported_terminal() {
+    local out
+    out="$(CLICOLOR_FORCE=1 TERM_PROGRAM=Apple_Terminal ui_url "https://prime.tailnet.ts.net:8443")"
+    if [[ "$out" == *$(printf '\033]8;;')* ]]; then
+        _assert_fail "an unlisted TERM_PROGRAM must not receive OSC 8: $out"
+    fi
+    # fallback is exactly today's output: SGR-4 underline, URL bytes intact
+    assert_contains "$(printf '\033[4mhttps://prime.tailnet.ts.net:8443\033[0m')" "$out"
+}
+
+test_ui_url_links_never_wins_in_supported_terminal() {
+    local out
+    out="$(TAILROUTE_LINKS=never CLICOLOR_FORCE=1 TERM_PROGRAM=ghostty ui_url "https://prime.tailnet.ts.net:8443")"
+    if [[ "$out" == *$(printf '\033]8;;')* ]]; then
+        _assert_fail "TAILROUTE_LINKS=never must suppress OSC 8: $out"
+    fi
+    # underline keeps riding the color gate
+    assert_contains "$(printf '\033[4m')" "$out"
+}
+
+test_ui_url_links_always_forces_osc8_but_not_the_gate() {
+    local out
+    # always: links in an unlisted terminal whenever the gate is on
+    out="$(TAILROUTE_LINKS=always CLICOLOR_FORCE=1 TERM_PROGRAM=Apple_Terminal ui_url "https://x.test")"
+    assert_contains "$(printf '\033]8;;')" "$out"
+    # ...but links can never switch the gate on by themselves (piped, no env)
+    out="$(TAILROUTE_LINKS=always TERM_PROGRAM=iTerm.app ui_url "https://x.test")"
+    assert_eq "https://x.test" "$out"
+}
+
+test_ui_url_no_escapes_of_either_kind_without_gate() {
+    local out
+    # NO_COLOR in a supported terminal: neither SGR nor OSC 8
+    out="$(NO_COLOR=1 CLICOLOR_FORCE=1 TERM_PROGRAM=iTerm.app ui_url "https://prime.tailnet.ts.net:8443")"
+    assert_eq "https://prime.tailnet.ts.net:8443" "$out"
+    # piped into a supported terminal: same — plain URL only
+    out="$(TERM_PROGRAM=ghostty ui_url "https://prime.tailnet.ts.net:8443")"
+    assert_eq "https://prime.tailnet.ts.net:8443" "$out"
+    if [[ "$out" == *"$ESC"* ]]; then
+        _assert_fail "piped output must not contain an escape byte: $out"
+    fi
+}
+
+# =============================================================================
 # Gate robustness
 # =============================================================================
 
