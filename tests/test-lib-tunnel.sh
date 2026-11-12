@@ -3088,33 +3088,36 @@ test_t431_journal_write_fails_closed_when_fsync_fails() {
 }
 
 # A process that dies between two transaction steps runs no rollback. The
-# journal must record exactly the steps that completed, and every later
-# command must refuse to build on top of the half-finished state.
-test_t431_termination_after_registry_step_leaves_recoverable_journal() {
+# journal must record exactly the steps that completed, and status must
+# surface the half-finished state.
+test_t431_termination_after_bootstrap_step_leaves_recoverable_journal() {
     _tunnel_setup_sandbox
     ( tunnel_hosts_apply() { exit 137; }; tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 ) || true
-    assert_contains '"completed":["registry"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
-    assert_contains "\"peer\": \"$FX_PEER\"" "$(tunnel_registry_get "$FX_PEER" 2>&1)"
+    assert_contains '"completed":["plist","bootstrap"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
     if grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" 2>/dev/null; then
         _assert_fail "hosts mapping written although the process died before the hosts step"
     fi
+    assert_fail tunnel_registry_get "$FX_PEER"
     rm -rf "$TUNNEL_LOCK_DIR"   # the dead process's lock; stale-pid reclaim covers a real death
-    local out rc=0
-    out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || rc=$?
-    assert_eq 1 "$rc" "add must not rebuild on top of a half-finished add"
+    local out
     out="$(tunnel_do_status 2>&1 || true)"
     assert_contains "INCOMPLETE JOURNAL" "$out"
 }
 
-test_t431_termination_after_hosts_step_records_both_steps() {
+test_t431_termination_after_hosts_step_records_all_three_steps() {
     _tunnel_setup_sandbox
-    ( tunnel_generate_plist() { exit 137; }; tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 ) || true
-    assert_contains '"completed":["registry","hosts"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
+    ( tunnel_registry_add() { exit 137; }; tunnel_do_add "$FX_PEER" --yes >/dev/null 2>&1 ) || true
+    assert_contains '"completed":["plist","bootstrap","hosts"]' "$(cat "$TUNNEL_JOURNAL_PATH")"
     grep -q "$FX_HOSTNAME" "$TUNNEL_HOSTS_FILE" || _assert_fail "hosts mapping missing after the hosts step completed"
+    assert_fail tunnel_registry_get "$FX_PEER"
+    rm -rf "$TUNNEL_LOCK_DIR"
+    local out
+    out="$(tunnel_do_status 2>&1 || true)"
+    assert_contains "INCOMPLETE JOURNAL" "$out"
 }
 
 # Cross-user hosts edit: another tailroute user holds the machine-wide hosts
-# lock. The add must back out its registry entry and leave /etc/hosts alone,
+# lock. The add must back out its job and plist and leave /etc/hosts alone,
 # not push through the held lock.
 test_t431_add_respects_a_held_hosts_lock() {
     _tunnel_setup_sandbox
@@ -3125,7 +3128,8 @@ test_t431_add_respects_a_held_hosts_lock() {
     before="$(cat "$TUNNEL_HOSTS_FILE")"
     out="$(tunnel_do_add "$FX_PEER" --yes 2>&1)" || rc=$?
     assert_eq 1 "$rc" "add must not proceed while the hosts lock is held"
-    assert_contains "ROLLED BACK: registry entry (hosts lock busy)" "$out"
+    assert_contains "hosts lock busy" "$out"
+    assert_contains "rolled back · job unloaded · plist" "$out"
     assert_eq "$before" "$(cat "$TUNNEL_HOSTS_FILE")" "hosts file changed under a held lock"
     assert_fail tunnel_registry_get "$FX_PEER"
     [ -f "$TUNNEL_HOSTS_LOCK_DIR/pid" ] || _assert_fail "the other holder's lock was removed"
