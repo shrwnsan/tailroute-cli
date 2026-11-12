@@ -122,7 +122,8 @@ MOCK
     local rc=0 out
     out="$(tunnel_do_add prime --yes 2>&1)" || rc=$?
     assert_eq "1" "$rc" "add rc"
-    assert_contains "ROLLED BACK: TLS identity verification failed" "$out"
+    assert_contains "TLS certificate does not match" "$out"
+    assert_contains "rolled back · job unloaded" "$out"
     _assert_nothing_left_behind
 
     # the squatter leaves; the same add now succeeds on the same port

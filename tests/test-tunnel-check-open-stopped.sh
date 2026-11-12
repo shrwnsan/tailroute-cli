@@ -36,8 +36,8 @@ test_check_on_stopped_names_the_parked_listener() {
     assert_eq "1" "$rc" "check on parked rc"
     assert_contains "listener: 127.0.0.1:8443 closed — stopped by request" "$out"
     assert_contains "repair: tailroute tunnel start web" "$out"
-    # tokens the menu bar's diagnostics panel parses must survive
-    assert_contains " -> remote " "$out"
+    # path-line token
+    assert_contains " → remote " "$out"
     assert_contains ": check FAILED" "$out"
     # the old job-down text must not leak into the parked case
     if printf '%s' "$out" | grep -q "the tunnel job is down"; then
