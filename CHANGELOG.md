@@ -5,6 +5,7 @@ All notable changes to tailroute CLI are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **`tailroute status` no longer reports a daemon that is not running.** When the daemon is not in the user launchd domain, status falls back to `pgrep -f "tailroute daemon"` and printed "Running (PID …)" for the first hit, even when that hit was only a shell one-liner or editor whose command line contained those words. Status now checks that the process is a shell running the tailroute script with `daemon` as its subcommand, and skips any other match. Three tests cover a foreign match, a foreign match listed ahead of the real daemon, and the script launched by path.
 - **`tailroute status` no longer reports a proxy that is not running.** The top-level status matched any process whose command line contained `tailroute-proxy` (a shell, an editor, a `tail` on the log) and printed "Running (pid …)" for it, while `tailroute proxy status` used the stricter check and said Stopped. Both now use the same check, and pid resolution examines every match instead of trusting the first, so a stray match can no longer hide the real proxy either. Three tests cover a foreign match, a foreign match listed ahead of the real proxy, and the real pid in `status`.
 
 ## [0.9.5] - 2026-11-12

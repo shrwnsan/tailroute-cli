@@ -234,6 +234,29 @@ do_daemon() {
     exit 0
 }
 
+# True when pid's command line is the daemon itself: a shell running the
+# tailroute script with "daemon" as its subcommand. pgrep -f also matches any
+# command line that merely contains "tailroute daemon" (a `sh -c` one-liner, an
+# editor, a grep), so the match alone proves nothing.
+_daemon_pid_is_ours() {
+    local pid="${1:-}" cmd
+    [[ -n "$pid" ]] || return 1
+    cmd=$(ps -p "$pid" -o command= 2>/dev/null) || return 1
+    [[ "$cmd" =~ ^([^[:space:]]*/)?(ba|z)?sh([[:space:]]+-[^c[:space:]][^[:space:]]*)*[[:space:]]+([^[:space:]]*/)?tailroute(\.sh)?[[:space:]]+daemon([[:space:]]|$) ]]
+}
+
+# First pid that passes _daemon_pid_is_ours; fails when none does.
+_find_daemon_pid() {
+    local pid
+    while IFS= read -r pid; do
+        if _daemon_pid_is_ours "$pid"; then
+            echo "$pid"
+            return 0
+        fi
+    done < <(pgrep -f "tailroute daemon" 2>/dev/null || true)
+    return 1
+}
+
 # =============================================================================
 # do_status — Show daemon status and current state
 # =============================================================================
@@ -254,7 +277,7 @@ do_status() {
         echo "Daemon:         Running (PID $daemon_pid)"
     else
         # Check for running daemon process (system-level services may not appear in user launchctl)
-        daemon_pid=$(pgrep -f "tailroute daemon" 2>/dev/null | head -1) || daemon_pid=""
+        daemon_pid=$(_find_daemon_pid) || daemon_pid=""
         if [[ -n "$daemon_pid" ]]; then
             echo "Daemon:         Running (PID $daemon_pid)"
         elif [[ -f "$(_daemon_plist_path)" ]]; then
