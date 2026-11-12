@@ -188,6 +188,42 @@ test_status_reports_the_resolved_pid_not_the_stale_one() {
     assert_contains "Running (pid $PPID)" "$out"
 }
 
+test_resolve_skips_foreign_pgrep_matches_before_the_real_proxy() {
+    # pgrep -f matches any command line that merely mentions the name (an
+    # editor, a tail on the log, a shell running this very check).
+    _setup_proxy_sandbox
+    fake_pgrep $$ $PPID
+    fake_comm $$ bash
+    fake_comm $PPID tailroute-proxy
+
+    assert_eq "$PPID" "$(get_proxy_pid)" "a foreign first match must not hide the real proxy"
+}
+
+test_top_level_status_does_not_report_a_foreign_pgrep_match_as_the_proxy() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+    fake_pgrep $PPID
+    fake_comm $PPID bash               # mentions tailroute-proxy, is not it
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "SOCKS5 Proxy:   Stopped" "$out"
+}
+
+test_top_level_status_reports_the_real_proxy_pid() {
+    _setup_proxy_sandbox
+    launchctl() { return 1; }
+    _daemon_plist_path() { echo "$PROXY_TEST_HOME/none.plist"; }
+    fake_pgrep $$ $PPID
+    fake_comm $$ bash
+    fake_comm $PPID tailroute-proxy
+
+    local out
+    out=$(do_status 2>&1)
+    assert_contains "SOCKS5 Proxy:   Running (pid $PPID" "$out"
+}
+
 # =============================================================================
 # Daemon status: installed-but-not-running gets a repair hint (#42 defect 1)
 # =============================================================================
