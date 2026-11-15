@@ -22,6 +22,8 @@ source "$SCRIPT_DIR/lib-reconcile.sh"
 source "$SCRIPT_DIR/lib-lock.sh"
 # shellcheck source=lib-dns.sh disable=SC1091
 source "$SCRIPT_DIR/lib-dns.sh"
+# shellcheck source=lib-proxy-monitor.sh disable=SC1091
+source "$SCRIPT_DIR/lib-proxy-monitor.sh"
 
 # Paths to system commands (absolute for security)
 ROUTE_CMD="/sbin/route"
@@ -105,6 +107,14 @@ run_event_loop() {
     # Start background safety-net poll
     start_poll || {
         log_error "Failed to start background poll"
+        cleanup
+        return 1
+    }
+
+    # Start the proxy health monitor (T-001): keeps a running proxy alive,
+    # never starts or stops one on its own initiative.
+    start_proxy_monitor_poll || {
+        log_error "Failed to start proxy monitor poll"
         cleanup
         return 1
     }
@@ -394,6 +404,7 @@ handle_sighup() {
 # =============================================================================
 cleanup() {
     stop_poll
+    stop_proxy_monitor_poll
 
     release_lock 2>/dev/null || true
 
