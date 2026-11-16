@@ -477,6 +477,11 @@ def check_metrics(landing, strict):
         with redirect_stdout(captured):
             updated = module._replace_releases(landing.text, 1)
             updated = module._replace_version(updated, "0.0.0")
+            updated = module._replace_chart(updated, [
+                {"tag_name": "v0.1.0", "published_at": "2026-03-27T00:00:00Z"},
+                {"tag_name": "v0.2.0", "published_at": "2026-06-01T00:00:00Z"},
+                {"tag_name": "v0.3.0", "published_at": "2026-11-01T00:00:00Z"},
+            ])
             module._replace_span(updated, "updated", "x")
     except Exception as exc:
         fails.append(Failure(landing.rel, 1, f"metric helpers crashed: {exc}"))
