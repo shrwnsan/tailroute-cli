@@ -28,6 +28,11 @@ SOCKS5 proxy using Tailscale's tsnet for independent mesh access.
 - Binds to `127.0.0.1:1055` (localhost only)
 - Creates separate Tailscale identity (doesn't conflict with primary)
 - Bypasses VPN Network Extension interception
+- Watched by the daemon's health monitor (`lib-proxy-monitor.sh`): a crashed
+  proxy restarts with exponential backoff (5s → 10s → 20s); more than 3
+  restarts in 60s disables auto-restart until a manual `tailroute proxy
+  start`. The monitor never starts or stops a proxy on its own initiative —
+  a missing PID file means the user stopped it, and that is hands-off.
 
 ## How It Works
 

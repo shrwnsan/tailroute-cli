@@ -332,8 +332,19 @@ do_status() {
     echo ""
     if [[ -n "$proxy_pid" ]]; then
         echo "SOCKS5 Proxy:   Running (pid $proxy_pid, $proxy_addr)"
+        if declare -F proxy_monitor_state >/dev/null; then
+            echo "Proxy monitor:  $(proxy_monitor_state "$HOME/.tailroute/proxy-monitor.state")"
+        fi
     else
         echo "SOCKS5 Proxy:   Stopped"
+        if declare -F proxy_monitor_state >/dev/null; then
+            local monitor_state
+            monitor_state=$(proxy_monitor_state "$HOME/.tailroute/proxy-monitor.state")
+            case "$monitor_state" in
+                healthy | restarting*) echo "Proxy monitor:  $monitor_state (proxy process missing — daemon will restart it)" ;;
+                disabled*) echo "Proxy monitor:  $monitor_state" ;;
+            esac
+        fi
     fi
     
     echo ""
@@ -1130,6 +1141,10 @@ do_proxy_uninstall() {
 }
 
 do_proxy_start() {
+    # Manual start re-arms the daemon's auto-restart monitor (T-001): a
+    # disabled monitor (restart loop) is cleared by explicit human intent.
+    declare -F proxy_monitor_reset >/dev/null && proxy_monitor_reset
+
     if is_proxy_running; then
         local pid
         pid=$(get_proxy_pid)
@@ -1290,6 +1305,12 @@ do_proxy_status() {
     fi
     
     echo ""
+    # Monitor state from the daemon (T-001): healthy / restarting /
+    # disabled. Show it for every state — off means the daemon is not
+    # running the monitor.
+    if declare -F proxy_monitor_state >/dev/null; then
+        echo "Monitor:  $(proxy_monitor_state "$HOME/.tailroute/proxy-monitor.state")"
+    fi
     if [[ -f "$HOME/.tailroute/proxy.log" ]]; then
         echo "Recent log:"
         tail -5 "$HOME/.tailroute/proxy.log" 2>/dev/null
