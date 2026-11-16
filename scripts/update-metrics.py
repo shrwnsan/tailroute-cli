@@ -3,9 +3,9 @@
 
 Counts CLI tagged releases (excludes app-v* releases, which are the menu bar
 app's separate tag space) and the latest CLI version from the GitHub API, then
-updates the pages in place: the landing's stat card, JSON-LD, release chart
-(SVG, hover data, data table) and its JSON data blob, and the manual page's
-JSON-LD plus its version badge. A failure leaves the pages as-is: slightly
+updates the pages in place: the landing's stat card and JSON-LD, and the
+manual page's JSON-LD, version badge, release chart (SVG, hover data, data
+table) and its JSON data blob. A failure leaves the pages as-is: slightly
 stale numbers are this site's failure mode, a broken deploy is not.
 Idempotent. Stdlib only.
 
@@ -62,11 +62,11 @@ def main():
     def landing(html):
         html = _replace_releases(html, count)
         html = _replace_version(html, latest)
-        html = _replace_chart(html, releases)
         return _replace_span(html, "updated", f" \u00b7 site updated {today}")
 
     def manual(html):
         html = _replace_version(html, latest)
+        html = _replace_chart(html, releases)
         return _replace_span(html, "cli-version", f"v{latest}")
 
     touched = 0
