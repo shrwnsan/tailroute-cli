@@ -45,9 +45,13 @@ PROXY_MONITOR_PID=""    # PID of the monitor poll subshell (start/stop below)
 
 # Monitor state (in-memory, inside the monitor poll subshell)
 _PM_STATE=""            # "" | "running" | "restarting" | "disabled"
-_PM_CRASHES=()          # epochs of crashes inside the window
+_PM_CRASHES=""          # space-separated epochs of crashes inside the window
 _PM_NEXT_ATTEMPT=0      # epoch of the next allowed restart
 _PM_PID=""              # PID written by the last restart
+# NOTE: no bash arrays here — /bin/bash is 3.2, where "_ARR=()" unsets the
+# variable and any later "${_ARR[@]}" under set -u aborts the tick with
+# "unbound variable" (found in live UAT 2026-11-16). Numbers-only tokens in
+# a scalar keep every expansion total.
 
 # =============================================================================
 # _pm_now — Monotonic-ish clock for windows and backoff
@@ -121,7 +125,7 @@ _pm_write_state() {
 # =============================================================================
 proxy_monitor_reset() {
     _PM_STATE=""
-    _PM_CRASHES=()
+    _PM_CRASHES=""
     _PM_NEXT_ATTEMPT=0
     _PM_PID=""
     if declare -F _tr_resolve_target_user >/dev/null &&
@@ -225,12 +229,12 @@ proxy_monitor_tick() {
             log_info "proxy-monitor: proxy is up (pid $pid)"
         fi
         _PM_STATE="running"
-        if ((${#_PM_CRASHES[@]} > 0)); then
+        if [[ -n "$_PM_CRASHES" ]]; then
             local now last
             now=$(_pm_now)
-            last=${_PM_CRASHES[${#_PM_CRASHES[@]} - 1]}
+            last="${_PM_CRASHES##* }"
             if ((now - last > PROXY_MONITOR_WINDOW)); then
-                _PM_CRASHES=()
+                _PM_CRASHES=""
             fi
         fi
         _pm_write_state
@@ -252,7 +256,7 @@ proxy_monitor_tick() {
             log_info "proxy-monitor: proxy stopped by user; disengaging"
         fi
         _PM_STATE=""
-        _PM_CRASHES=()
+        _PM_CRASHES=""
         _PM_NEXT_ATTEMPT=0
         _PM_PID=""
         rm -f "$(_pm_state_file)" 2>/dev/null || true
@@ -265,15 +269,20 @@ proxy_monitor_tick() {
     now=$(_pm_now)
 
     # Restart-loop guard: prune the window, then count.
-    local kept=() ts
-    for ts in "${_PM_CRASHES[@]}"; do
-        ((now - ts <= PROXY_MONITOR_WINDOW)) && kept+=("$ts")
+    local kept="" ts
+    for ts in $_PM_CRASHES; do
+        ((now - ts <= PROXY_MONITOR_WINDOW)) && kept="$kept $ts"
     done
-    _PM_CRASHES=("${kept[@]}")
+    _PM_CRASHES="${kept# }"
 
-    if ((${#_PM_CRASHES[@]} >= PROXY_MONITOR_MAX_RESTARTS)); then
+    local crash_count=0
+    for ts in $_PM_CRASHES; do
+        crash_count=$((crash_count + 1))
+    done
+
+    if ((crash_count >= PROXY_MONITOR_MAX_RESTARTS)); then
         if [[ "$_PM_STATE" != "disabled" ]]; then
-            log_error "proxy-monitor: ${#_PM_CRASHES[@]} restarts in ${PROXY_MONITOR_WINDOW}s — disabling auto-restart; run 'tailroute proxy start' to re-arm"
+            log_error "proxy-monitor: $crash_count restarts in ${PROXY_MONITOR_WINDOW}s — disabling auto-restart; run 'tailroute proxy start' to re-arm"
             _PM_STATE="disabled"
             _pm_write_state
         fi
@@ -282,7 +291,7 @@ proxy_monitor_tick() {
 
     # Backoff gate: 5s → 10s → 20s as crashes accumulate in the window.
     local delay
-    delay=$((PROXY_MONITOR_BACKOFF_BASE * (1 << ${#_PM_CRASHES[@]})))
+    delay=$((PROXY_MONITOR_BACKOFF_BASE * (1 << crash_count)))
     ((delay > 20)) && delay=20
     if ((now < _PM_NEXT_ATTEMPT)); then
         _PM_STATE="restarting"
@@ -290,7 +299,8 @@ proxy_monitor_tick() {
         return 0
     fi
 
-    _PM_CRASHES+=("$now")
+    _PM_CRASHES="$_PM_CRASHES $now"
+    _PM_CRASHES="${_PM_CRASHES# }"
     _PM_NEXT_ATTEMPT=$((now + delay))
     _PM_STATE="restarting"
     _pm_write_state
