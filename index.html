@@ -767,7 +767,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 
       <dl class="band reveal">
         <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>40</i></dd></div>
-        <div class="stat"><dt>shell tests · 348 → 593 in nine weeks</dt><dd>593</dd></div>
+        <div class="stat"><dt>shell tests · 348 → 667 in eleven weeks</dt><dd>667</dd></div>
         <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
         <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
       </dl>
@@ -830,7 +830,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
           <div class="resp"><h3><i>03</i>Self-verifying install</h3>
             <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
             refuse to start, and say what changed. Strict validation, absolute paths, MagicDNS restored when
-            the daemon stops, 593 tests and counting.</p></div>
+            the daemon stops, 667 tests and counting.</p></div>
         </div>
 
         <div class="b-card b12 reveal d1">
@@ -932,8 +932,8 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
         <div class="reveal d2">
           <div class="feed">
             <div class="feed-item"><span class="feed-v">0.9.7</span><div><p class="feed-t"><b>The proxy monitor survives macOS bash</b>—the first crash no longer kills the restart loop before any restart happens.</p><p class="feed-d">2026-11-16 · bash 3.2-safe</p></div></div>
-            <div class="feed-item"><span class="feed-v">0.9.6</span><div><p class="feed-t"><b>The daemon restarts a crashed proxy</b>—30-second health checks, 5→10→20s backoff, and a loop guard; status shows the monitor state.</p><p class="feed-d">2026-11-16 · params ratified 2026-11-13</p></div></div>
-            <div class="feed-item"><span class="feed-v">0.9.5</span><div><p class="feed-t"><b>uninstall restores MagicDNS with the Tailscale it finds</b>—no more silent failures on Apple silicon Homebrew installs.</p><p class="feed-d">2026-11-12 · found binary, named fallback</p></div></div>
+            <div class="feed-item"><span class="feed-v">0.9.6</span><div><p class="feed-t"><b>The daemon restarts a crashed proxy</b>—30-second health checks, 5→10→20s backoff, and a loop guard; status shows the monitor state.</p><p class="feed-d">2026-11-16 · the daemon owns restarts</p></div></div>
+            <div class="feed-item"><span class="feed-v">0.9.5</span><div><p class="feed-t"><b>uninstall restores MagicDNS with the Tailscale it finds</b>—no more silent failures on Apple silicon Homebrew installs.</p><p class="feed-d">2026-11-12 · uses the Tailscale it finds</p></div></div>
             <div class="feed-item"><span class="feed-v">0.9.4</span><div><p class="feed-t"><b>A changed ssh host key is no longer treated as first-time trust</b>—the pre-flight says the key changed instead of inviting you to accept it. Unverified-TLS tunnels stay flagged in <code>open</code>, <code>list</code>, and <code>status</code>; registry writes are flushed to disk.</p><p class="feed-d">2026-11-07 · tests 554 → 593</p></div></div>
             <div class="feed-item"><span class="feed-v">0.9.3</span><div><p class="feed-t"><b>Homebrew installs find their own proxy</b>—Apple Silicon no longer reports <code>Binary: Not installed</code>, and <code>proxy start</code> stops waiting on a prompt nobody can answer.</p><p class="feed-d">2026-11-03 · tests 544 → 554</p></div></div>
           </div>
