@@ -1863,7 +1863,7 @@ else:
 print("  Registry forwards:")
 if registered:
     for local, remote in forwards:
-        print("    127.0.0.1:%s → remote %s   https://%s:%s" % (local, remote, hostname, local))
+        print("    127.0.0.1:%s -> remote %s   https://%s:%s" % (local, remote, hostname, local))
 else:
     print("    (none — this peer is not registered)")
 
@@ -2107,7 +2107,7 @@ tunnel_do_check() {
     # locals — dynamic scope reaches them here.
     _check_emit_section() {
         echo ""
-        if [ "$fwd_failed" -eq 0 ]; then ui_ok "$chain"; else ui_fail "$chain"; fi
+        if [ "$fwd_failed" -eq 0 ]; then ui_ok "$chain"; else ui_bad "$chain"; fi
         printf '%s' "$detail"
     }
     # shellcheck disable=SC2086  # $pairs intentionally word-splits into l:r pairs
@@ -2120,11 +2120,11 @@ tunnel_do_check() {
         # Rows are built with `printf -v` (bash 3.2+) — `$(printf …)` would
         # strip each row's trailing newline and glue the section into one line.
         local detail="" chain="" fwd_failed=0 row=""
-        printf -v row '  127.0.0.1:%s → remote %s · %s\n' "$lport" "$rport" "$(ui_url "https://$hostname:$lport")"
+        printf -v row '  127.0.0.1:%s -> remote %s   https://%s:%s\n' "$lport" "$rport" "$hostname" "$lport"
         detail="$row"
         if tunnel_hosts_has_mapping "$hostname"; then
             chain="hosts"
-            printf -v row '    hosts:    %s → 127.0.0.1 (%s)\n' "$hostname" "$TUNNEL_HOSTS_FILE"
+            printf -v row '    hosts:    %s -> 127.0.0.1 (%s)\n' "$hostname" "$TUNNEL_HOSTS_FILE"
             detail="$detail$row"
         else
             chain="hosts — — —"
@@ -2782,20 +2782,19 @@ tunnel_do_add() {
     # Payoff: dim arrow, linked+underlined URL via ui_url (OSC 8 where
     # supported), dim forwards note (non-default ports)
     local url="https://$full_hostname:$lport"
-    local linked
-    linked="$(ui_url "$url")"
     if _ui_gate_out; then
+        printf '%s→%s ' "$_UI_SGR_DIM" "$_UI_SGR_RESET"
+        _ui_url_inline "$url"
         if [ "$rport" != "443" ]; then
-            printf '%s→ %s %s(forwards to remote %s)%s\n' \
-                "$_UI_SGR_DIM" "$linked" "$_UI_SGR_DIM" "$rport" "$_UI_SGR_RESET"
+            printf '%s (forwards to remote %s)%s\n' "$_UI_SGR_DIM" "$rport" "$_UI_SGR_RESET"
         else
-            printf '%s→ %s%s\n' "$_UI_SGR_DIM" "$linked" "$_UI_SGR_RESET"
+            printf '\n'
         fi
     else
         if [ "$rport" != "443" ]; then
-            printf '→ %s (forwards to remote %s)\n' "$linked" "$rport"
+            printf '→ %s (forwards to remote %s)\n' "$url" "$rport"
         else
-            printf '→ %s\n' "$linked"
+            printf '→ %s\n' "$url"
         fi
     fi
     # Next-step hint: dim data line before the blank line + footer
@@ -3663,7 +3662,7 @@ sys.exit(1 if degraded else 0)
                 [ -n "$notes" ] && echo "  Notes:    $notes"
                 prev_peer="$p"
             fi
-            echo "    127.0.0.1:$lport → remote $rport  $listener, $tls, backend $backend"
+            echo "    127.0.0.1:$lport -> remote $rport  $listener, $tls, backend $backend"
             if [ "$backend" = "unknown" ]; then
                 echo "      ssh to the peer failed — it may be starting or the backend is down"
             fi
@@ -3776,7 +3775,10 @@ tunnel_do_open() { # <peer>
         echo "ERROR: could not open $url in a browser" >&2
         return 1
     fi
-    echo "Opened $(ui_url "$url")"
+    # Same no-capture rule as add's payoff: direct print keeps the
+    # underline/OSC 8 styling alive on a real TTY.
+    printf 'Opened '
+    ui_url "$url"
     return 0
 }
 

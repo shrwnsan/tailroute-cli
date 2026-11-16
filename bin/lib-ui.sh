@@ -175,18 +175,48 @@ ui_dim() {
 # _ui_links_supported), the URL is additionally wrapped in an OSC 8 hyperlink
 # so terminals make it clickable. The label IS the URL — the visible bytes
 # stay copy-paste-identical to the plain form in every variant.
+#
+# Callers must invoke ui_url (or _ui_url_inline) DIRECTLY on the interactive
+# path — never inside $( ): a command substitution's fd 1 is a pipe, so the
+# gate would see non-TTY and strip the styling exactly where the user can
+# see it. Compose multi-part lines with _ui_url_inline instead of capturing.
 # -----------------------------------------------------------------------------
 ui_url() {
+    _ui_url_inline "$@"
+    printf '\n'
+}
+
+# _ui_url_inline — ui_url without the trailing newline, for composing lines
+# whose URL sits mid-line (add's payoff: dim arrow + URL + dim port note).
+_ui_url_inline() {
     if _ui_gate_out; then
         if _ui_links_supported; then
-            printf '%s%s%s%s%s%s%s\n' \
+            printf '%s%s%s%s%s%s%s' \
                 "$_UI_OSC8_OPEN_PREFIX" "$*" "$_UI_OSC8_ST" \
                 "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET" \
                 "$_UI_OSC8_CLOSE"
         else
-            printf '%s%s%s\n' "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET"
+            printf '%s%s%s' "$_UI_SGR_UNDERLINE" "$*" "$_UI_SGR_RESET"
         fi
     else
-        printf '%s\n' "$*"
+        printf '%s' "$*"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_bad — Print a failure verdict line to STDOUT
+# -----------------------------------------------------------------------------
+# The ✗ mark is red (same mark as ui_fail), but the stream is stdout: this
+# printer exists for lines that ARE a command's payload rather than
+# commentary — `tunnel check`'s per-forward chain verdicts. Detail rows and
+# verdicts share stdout so `2>/dev/null` cannot strip the verdict and
+# text-scraping consumers read the answer from one stream. ui_fail stays the
+# right choice for rollback narration and genuine warnings.
+# -----------------------------------------------------------------------------
+ui_bad() {
+    if _ui_gate_out; then
+        printf '%s✗%s %s\n' "$_UI_SGR_RED" "$_UI_SGR_RESET" "$*"
+    else
+        printf '✗ %s\n' "$*"
     fi
 }

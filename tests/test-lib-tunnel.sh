@@ -1383,8 +1383,8 @@ test_t436_status_lists_every_forward() {
     tunnel_do_add "$FX_PEER" --remote-port 8080 --yes >/dev/null 2>&1
     local out
     out="$(tunnel_do_status --skip-remote-check 2>&1)"
-    assert_contains "127.0.0.1:8443 → remote 443" "$out"
-    assert_contains "127.0.0.1:8444 → remote 8080" "$out"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
 }
 
 test_status_shows_every_peer_not_just_the_first() {
@@ -2081,7 +2081,7 @@ test_t439_registered_peer_no_drift() {
     out="$(_t439_drift_inert "$FX_PEER" 0)"
     assert_contains "no drift" "$out"
     assert_contains "https://$FX_HOSTNAME:8443" "$out" "the full current forward set + URL must be shown"
-    assert_contains "127.0.0.1:8443 → remote 443" "$out"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
     assert_contains "applies nothing" "$out" "inertness is stated as policy, not implied"
 }
 
@@ -2406,8 +2406,8 @@ test_check_mapping_row_uses_unicode_arrows_and_underlined_url() {
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 0)"
     # data positions carry → arrows; the URL rides through ui_url
-    assert_contains "127.0.0.1:8443 → remote 443 · https://$FX_HOSTNAME:8443" "$out"
-    assert_contains "hosts:    $FX_HOSTNAME → 127.0.0.1" "$out"
+    assert_contains "127.0.0.1:8443 -> remote 443   https://$FX_HOSTNAME:8443" "$out"
+    assert_contains "hosts:    $FX_HOSTNAME -> 127.0.0.1" "$out"
     if printf '%s' "$out" | grep -q -- ' -> '; then
         _assert_fail "check must not print ASCII arrows: $out"
     fi
@@ -2644,8 +2644,8 @@ test_check_reports_each_forward_of_a_multi_forward_tunnel() {
     _tunnel_check_set_http 200
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 0)"
-    assert_contains "127.0.0.1:8443 → remote 443" "$out"
-    assert_contains "127.0.0.1:8444 → remote 8080" "$out"
+    assert_contains "127.0.0.1:8443 -> remote 443" "$out"
+    assert_contains "127.0.0.1:8444 -> remote 8080" "$out"
     assert_eq 2 "$(printf '%s\n' "$out" | grep -c '    http:')" "every forward gets its own HTTP probe"
 }
 

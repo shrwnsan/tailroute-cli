@@ -315,3 +315,58 @@ test_ui_helpers_re_sourcing_is_gated() {
     source "$SCRIPT_DIR/../bin/lib-ui.sh" || rc=$?
     assert_eq 0 "$rc" "re-sourcing lib-ui.sh must be a no-op, not an error"
 }
+
+# -----------------------------------------------------------------------------
+# ui_bad — failure verdict on STDOUT (check's payload stream)
+# -----------------------------------------------------------------------------
+
+test_ui_bad_writes_to_stdout() {
+    local out err
+    out="$(NO_COLOR=1 ui_bad "hosts → listener — —")"
+    err="$(NO_COLOR=1 ui_bad "hosts → listener — —" 2>&1 >/dev/null)"
+    assert_eq "✗ hosts → listener — —" "$out"
+    assert_eq "" "$err" "the verdict must never ride stderr"
+}
+
+test_ui_bad_colored_with_clicolor_force() {
+    local out esc
+    esc=$(printf '\033')
+    out="$(CLICOLOR_FORCE=1 ui_bad "hosts — — —")"
+    assert_contains "$esc[31m✗$esc[0m hosts — — —" "$out"
+}
+
+# -----------------------------------------------------------------------------
+# ui_url / _ui_url_inline — newline contract and mid-line composition
+# -----------------------------------------------------------------------------
+
+test_ui_url_appends_newline_inline_does_not() {
+    local plain inline
+    plain="$(NO_COLOR=1 ui_url "https://x.test:8443")"
+    assert_eq "https://x.test:8443" "$plain"
+    # command substitution strips trailing newlines, so compare via od:
+    inline="$(NO_COLOR=1 _ui_url_inline "https://x.test:8443" | od -c | head -1)"
+    assert_contains "h   t   t   p   s" "$inline"
+    if NO_COLOR=1 _ui_url_inline "https://x.test:8443" | od -c | grep -q '\\n'; then
+        _assert_fail "_ui_url_inline must not append a newline"
+    fi
+}
+
+test_ui_url_inline_styled_when_forced() {
+    local out esc
+    esc=$(printf '\033')
+    out="$(CLICOLOR_FORCE=1 _ui_url_inline "https://x.test:8443")"
+    assert_contains "$esc[4mhttps://x.test:8443$esc[0m" "$out"
+}
+
+# The add payoff and tunnel open must call ui_url directly (no $( ) capture):
+# a command substitution's fd 1 is a pipe, so a captured ui_url can never be
+# styled on a real TTY. Guard the no-capture rule textually.
+test_payoff_and_open_call_ui_url_directly() {
+    local lib="$SCRIPT_DIR/../bin/lib-tunnel.sh"
+    if grep -q 'linked="\$(ui_url' "$lib"; then
+        _assert_fail "add payoff captures ui_url via command substitution — styling dies on a TTY"
+    fi
+    if grep -q 'Opened \$(ui_url' "$lib"; then
+        _assert_fail "tunnel open captures ui_url via command substitution"
+    fi
+}
