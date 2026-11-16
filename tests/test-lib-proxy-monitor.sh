@@ -48,7 +48,7 @@ pm_setup() {
     printf '#!/bin/sh\nexit 0\n' > "$TR_HOME/.tailroute/bin/tailroute-proxy"
     chmod +x "$TR_HOME/.tailroute/bin/tailroute-proxy"
     _PM_STATE=""
-    _PM_CRASHES=()
+    _PM_CRASHES=""
     _PM_NEXT_ATTEMPT=0
     _PM_PID=""
     PM_CLOCK=1000
@@ -81,6 +81,13 @@ pm_remove_pid() {
 pm_state() {
     _pm_resolve_target >/dev/null 2>&1 || return 1
     "$PM_CAT_CMD" "$(_pm_state_file)" 2>/dev/null | grep '^state=' | cut -d= -f2
+}
+pm_count_crashes() {
+    local n=0 ts
+    for ts in $_PM_CRASHES; do
+        n=$((n + 1))
+    done
+    printf '%s' "$n"
 }
 
 # =============================================================================
@@ -138,7 +145,7 @@ test_tick_restarts_dead_pid() {
     [[ ${#PM_SPAWN_CALLS[@]} -eq 1 ]] || return 1
     [[ "${PM_SPAWN_CALLS[0]}" == "testuser|$TR_HOME|"* ]] || return 1
     [[ "$(pm_state)" == "restarting" ]] || return 1
-    [[ ${#_PM_CRASHES[@]} -eq 1 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 1 ]] || return 1
     pm_teardown
 }
 
@@ -149,7 +156,7 @@ test_tick_restarts_dead_pid() {
 test_tick_backoff_defers_second_restart() {
     pm_setup
     _PM_STATE="running"
-    _PM_CRASHES=(990)          # one crash 10s ago
+    _PM_CRASHES="990"          # one crash 10s ago
     _PM_NEXT_ATTEMPT=1100      # 5s backoff → attempt allowed at 1005? no: 1000<1100 → gated
     pm_write_pid 999999999
     proxy_monitor_tick
@@ -161,7 +168,7 @@ test_tick_backoff_defers_second_restart() {
 test_tick_backoff_elapses_then_restarts() {
     pm_setup
     _PM_STATE="restarting"
-    _PM_CRASHES=(990)
+    _PM_CRASHES="990"
     _PM_NEXT_ATTEMPT=995       # gate elapsed (clock 1000)
     pm_write_pid 999999999
     proxy_monitor_tick
@@ -178,7 +185,7 @@ test_tick_backoff_elapses_then_restarts() {
 test_tick_disables_after_three_restarts() {
     pm_setup
     _PM_STATE="restarting"
-    _PM_CRASHES=(990 995 998)  # three crashes, all inside 60s of clock 1000
+    _PM_CRASHES="990 995 998"  # three crashes, all inside 60s of clock 1000
     pm_write_pid 999999999
     proxy_monitor_tick
     [[ ${#PM_SPAWN_CALLS[@]} -eq 0 ]] || return 1
@@ -189,7 +196,7 @@ test_tick_disables_after_three_restarts() {
 test_tick_disabled_stays_disabled() {
     pm_setup
     _PM_STATE="disabled"
-    _PM_CRASHES=(995 998 999)
+    _PM_CRASHES="995 998 999"
     _pm_write_state   # persisted from the transition tick that disabled it
     pm_write_pid 999999999
     proxy_monitor_tick
@@ -201,12 +208,12 @@ test_tick_disabled_stays_disabled() {
 test_tick_window_prunes_old_crashes() {
     pm_setup
     _PM_STATE="restarting"
-    _PM_CRASHES=(900 905 910 980)  # three stale (>60s), one fresh
+    _PM_CRASHES="900 905 910 980"  # three stale (>60s), one fresh
     pm_write_pid 999999999
     proxy_monitor_tick
     # Only the fresh crash counts → restart allowed
     [[ ${#PM_SPAWN_CALLS[@]} -eq 1 ]] || return 1
-    [[ ${#_PM_CRASHES[@]} -eq 2 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 2 ]] || return 1
     pm_teardown
 }
 
@@ -217,7 +224,7 @@ test_tick_window_prunes_old_crashes() {
 test_tick_recovers_after_restart() {
     pm_setup
     _PM_STATE="restarting"
-    _PM_CRASHES=(990)
+    _PM_CRASHES="990"
     pm_write_pid "$$"          # restart landed, process alive
     proxy_monitor_tick
     [[ ${#PM_SPAWN_CALLS[@]} -eq 0 ]] || return 1
@@ -225,7 +232,7 @@ test_tick_recovers_after_restart() {
     # Sustained health past the window prunes crashes
     PM_CLOCK=1100
     proxy_monitor_tick
-    [[ ${#_PM_CRASHES[@]} -eq 0 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 0 ]] || return 1
     pm_teardown
 }
 
@@ -236,12 +243,12 @@ test_tick_recovers_after_restart() {
 test_reset_rearms_disabled_monitor() {
     pm_setup
     _PM_STATE="disabled"
-    _PM_CRASHES=(995 998 999)
+    _PM_CRASHES="995 998 999"
     _pm_write_state
     [[ -f "$(_pm_state_file)" ]] || return 1
     proxy_monitor_reset
     [[ -z "$_PM_STATE" ]] || return 1
-    [[ ${#_PM_CRASHES[@]} -eq 0 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 0 ]] || return 1
     [[ ! -f "$(_pm_state_file)" ]] || return 1
     # after reset with no pid file, the monitor stays hands-off
     proxy_monitor_tick
@@ -250,7 +257,7 @@ test_reset_rearms_disabled_monitor() {
     pm_write_pid 999999999
     proxy_monitor_tick
     [[ ${#PM_SPAWN_CALLS[@]} -eq 1 ]] || return 1
-    [[ "${#_PM_CRASHES[@]}" -eq 1 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 1 ]] || return 1
     pm_teardown
 }
 
@@ -295,5 +302,23 @@ test_write_state_skips_chown_unprivileged() {
     _pm_write_state
     [[ -f "$(_pm_state_file)" ]] || return 1
     grep -q '^updated=' "$(_pm_state_file)" || return 1
+    pm_teardown
+}
+
+# =============================================================================
+# regression (live UAT 2026-11-16): /bin/bash 3.2 + set -u aborts the tick
+# with "unbound variable" when the crash window is empty (empty array
+# literal unsets the variable in 3.2). The scalar string must survive a
+# first-crash tick.
+# =============================================================================
+
+test_first_crash_with_empty_window_restarts() {
+    pm_setup
+    _PM_STATE="running"
+    _PM_CRASHES=""
+    pm_write_pid 999999999
+    proxy_monitor_tick
+    [[ ${#PM_SPAWN_CALLS[@]} -eq 1 ]] || return 1
+    [[ "$(pm_count_crashes)" -eq 1 ]] || return 1
     pm_teardown
 }

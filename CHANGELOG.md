@@ -4,6 +4,11 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-11-16
+
+### Fixed
+- **The proxy monitor survives macOS bash.** The daemon runs `/bin/bash` 3.2, where an empty array literal (`_ARR=()`) unsets the variable and any later `"${_ARR[@]}"` under `set -u` aborts with "unbound variable" — found in live use: the first crash of the proxy killed the monitor tick before any restart could happen. The crash window is now a space-separated scalar string, every expansion is total under `set -u`, and a regression test drives the first-crash-with-empty-window path. The monitor test suite passes under both `/bin/bash` 3.2 and Homebrew bash.
+
 ## [0.9.6] - 2026-11-16
 
 ### Added
