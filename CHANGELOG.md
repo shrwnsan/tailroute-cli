@@ -4,6 +4,8 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-16
+
 ### Added
 - **The daemon restarts a crashed proxy.** `tailroute-proxy` ran as a bare background process with only a PID file; a crash left tunnel access silently broken until someone ran `proxy status` by hand. The daemon now runs a 30-second health monitor (T-001, parameters ratified by the owner 2026-11-13): a dead proxy restarts with exponential backoff (5s → 10s → 20s), and more than 3 restarts in any 60-second window disables auto-restart and surfaces the state instead of looping forever. The monitor never starts a proxy the user did not start (a missing PID file means "stopped on purpose") and never deletes the binary — a disabled monitor is re-armed by a manual `tailroute proxy start`. Every restart is logged with timestamps, `tailroute status` and `proxy status` show the monitor state (healthy / restarting / disabled), and the monitor does not take the reconcile lock, so DNS reconciliation never waits on proxy health or vice versa.
 
