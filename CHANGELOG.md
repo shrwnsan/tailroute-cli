@@ -2,7 +2,7 @@
 
 All notable changes to tailroute CLI are documented in this file.
 
-## [Unreleased]
+## [0.9.8] - 2026-11-17
 
 ### Added
 - **One TTY-aware presentation layer for the whole CLI (`bin/lib-ui.sh`)** — every helper prints through a single gate (`TAILROUTE_COLOR=never/always` wins, then `NO_COLOR`, then `CLICOLOR_FORCE`/`FORCE_COLOR`, then `TERM=dumb`, then "is this file descriptor a TTY"), so color shows up exactly where a human is watching and never in pipes, logs, or CI output. Printers: `ui_ok` (green ✓), `ui_warn` (yellow `WARN:` token on stderr), `ui_fail` (red ✗ on stderr), `ui_bad` (red ✗ **on stdout** — for lines that are a command's payload, like `tunnel check`'s verdicts), `ui_dim`, and `ui_url` (underline only, plus an OSC 8 hyperlink in terminals that advertise support — iTerm, VS Code, Ghostty, WezTerm via `TERM_PROGRAM`, overridable with `TAILROUTE_LINKS=never/always`). Every variant keeps the plain text byte-identical, so piped consumers see the same words they always have.

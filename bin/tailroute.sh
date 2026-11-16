@@ -21,7 +21,7 @@ set -euo pipefail
 export HOME
 
 # Version
-readonly VERSION="0.9.7"
+readonly VERSION="0.9.8"
 
 # Absolute path to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
