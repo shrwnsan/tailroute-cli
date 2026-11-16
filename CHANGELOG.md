@@ -4,6 +4,17 @@ All notable changes to tailroute CLI are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **One TTY-aware presentation layer for the whole CLI (`bin/lib-ui.sh`)** — every helper prints through a single gate (`TAILROUTE_COLOR=never/always` wins, then `NO_COLOR`, then `CLICOLOR_FORCE`/`FORCE_COLOR`, then `TERM=dumb`, then "is this file descriptor a TTY"), so color shows up exactly where a human is watching and never in pipes, logs, or CI output. Printers: `ui_ok` (green ✓), `ui_warn` (yellow `WARN:` token on stderr), `ui_fail` (red ✗ on stderr), `ui_bad` (red ✗ **on stdout** — for lines that are a command's payload, like `tunnel check`'s verdicts), `ui_dim`, and `ui_url` (underline only, plus an OSC 8 hyperlink in terminals that advertise support — iTerm, VS Code, Ghostty, WezTerm via `TERM_PROGRAM`, overridable with `TAILROUTE_LINKS=never/always`). Every variant keeps the plain text byte-identical, so piped consumers see the same words they always have.
+- **`tunnel add` narrates the transaction as a ✓ ledger** — the old `Tunnel added:` block becomes `✓ ssh auth ok · peer reachable` → `✓ serve accepting on 443 · TLS cert valid` → `✓ /etc/hosts entry · registry updated` → the URL as the payoff line, then a `next:` hint naming `tunnel check` and `tunnel open`. On failure the same grammar narrates the unwind (`✗ …` → `→ rolling back…` → `✓ rolled back · job unloaded`), replacing `ROLLED BACK:` / `MANUAL REVERT NEEDED:` — which are now absent from the codebase.
+- **`tunnel check` shows a per-forward chain verdict** — `✓ hosts → listener → TLS → HTTP 200` on top of the existing detail rows, with `—` marking each layer a breakage skipped. A failure adds a what/why/next block: the layer named in plain English, the reason, and the exact repair (`restart`, `remove && add`, `tunnel drift`, or "fix on the peer" for 5xx) plus the re-run command.
+
+### Changed
+- **A fresh `tunnel add` verifies TLS before the system-wide writes.** The transaction order is now plist → job → TLS verify → `/etc/hosts` → registry commit, so a certificate mismatch rolls back only the launchd job and its plist — it can no longer strand a hosts mapping or a registry entry that only `MANUAL REVERT` could fix. (Incremental forwards keep TLS-last deliberately: that path never touches hosts and restores the previous job.)
+- **Warnings and errors say `WARN:`/`✗` and live on stderr** — the ⚠/WARNING variants are normalized, and ten install/uninstall/proxy messages moved from stdout to stderr where redirection users expect them. Scripts that captured them from stdout will now find them on stderr; `--json` outputs, registry rows, and exit codes are untouched.
+- **Existing line formats are kept byte-identical downstream** — ` -> remote ` detail rows, `hosts: … -> 127.0.0.1`, the `http:` row (including the `upstream reports` wording), and the final `$peer: check FAILED` headline are unchanged on purpose: tools that parse `tunnel check` and `tunnel status` output keep working. The new ✓/✗/→ vocabulary appears only on the new ledger, chain, and verdict lines.
+- Tests: 625 → 667 (ui gate matrix: TAILROUTE_COLOR/NO_COLOR/CLICOLOR_FORCE/TERM=dumb; per-printer stream and color assertions incl. ui_bad on stdout; `_ui_url_inline` newline contract; a textual guard that the add payoff and `tunnel open` call `ui_url` directly — a `$( )` capture would silently strip styling on a real TTY; ledger/chain/verdict coverage in the tunnel suites; row-format assertions pinned to the byte-identical contract).
+
 ## [0.9.7] - 2026-11-16
 
 ### Fixed

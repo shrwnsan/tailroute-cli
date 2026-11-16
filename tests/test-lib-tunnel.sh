@@ -2397,7 +2397,7 @@ _tunnel_check_inert() { # <peer> <expected-rc>
     printf '%s\n' "$out"
 }
 
-test_check_mapping_row_uses_unicode_arrows_and_underlined_url() {
+test_check_rows_stay_byte_identical_while_chain_lines_carry_arrows() {
     _tunnel_setup_sandbox
     _t439_register_prime "8443:443"
     _tunnel_check_add_hosts_mapping
@@ -2405,12 +2405,12 @@ test_check_mapping_row_uses_unicode_arrows_and_underlined_url() {
     _tunnel_check_set_http 200
     local out
     out="$(_tunnel_check_inert "$FX_PEER" 0)"
-    # data positions carry → arrows; the URL rides through ui_url
+    # Rows are byte-identical to the pre-ui grammar (downstream parsers —
+    # the menu-bar app counts paths via the literal " -> remote " token);
+    # the → arrows live only on the NEW chain-verdict lines.
     assert_contains "127.0.0.1:8443 -> remote 443   https://$FX_HOSTNAME:8443" "$out"
     assert_contains "hosts:    $FX_HOSTNAME -> 127.0.0.1" "$out"
-    if printf '%s' "$out" | grep -q -- ' -> '; then
-        _assert_fail "check must not print ASCII arrows: $out"
-    fi
+    assert_contains "✓ hosts → listener → TLS → HTTP 200" "$out"
 }
 
 test_check_unregistered_peer_errors_like_status() {
