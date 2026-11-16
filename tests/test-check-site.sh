@@ -121,7 +121,6 @@ write_good_page() {
 <nav><a href="#faq">FAQ</a></nav>
 <main id="top">
 <section id="features"><h2>How it works</h2></section>
-<section id="proof"></section>
 <section id="core"></section>
 <section id="limits"></section>
 <section id="faq">
@@ -136,6 +135,42 @@ write_good_page() {
 HTML
     add_region_markers "$dir"
     write_tokens_css "$dir"
+    write_docs_page "$dir"
+}
+
+# A minimal manual page that passes every default check: the CLI name in the
+# title and og:title, a softwareVersion for the version injector, the release
+# chart regions for the chart injector, and the version-badge span.
+write_docs_page() {
+    local dir="$1"
+    mkdir -p "$dir/docs"
+    cat > "$dir/docs/index.html" <<'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>tailroute-cli manual</title>
+<meta property="og:title" content="tailroute-cli manual">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"tailroute-cli","softwareVersion":"0.8.17"}
+</script>
+</head>
+<body>
+<main>
+<span data-metric="cli-version">v0.8.17</span>
+<div class="chart-card">
+  <div class="chart-head"><span class="chart-title">Tagged releases, cumulative</span>
+    <span class="chart-hi">37 of 39 releases shipped since Aug 24</span></div>
+  <svg viewBox="0 -14 728 260" role="img" aria-label="Cumulative tagged releases, March to November 2026"><line class="axis" x1="46" y1="214" x2="702" y2="214"/>
+  </svg>
+  <script type="application/json" id="chart-data">{"vb":[0,-14,728,260],"pts":[[46,208.8,"2026-03-27",1]]}</script>
+  <details class="data"><summary>View data table</summary><table><tbody><tr><td>2026-03-27</td><td>1</td></tr></tbody></table>
+  </details>
+</div>
+</main>
+</body>
+</html>
+HTML
 }
 
 # The good page plus everything --strict wants: the install anchor, a clean
@@ -182,7 +217,7 @@ open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
 PY
 }
 
-REGION_NAMES=(assets meta nav hero features proof core limits faq support finale footer)
+REGION_NAMES=(assets meta nav hero features core limits faq support finale footer)
 
 region_marker_lines() {
     local name
@@ -429,15 +464,8 @@ test_anchors_resolves_docs_fragment() {
     local dir
     dir=$(make_fixture)
     write_good_page "$dir"
-    mkdir -p "$dir/docs"
-    cat > "$dir/docs/index.html" <<'HTML'
-<!DOCTYPE html>
-<html lang="en">
-<head><title>tailroute-cli manual</title>
-<meta property="og:title" content="tailroute-cli manual"></head>
-<body><main><h2 id="diagnostics">Diagnostics</h2></main></body>
-</html>
-HTML
+    write_docs_page "$dir"
+    replace_once "$dir/docs" '</main>' '<h2 id="diagnostics">Diagnostics</h2></main>' 
     replace_once "$dir" '</body>' '<a href="docs/#diagnostics">Diagnostics</a></body>'
     run_checker "$dir"
     assert_eq "0" "$CHECK_RC"
@@ -448,15 +476,8 @@ test_anchors_flags_unresolvable_docs_fragment() {
     local dir
     dir=$(make_fixture)
     write_good_page "$dir"
-    mkdir -p "$dir/docs"
-    cat > "$dir/docs/index.html" <<'HTML'
-<!DOCTYPE html>
-<html lang="en">
-<head><title>tailroute-cli manual</title>
-<meta property="og:title" content="tailroute-cli manual"></head>
-<body><main></main></body>
-</html>
-HTML
+    write_docs_page "$dir"
+    replace_once "$dir/docs/index.html" '<span data-metric="cli-version">v0.8.17</span>' '' 
     replace_once "$dir" '</body>' '<a href="docs/#diagnostics">Diagnostics</a></body>'
     run_checker "$dir"
     assert_eq "1" "$CHECK_RC"
@@ -699,9 +720,9 @@ test_regions_flags_wrong_order() {
     local dir
     dir=$(make_fixture)
     write_region_page "$dir"
-    replace_once "$dir" '<!-- region:proof owner:lead --><!-- /region:proof -->
-<!-- region:core owner:lead --><!-- /region:core -->' '<!-- region:core owner:lead --><!-- /region:core -->
-<!-- region:proof owner:lead --><!-- /region:proof -->'
+    replace_once "$dir" '<!-- region:core owner:lead --><!-- /region:core -->
+<!-- region:limits owner:lead --><!-- /region:limits -->' '<!-- region:limits owner:lead --><!-- /region:limits -->
+<!-- region:core owner:lead --><!-- /region:core -->'
     run_checker_regions_on "$dir"
     assert_eq "1" "$CHECK_RC"
     assert_contains "FAIL regions" "$CHECK_OUT"

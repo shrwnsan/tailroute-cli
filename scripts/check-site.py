@@ -73,7 +73,7 @@ STRICT_BANNED_PHRASES = (
 )
 
 # Anchor ids the landing must keep resolving (inbound links depend on them).
-REQUIRED_IDS = ("top", "features", "proof", "core", "limits", "faq", "support")
+REQUIRED_IDS = ("top", "features", "core", "limits", "faq", "support")
 STRICT_REQUIRED_IDS = ("install",)
 
 # Entrance-animation classes; content must be visible without them.
@@ -138,7 +138,6 @@ EXPECTED_REGIONS = (
     "nav",
     "hero",
     "features",
-    "proof",
     "core",
     "limits",
     "faq",
@@ -461,8 +460,10 @@ def check_jsonld(pages):
     return fails
 
 
-def check_metrics(landing, strict):
-    """Replay the deploy-time metric substitutions; any helper warning fails."""
+def check_metrics(landing, docs, strict):
+    """Replay the deploy-time metric substitutions; any helper warning fails.
+    The stat card and the site-updated span are landing surfaces; the release
+    chart is a manual-page surface."""
     fails = []
     if not UPDATE_METRICS_PATH.exists():
         return [Failure(landing.rel, 1, "update-metrics.py not found next to check-site.py")]
@@ -477,12 +478,13 @@ def check_metrics(landing, strict):
         with redirect_stdout(captured):
             updated = module._replace_releases(landing.text, 1)
             updated = module._replace_version(updated, "0.0.0")
-            updated = module._replace_chart(updated, [
+            module._replace_span(updated, "updated", "x")
+            doc_updated = module._replace_version(docs.text, "0.0.0")
+            module._replace_chart(doc_updated, [
                 {"tag_name": "v0.1.0", "published_at": "2026-03-27T00:00:00Z"},
                 {"tag_name": "v0.2.0", "published_at": "2026-06-01T00:00:00Z"},
                 {"tag_name": "v0.3.0", "published_at": "2026-11-01T00:00:00Z"},
             ])
-            module._replace_span(updated, "updated", "x")
     except Exception as exc:
         fails.append(Failure(landing.rel, 1, f"metric helpers crashed: {exc}"))
     for line in captured.getvalue().splitlines():
@@ -974,7 +976,8 @@ def main(argv=None):
         text = path.read_text(encoding="utf-8")
         pages.append(Page(path.relative_to(root).as_posix(), text, parse_html(text)))
     landing = next((page for page in pages if page.rel == "index.html"), None)
-    if landing is None:
+    docs = next((page for page in pages if page.rel == "docs/index.html"), None)
+    if landing is None or docs is None:
         print("check-site: no index.html found under the site root", file=sys.stderr)
         return 2
 
@@ -1005,7 +1008,7 @@ def main(argv=None):
 
     checks = [
         ("third-party", lambda: check_third_party(pages, all_css)),
-        ("metrics", lambda: check_metrics(landing, strict=args.strict)),
+        ("metrics", lambda: check_metrics(landing, docs, strict=args.strict)),
         ("jsonld", lambda: check_jsonld(pages)),
         ("faq-sync", lambda: check_faq_sync(pages)),
         ("anchors", lambda: check_anchors(pages, strict=args.strict)),
