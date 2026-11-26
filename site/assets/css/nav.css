@@ -31,6 +31,7 @@ nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webki
   .nav-panel a:hover { color: var(--text); background: var(--surface-2); }
   .gh-btn:hover { color: var(--text); background: var(--surface-2); }
   .sp-link:hover { color: var(--mesh-ink); background: var(--mesh); border-color: var(--mesh); }
+  .nav-cta:hover { background: var(--text-dim); }
   .nav-menu[open] .nav-panel a:hover { background: none; color: var(--mesh); }
 }
 @media (max-width: 1000px) {
@@ -47,7 +48,8 @@ nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webki
 .gh-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; color: var(--text-dim); text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
 .gh-btn svg { width: 17px; height: 17px; fill: currentColor; }
 .sp-link { font-family: var(--font-mono); font-size: var(--step--1); color: var(--mesh); text-decoration: none; border: 1px solid var(--mesh-line); background: var(--mesh-soft); border-radius: 999px; padding: 6px 14px; transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
-.brand, .stage-pill, .nav-mid a, .gh-btn, .sp-link { white-space: nowrap; }
+.nav-cta { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 600; color: var(--ground); background: var(--text); border-radius: 999px; padding: 7px 14px; text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
+.brand, .stage-pill, .nav-mid a, .gh-btn, .sp-link, .nav-cta { white-space: nowrap; }
 
 @media (max-width: 1000px) {
   .nav-mid { display: none; }
@@ -56,4 +58,14 @@ nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webki
 
 @media (max-width: 620px) {
   .menu-bar { flex-wrap: wrap; }
+  /* the Install button stays in the bar next to the burger, so the bar tightens
+     before anything hides */
+  .nav-in { padding: 13px 20px; gap: 12px; }
+  .nav-right { gap: 8px; }
+}
+
+@media (max-width: 360px) {
+  .nav-in { padding: 13px 16px; gap: 10px; }
+  .nav-right { gap: 6px; }
+  .stage-pill { display: none; }
 }
