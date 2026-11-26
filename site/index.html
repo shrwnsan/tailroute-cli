@@ -577,24 +577,50 @@
 </main>
 
 <!-- region:finale owner:finale -->
-<!-- FINALE CTA -->
-<section class="finale">
+  <!-- FINAL INSTALL -->
+<section id="install" class="finale">
   <div class="wrap">
-    <h2 class="">Two minutes. Then never<br>think about it again.</h2>
-    <p class="fin-sub">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
-    <div class="fin-installs">
-      <div class="fin-chip">
-        <span class="flabel">Menu bar app</span>
-        <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
-        <button type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-      <div class="fin-chip">
-        <span class="flabel">CLI daemon</span>
-        <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
-        <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-    </div>
-    <p class="fin-micro">no account · no telemetry · uninstall restores everything</p>
+    <h2>Install it once. It takes it from there.</h2>
+    <p class="lede">Both commands install the same engine. Connect your VPN and Tailscale the way you always do&mdash;there is no daily usage, and that&rsquo;s the whole point.</p>
+    <ol class="fin-steps">
+      <li>
+        <h3>Install</h3>
+        <div class="install" data-install id="final-install">
+          <div class="install-tabs" role="tablist" aria-label="Install">
+            <button class="install-tab" type="button" role="tab" id="final-tab-cli" aria-controls="final-panel-cli" aria-selected="true">CLI daemon</button>
+            <button class="install-tab" type="button" role="tab" id="final-tab-app" aria-controls="final-panel-app" aria-selected="false" tabindex="-1">Menu bar app</button>
+          </div>
+          <div class="install-panel" role="tabpanel" id="final-panel-cli" aria-labelledby="final-tab-cli">
+            <p class="install-label">CLI daemon</p>
+            <code class="install-cmd"><span class="install-ps1">$</span><span id="final-cmd-cli">brew install shrwnsan/tap/tailroute-cli</span></code>
+            <span class="install-note">The full engine, Apache-2.0, as a root launchd daemon.</span>
+            <p class="install-activate">Then run <code>sudo tailroute install</code>&mdash;check <code>tailroute status</code> any time.</p>
+            <button class="copy" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-target="final-cmd-cli" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+          </div>
+          <div class="install-panel" role="tabpanel" id="final-panel-app" aria-labelledby="final-tab-app" hidden>
+            <p class="install-label">Menu bar app</p>
+            <code class="install-cmd"><span class="install-ps1">$</span><span id="final-cmd-app">brew install --cask shrwnsan/tap/tailroute</span></code>
+            <span class="install-note">The same engine behind a menu bar icon. Includes the CLI.</span>
+            <span class="install-note gk-note">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in <code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code>.</span>
+            <p class="install-activate">Then open Tailroute and approve it&mdash;check <code>tailroute status</code> any time.</p>
+            <button class="copy" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-target="final-cmd-app" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+          </div>
+        </div>
+      </li>
+      <li>
+        <h3>Activate</h3>
+        <p>CLI daemon: run <code>sudo tailroute install</code>. Menu bar app: open Tailroute. <span class="gk-note">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in <code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code>.</span></p>
+      </li>
+      <li>
+        <h3>Connect</h3>
+        <p>Connect your VPN and Tailscale the way you always do.</p>
+      </li>
+      <li>
+        <h3>Verify</h3>
+        <p>Run <code>tailroute status</code> and watch the daemon make its first correct call: while your VPN is connected, MagicDNS state reads disabled (as set by daemon).</p>
+      </li>
+    </ol>
+    <p class="fin-after">Changed your mind? <code>sudo tailroute uninstall</code> restores MagicDNS and removes everything. The full manual: <a href="docs/#diagnostics">diagnostics and logs</a>.</p>
   </div>
 </section>
 <!-- /region:finale -->
