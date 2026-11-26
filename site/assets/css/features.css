@@ -34,7 +34,7 @@
 /* the problem side is plain body type on the shared scale: situation line,
    then the short line it earns */
 .features .prob p { color: var(--text-dim); font-size: var(--step-1); margin-bottom: 8px; }
-.features .prob h4 { font-size: var(--step-1); font-weight: 600; color: var(--text); }
+.features .prob-head { font-size: var(--step-1); font-weight: 600; color: var(--text); }
 .features .resp { padding: 24px 26px; }
 .features .resp h3 { margin-bottom: 8px; }
 .features .resp p { color: var(--text-dim); font-size: 0.9em; }

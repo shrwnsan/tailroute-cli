@@ -267,7 +267,7 @@
       <p class="states-note">If the state is ambiguous — two VPNs active at once, say — tailroute logs a warning and changes nothing. <b>When in doubt, do nothing.</b></p>
 
       <div class="probband">
-        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
+        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><p class="prob-head">Every peer times out.</p></div>
         <div class="resp"><h3>SOCKS5 mesh proxy</h3>
           <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
           the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
@@ -275,7 +275,7 @@
       </div>
 
       <div class="probband">
-        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
+        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><p class="prob-head">Cert warnings, extensions, luck.</p></div>
         <div class="resp"><h3>Browser tunnels</h3>
           <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
           <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
@@ -284,7 +284,7 @@
       </div>
 
       <div class="probband">
-        <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+        <div class="prob"><p>When it asks for root</p><p class="prob-head">Why trust a DNS-flipping daemon?</p></div>
         <div class="resp"><h3>Self-verifying install</h3>
           <p><code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon
           checks it before loading any code and refuses to start if anything changed. Strict validation,
