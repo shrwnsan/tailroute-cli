@@ -393,6 +393,110 @@ html:not(.js) #hero-install .install-activate { display: block; margin-top: 8px;
   .hcard:hover, .hcard:focus-within { transform: none; }
   .hcard, .hcard .dot, .hcard .act { transition: none; }
 }
+/* ============ HERO ROUTE DIAGRAM ============ */
+/* The hero's route diagram replaces the two mock cards. The stylesheet
+   draws the final frame only: amber (--vpn-mark) = the Mac to VPN to
+   internet route, green (--mesh-mark) = the Mac to proxy to peers route.
+   Every coloured path also carries words, so the stroke pair is never
+   the only signal. The draw-in keyframes live at the bottom of this
+   file behind html.js .route.is-playing and the reduced-motion query. */
+
+.route { font-size: var(--step--1); }
+
+/* one card, two layouts: the wide figure serves 620px and up, the
+   narrow figure takes over below it; equal specificity, later rule wins */
+.route-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 18px 44px color-mix(in srgb, black 30%, transparent); }
+.route svg { display: block; width: 100%; height: auto; }
+svg.fig-wide { aspect-ratio: 390 / 290; }
+svg.fig-narrow { display: none; aspect-ratio: 330 / 330; }
+@media (max-width: 620px) {
+  svg.fig-wide { display: none; }
+  svg.fig-narrow { display: block; }
+}
+/* single-column hero: the visual keeps the mock cards' width cap */
+@media (max-width: 1000px) {
+  .route { max-width: 560px; }
+}
+
+/* nodes and their word labels */
+.route-node rect { fill: var(--surface-2); stroke: var(--line-2); stroke-width: 1.25; }
+.route-name { font-family: var(--font-mono); font-size: 1.1em; font-weight: 600; fill: var(--text); }
+.route-lab { font-family: var(--font-mono); font-size: 1em; fill: var(--text-dim); }
+
+/* the two routes plus the direct route that breaks */
+.route-path { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 1; }
+.route-path.vpn { stroke: var(--vpn-mark); }
+.route-path.mesh { stroke: var(--mesh-mark); }
+.route-direct { fill: none; stroke: var(--mesh-mark); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.012 0.026; opacity: 0.4; }
+.route-x { fill: none; stroke: var(--text-faint); stroke-width: 2.25; stroke-linecap: round; }
+.tip-vpn { fill: var(--vpn-mark); }
+.tip-mesh { fill: var(--mesh-mark); }
+
+/* standing caption under the figure */
+.route-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.route-final { margin: 0; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); }
+
+/* ---- the one orchestrated motion moment ---- */
+
+/* caption rail: one reserved line under the card; the step captions
+   crossfade inside it during the run. The sequence is aria-hidden —
+   the svg <desc> carries the meaning for assistive tech. */
+.route-rail { position: relative; height: 1.6em; margin-top: 10px; }
+.route-cap { position: absolute; inset: 0; margin: 0; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); opacity: 0; }
+
+/* Replay is a JS affordance: hidden without JavaScript and under
+   reduced motion — those visitors get the final frame directly. */
+.route-replay { display: none; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); background: none; border: 1px solid var(--line-2); border-radius: 8px; padding: 3px 12px; cursor: pointer; transition: color var(--dur-press) var(--ease-out), border-color var(--dur-press) var(--ease-out); }
+html.js .route-replay { display: inline-block; }
+.route-replay:hover { color: var(--text); border-color: var(--mesh); }
+@media (prefers-reduced-motion: reduce) {
+  html.js .route-replay { display: none; }
+  .route-replay { transition: none; }
+}
+
+/* The 2.4s storyboard, told with stroke-dashoffset and opacity only.
+   Every path carries pathLength="1", so dashoffset 1 is fully hidden
+   and 0 fully drawn. The last keyframe of each animation equals the
+   static default above, so the final frame is the resting page. */
+@keyframes route-vpn-1 { 0%, 12.5% { stroke-dashoffset: 1; } 21%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-vpn-2 { 0%, 21% { stroke-dashoffset: 1; } 29.17%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-mesh-1 { 0%, 54.17% { stroke-dashoffset: 1; } 66%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-mesh-2 { 0%, 66% { stroke-dashoffset: 1; } 79.17%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-direct-fade { 0%, 37.5% { opacity: 0.9; } 45.83%, 100% { opacity: 0.4; } }
+@keyframes route-x-in { 0%, 37.5% { opacity: 0; } 45.83%, 100% { opacity: 1; } }
+@keyframes route-lab-vpn-in { 0%, 12.5% { opacity: 0; } 19%, 100% { opacity: 1; } }
+@keyframes route-lab-int-in { 0%, 23% { opacity: 0; } 29.5%, 100% { opacity: 1; } }
+@keyframes route-lab-proxy-in { 0%, 56% { opacity: 0; } 63%, 100% { opacity: 1; } }
+@keyframes route-lab-peers-in { 0%, 71% { opacity: 0; } 77.5%, 100% { opacity: 1; } }
+@keyframes route-tip-v1-in { 0%, 17% { opacity: 0; } 21.5%, 100% { opacity: 1; } }
+@keyframes route-tip-v2-in { 0%, 25% { opacity: 0; } 29.5%, 100% { opacity: 1; } }
+@keyframes route-tip-m1-in { 0%, 62% { opacity: 0; } 66.5%, 100% { opacity: 1; } }
+@keyframes route-tip-m2-in { 0%, 75% { opacity: 0; } 79.5%, 100% { opacity: 1; } }
+@keyframes route-cap-1 { 0%, 12.5% { opacity: 1; } 17%, 100% { opacity: 0; } }
+@keyframes route-cap-2 { 0%, 12.5% { opacity: 0; } 17%, 37.5% { opacity: 1; } 42%, 100% { opacity: 0; } }
+@keyframes route-cap-3 { 0%, 37.5% { opacity: 0; } 42%, 58% { opacity: 1; } 64%, 100% { opacity: 0; } }
+@keyframes route-final-in { 0%, 54.17% { opacity: 0; } 70.83%, 100% { opacity: 1; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js .route.is-playing .route-vpn-1 { animation: route-vpn-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-vpn-2 { animation: route-vpn-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-mesh-1 { animation: route-mesh-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-mesh-2 { animation: route-mesh-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-direct { animation: route-direct-fade 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-x { animation: route-x-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-vpn { animation: route-lab-vpn-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-int { animation: route-lab-int-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-proxy { animation: route-lab-proxy-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-peers { animation: route-lab-peers-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-v1 { animation: route-tip-v1-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-v2 { animation: route-tip-v2-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-m1 { animation: route-tip-m1-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-m2 { animation: route-tip-m2-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-1 { animation: route-cap-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-2 { animation: route-cap-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-3 { animation: route-cap-3 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-final { animation: route-final-in 2400ms var(--ease-out) both; }
+}
 /* How it works: the three-state table and the problem-and-response rows.
    Every selector scopes to the section's .features root; every value comes
    from tokens.css. */
@@ -633,6 +737,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 }
     </style>
 <script defer src="assets/js/copy.js"></script>
+<script defer src="assets/js/diagram.js"></script>
 <script defer src="assets/js/install.js"></script>
 <script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/nav.js"></script>
@@ -767,26 +872,65 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
           </div>
         </div>
 
-        <div class="hero-visual" aria-hidden="true">
-          <div class="hcard">
-            <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
-            <div class="hcard-body">
-              <div class="hrow"><span>State</span><span class="ok">Coexisting—VPN + Tailscale</span></div>
-              <div class="hrow"><span>MagicDNS</span><span class="warnc">disabled (auto)</span></div>
-              <div class="hrow"><span>Proxy</span><span>127.0.0.1:1055 · running</span></div>
-              <div class="hrow"><span>Tunnels</span><span>2 healthy</span></div>
-            </div>
+        <div class="route">
+          <div class="route-card">
+            <svg class="fig-wide" role="img" viewBox="0 0 390 290">
+              <title>How a Mac routes traffic while a VPN and Tailscale run at the same time</title>
+              <desc>Final state of the diagram. The Mac has two live routes. Internet traffic flows from the Mac through the VPN. Tailscale peer traffic flows from the Mac through a local proxy on 127.0.0.1:1055 to peers on 100.x addresses. This is the coexistence state: MagicDNS is off and the proxy is up while the VPN is connected. When the VPN disconnects, tailroute restores MagicDNS within seconds of the route change, with a 60-second safety check for anything missed.</desc>
+              <g class="route-node"><rect x="14" y="122" width="72" height="38" rx="9"/><text class="route-name" x="50" y="146" text-anchor="middle">Mac</text></g>
+              <g class="route-node"><rect x="138" y="22" width="62" height="38" rx="9"/><text class="route-name" x="169" y="46" text-anchor="middle">VPN</text></g>
+              <g class="route-node"><rect x="258" y="22" width="118" height="38" rx="9"/><text class="route-name" x="317" y="46" text-anchor="middle">internet</text></g>
+              <g class="route-node"><rect x="134" y="190" width="82" height="38" rx="9"/><text class="route-name" x="175" y="214" text-anchor="middle">proxy</text></g>
+              <g class="route-node"><rect x="258" y="190" width="96" height="38" rx="9"/><text class="route-name" x="306" y="214" text-anchor="middle">peers</text></g>
+              <path class="route-path vpn route-vpn-1" pathLength="1" d="M87,130 C121,122 125,41 133,41"/>
+              <path class="route-path vpn route-vpn-2" pathLength="1" d="M200,41 L248,41"/>
+              <path class="route-path mesh route-mesh-1" pathLength="1" d="M87,152 C121,160 125,209 133,209"/>
+              <path class="route-path mesh route-mesh-2" pathLength="1" d="M216,209 L248,209"/>
+              <path class="route-direct" d="M87,141 C180,136 250,146 294,180"/>
+              <path class="route-x" d="M290.5,176.5 L301.5,187.5 M301.5,176.5 L290.5,187.5"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(128,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(248,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(124,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(248,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <text class="route-lab route-lab-vpn" x="169" y="80" text-anchor="middle">your VPN</text>
+              <text class="route-lab route-lab-int" x="317" y="80" text-anchor="middle">the internet</text>
+              <text class="route-lab route-lab-proxy" x="175" y="250" text-anchor="middle">local proxy</text>
+              <text class="route-lab route-lab-proxy" x="175" y="266" text-anchor="middle">127.0.0.1:1055</text>
+              <text class="route-lab route-lab-peers" x="306" y="250" text-anchor="middle">your peers, 100.x</text>
+            </svg>
+            <svg class="fig-narrow" role="img" viewBox="0 0 330 330">
+              <title>How a Mac routes traffic while a VPN and Tailscale run at the same time</title>
+              <desc>Final state of the diagram. The Mac has two live routes. Internet traffic flows from the Mac through the VPN. Tailscale peer traffic flows from the Mac through a local proxy on 127.0.0.1:1055 to peers on 100.x addresses. This is the coexistence state: MagicDNS is off and the proxy is up while the VPN is connected. When the VPN disconnects, tailroute restores MagicDNS within seconds of the route change, with a 60-second safety check for anything missed.</desc>
+              <g class="route-node"><rect x="125" y="16" width="80" height="38" rx="9"/><text class="route-name" x="165" y="40" text-anchor="middle">Mac</text></g>
+              <g class="route-node"><rect x="30" y="122" width="62" height="38" rx="9"/><text class="route-name" x="61" y="146" text-anchor="middle">VPN</text></g>
+              <g class="route-node"><rect x="22" y="246" width="96" height="38" rx="9"/><text class="route-name" x="70" y="270" text-anchor="middle">internet</text></g>
+              <g class="route-node"><rect x="206" y="122" width="84" height="38" rx="9"/><text class="route-name" x="248" y="146" text-anchor="middle">proxy</text></g>
+              <g class="route-node"><rect x="208" y="246" width="84" height="38" rx="9"/><text class="route-name" x="250" y="270" text-anchor="middle">peers</text></g>
+              <path class="route-path vpn route-vpn-1" pathLength="1" d="M133,54 C96,80 61,88 61,118"/>
+              <path class="route-path vpn route-vpn-2" pathLength="1" d="M61,160 L61,242"/>
+              <path class="route-path mesh route-mesh-1" pathLength="1" d="M197,54 C234,80 248,88 248,118"/>
+              <path class="route-path mesh route-mesh-2" pathLength="1" d="M248,160 L248,242"/>
+              <path class="route-direct" d="M160,54 L160,176 C160,204 180,218 204,222"/>
+              <path class="route-x" d="M206.5,218.5 L217.5,229.5 M217.5,218.5 L206.5,229.5"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(65,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(65,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(252,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(252,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <text class="route-lab route-lab-vpn" x="61" y="180" text-anchor="middle">your VPN</text>
+              <text class="route-lab route-lab-proxy" x="248" y="180" text-anchor="middle">local proxy</text>
+              <text class="route-lab route-lab-proxy" x="248" y="196" text-anchor="middle">127.0.0.1:1055</text>
+              <text class="route-lab route-lab-int" x="70" y="304" text-anchor="middle">the internet</text>
+              <text class="route-lab route-lab-peers" x="250" y="304" text-anchor="middle">your peers, 100.x</text>
+            </svg>
           </div>
-          <div class="hcard">
-            <div class="hbar"><span class="dots"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i></span><span class="hbar-title mono">tailroute status</span></div>
-            <div class="hcard-body">
-              <p class="hcomment"># sample output</p>
-              <div class="hrow"><span>daemon</span><span class="ok">running (pid 4821)</span></div>
-              <div class="hrow"><span>tailscale</span><span>utun4 (100.101.12.40)</span></div>
-              <div class="hrow"><span>vpn</span><span>utun3 (default route)</span></div>
-              <div class="hrow"><span>magicdns</span><span class="warnc">disabled (vpn_active)</span></div>
-              <div class="hrow"><span>last check</span><span>12s ago</span></div>
-            </div>
+          <div class="route-rail" aria-hidden="true">
+            <p class="route-cap route-cap-1">Tailscale only</p>
+            <p class="route-cap route-cap-2">VPN connects</p>
+            <p class="route-cap route-cap-3">Peers time out</p>
+          </div>
+          <div class="route-foot">
+            <p class="route-final">tailroute: MagicDNS off, proxy up</p>
+            <button class="route-replay" type="button">Replay</button>
           </div>
         </div>
       </div>
