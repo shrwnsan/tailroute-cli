@@ -1,9 +1,59 @@
-.limits-note { margin-top: 14px; font-size: 13.5px; }
+/* Honest-limits section: VPN compatibility matrix and the on-the-record
+   panel. Everything is scoped under #limits; colours come from the shared
+   token file, type sizes from the scale tokens or em (nothing under 13px,
+   no uppercase). */
 
-/* ============ HONESTY ============ */
-.honest { border: 1px solid var(--vpn-line); background: var(--vpn-soft); border-radius: 16px; padding: 28px; }
-.honest h3 { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: var(--vpn); margin-bottom: 12px; }
-.honest p { color: var(--text-dim); font-size: 14.5px; max-width: 860px; }
-.honest p b { color: var(--text); }
-.honest .vpnline { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
-.honest .vpnline span { font-family: var(--font-mono); font-size: 11px; color: var(--vpn); border: 1px solid var(--vpn-line); border-radius: 999px; padding: 4px 11px; }
+#limits .matrix-frame { max-width: 860px; color: var(--text-dim); margin-bottom: 28px; }
+#limits .matrix-frame code { font-size: 0.95em; }
+
+/* ============ COMPATIBILITY MATRIX ============ */
+#limits .compat { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+#limits .compat caption { caption-side: top; text-align: left; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); padding: 0 0 12px; }
+#limits .compat code { font-size: 0.95em; white-space: normal; overflow-wrap: break-word; }
+#limits .compat thead th { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; text-align: left; color: var(--text-faint); padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+#limits .compat tbody th,
+#limits .compat tbody td { font-size: 0.875em; text-align: left; vertical-align: top; padding: 16px; border-bottom: 1px solid var(--line); }
+#limits .compat tbody tr:last-child th,
+#limits .compat tbody tr:last-child td { border-bottom: 0; }
+#limits .compat tbody th { color: var(--text); font-weight: 700; }
+#limits .compat tbody td { color: var(--text-dim); }
+#limits .compat .compat-eg { display: block; margin-top: 6px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--text-faint); }
+#limits .compat .ev { display: inline-block; font-family: var(--font-mono); font-size: var(--step--1); line-height: 1; color: var(--vpn); border: 1px solid var(--vpn-line); border-radius: 999px; padding: 5px 10px; white-space: nowrap; }
+#limits .matrix-legend { max-width: 860px; margin-top: 12px; font-size: var(--step--1); color: var(--text-faint); }
+
+/* mid widths: tighter cell padding keeps the auto-layout columns inside the card */
+@media (max-width: 1000px) {
+  #limits .compat thead th,
+  #limits .compat tbody th,
+  #limits .compat tbody td { padding: 12px 10px; }
+  #limits .compat .ev { padding: 4px 8px; }
+}
+
+/* ============ ON THE RECORD ============ */
+#limits .honest { margin-top: 44px; border: 1px solid var(--vpn-line); background: var(--vpn-soft); border-radius: 16px; padding: 28px; }
+#limits .honest h3 { color: var(--vpn); margin: 28px 0 12px; }
+#limits .honest h3:first-child { margin-top: 0; }
+#limits .honest p { color: var(--text-dim); font-size: 0.875em; max-width: 860px; }
+#limits .honest p b { color: var(--text); }
+#limits .honest code { font-size: 0.95em; }
+#limits .onrecord { padding-left: 22px; max-width: 860px; color: var(--text-dim); font-size: 0.875em; }
+#limits .onrecord li + li { margin-top: 10px; }
+#limits .onrecord li::marker { color: var(--vpn); }
+#limits .honest .limits-note { margin-top: 18px; font-size: var(--step--1); }
+
+/* ============ STACKED CARDS below 620px ============ */
+@media (max-width: 620px) {
+  #limits .compat { display: block; background: none; border: 0; border-radius: 0; }
+  #limits .compat caption { display: block; max-width: 480px; }
+  /* keep the column headers for assistive tech, out of the visual flow */
+  #limits .compat thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); }
+  #limits .compat tbody { display: block; }
+  #limits .compat tbody tr { display: block; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  #limits .compat tbody tr:last-child { margin-bottom: 0; }
+  #limits .compat tbody th,
+  #limits .compat tbody td { display: block; padding: 12px 16px; border-bottom: 0; }
+  #limits .compat tbody th { border-bottom: 1px solid var(--line); }
+  #limits .compat tbody td + td { border-top: 1px solid var(--line); }
+  #limits .compat tbody td::before { content: attr(data-l); display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--vpn); }
+  #limits .honest { padding: 20px; }
+}
