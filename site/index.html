@@ -28,6 +28,8 @@
 <!-- Plausible analytics: self-hosted, first-party (same registrable domain).
      Ingest = pulse.tailroute.app; keep it DNS-only — never CDN-proxy it. -->
 <script defer data-domain="tailroute.app" src="https://pulse.tailroute.app/js/script.js"></script>
+<!-- Cloudflare Web Analytics: cookie-free, aggregate-only. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "418fcc4385174264b82cae5eb6305a76"}'></script>
 <!-- /region:assets -->
 
 <!-- region:meta owner:meta -->
@@ -681,7 +683,7 @@
     <div class="legal">
       <p>CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc.<span data-metric="updated"> · site updated 2026-11-16</span></p>
     </div>
-    <p class="legal-quiet">This site counts pageviews with cookie-free, self-hosted Plausible. The daemon makes no external calls of any kind.</p>
+    <p class="legal-quiet">This site counts pageviews with cookie-free analytics: self-hosted Plausible and Cloudflare Web Analytics. The daemon makes no external calls of any kind.</p>
   </div>
 </footer>
 <!-- /region:footer -->
