@@ -9,7 +9,9 @@ brew install shrwnsan/tap/tailroute-cli
 sudo tailroute install
 ```
 
-That's it. The daemon runs automatically in the background.
+Then connect your VPN and Tailscale the way you always do. Run
+`tailroute status` and watch the daemon make its first call: while your VPN
+is connected, MagicDNS reads `disabled (as set by daemon)`.
 
 Menu bar app (same engine, native UI, free during early access):
 
