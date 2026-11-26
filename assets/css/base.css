@@ -16,13 +16,9 @@ h2 { font-family: var(--font-display); font-weight: 800; font-size: clamp(2rem, 
 h2 em { font-style: normal; color: var(--mesh); }
 .lede { max-width: 680px; color: var(--text-dim); font-size: 17px; margin: 16px 0 44px; }
 
-html.js .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2,0.65,0.3,1); }
-html.js .reveal.in { opacity: 1; transform: none; }
 :focus-visible { outline: 2px solid var(--mesh); outline-offset: 2px; border-radius: 4px; }
-.reveal.d1 { transition-delay: 0.07s; } .reveal.d2 { transition-delay: 0.15s; } .reveal.d3 { transition-delay: 0.23s; }
 
 @media (prefers-reduced-motion: reduce) {
-  html.js .reveal { opacity: 1; transform: none; transition: none; }
 }
 
 /* ============ BUTTONS (shared press and hover) ============ */
