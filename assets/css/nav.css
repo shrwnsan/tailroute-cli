@@ -1,19 +1,19 @@
 /* ============ NAV ============ */
-nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .nav-in { position: relative; max-width: 1180px; margin: 0 auto; padding: 13px 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.brand { font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--text); text-decoration: none; }
+.brand { font-family: var(--font-display); font-weight: 800; font-size: var(--step-1); letter-spacing: -0.02em; color: var(--text); text-decoration: none; }
 .brand i { font-style: normal; color: var(--mesh); }
 .brand-wrap { display: flex; align-items: center; gap: 10px; }
+/* the stage pill stays quiet: faint ink on the hairline, no fill */
 .stage-pill {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--vpn); background: var(--vpn-soft);
-  border: 1px solid var(--vpn-line); border-radius: 999px;
+  font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text-faint); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px;
   padding: 3px 10px; cursor: help;
 }
 .nav-mid { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 26px; }
-.nav-mid a { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-dim); text-decoration: none; }
-.nav-mid a:hover { color: var(--text); }
+.nav-mid a { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-dim); text-decoration: none; transition: color 0.15s ease; }
 .nav-right { display: flex; align-items: center; gap: 10px; }
 .nav-menu { display: none; position: relative; }
 .nav-menu summary { list-style: none; display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
@@ -24,25 +24,29 @@ nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -w
 .nav-menu[open] .i-menu { opacity: 0; }
 .nav-menu[open] .i-x { opacity: 1; color: var(--text); }
 .nav-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 220px; background: var(--surface-3); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); padding: 8px; z-index: 70; }
-.nav-panel a { display: block; padding: 12px 14px; border-radius: 9px; font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); text-decoration: none; }
-.nav-panel a:hover { color: var(--text); background: var(--surface-2); }
+.nav-panel a { display: block; padding: 12px 14px; border-radius: 9px; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-dim); text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
+@media (hover: hover) and (pointer: fine) {
+  /* hover touches colour only, never position or size */
+  .nav-mid a:hover { color: var(--text); }
+  .nav-panel a:hover { color: var(--text); background: var(--surface-2); }
+  .gh-btn:hover { color: var(--text); background: var(--surface-2); }
+  .sp-link:hover { color: var(--mesh-ink); background: var(--mesh); border-color: var(--mesh); }
+  .nav-menu[open] .nav-panel a:hover { background: none; color: var(--mesh); }
+}
 @media (max-width: 1000px) {
   /* nav's backdrop-filter makes it the containing block for fixed descendants —
      anchor the overlay to nav-in (relative, spans viewport) via absolute instead */
   .nav-menu[open] { position: static; }
-  .nav-menu[open] .nav-panel { position: absolute; top: 0; left: 0; right: 0; height: 100vh; height: 100dvh; z-index: 71; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 96px 40px 48px; min-width: 0; border: none; border-radius: 0; box-shadow: none; background: rgba(13,13,11,0.97); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-  .nav-menu[open] .nav-panel a { font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); padding: 14px 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+  .nav-menu[open] .nav-panel { position: absolute; top: 0; left: 0; right: 0; height: 100vh; height: 100dvh; z-index: 71; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 96px 40px 48px; min-width: 0; border: none; border-radius: 0; box-shadow: none; background: var(--nav-veil-strong); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .nav-menu[open] .nav-panel a { font-family: var(--font-display); font-size: var(--step-2); font-weight: 800; letter-spacing: -0.02em; color: var(--text); padding: 14px 0; border-bottom: 1px solid var(--line); border-radius: 0; }
   .nav-menu[open] .nav-panel a:last-child { border-bottom: none; }
-  .nav-menu[open] .nav-panel a:hover { background: none; color: var(--mesh); }
-  .nav-menu[open] .np-brand { position: absolute; top: 17px; left: 28px; font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--text); display: flex; align-items: center; gap: 10px; }
+  .nav-menu[open] .np-brand { position: absolute; top: 17px; left: 28px; font-family: var(--font-display); font-weight: 800; font-size: var(--step-1); letter-spacing: -0.02em; color: var(--text); display: flex; align-items: center; gap: 10px; }
   .nav-menu[open] .np-brand i { font-style: normal; color: var(--mesh); }
-  .nav-menu[open] .np-alpha { font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vpn); background: var(--vpn-soft); border: 1px solid var(--vpn-line); border-radius: 999px; padding: 3px 10px; }
+  .nav-menu[open] .np-alpha { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; letter-spacing: 0.05em; color: var(--text-faint); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
 }
-.gh-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; color: var(--text-dim); text-decoration: none; transition: color 0.15s, background 0.15s; }
-.gh-btn:hover { color: var(--text); background: var(--surface-2); }
+.gh-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; color: var(--text-dim); text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
 .gh-btn svg { width: 17px; height: 17px; fill: currentColor; }
-.sp-link { font-family: var(--font-mono); font-size: 12px; color: var(--mesh); text-decoration: none; border: 1px solid var(--mesh-line); background: var(--mesh-soft); border-radius: 999px; padding: 6px 14px; }
-.sp-link:hover { background: rgba(198,242,78,0.18); }
+.sp-link { font-family: var(--font-mono); font-size: var(--step--1); color: var(--mesh); text-decoration: none; border: 1px solid var(--mesh-line); background: var(--mesh-soft); border-radius: 999px; padding: 6px 14px; transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
 .brand, .stage-pill, .nav-mid a, .gh-btn, .sp-link { white-space: nowrap; }
 
 @media (max-width: 1000px) {
