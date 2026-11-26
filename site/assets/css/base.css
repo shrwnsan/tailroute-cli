@@ -28,6 +28,7 @@ h2 em { font-style: normal; color: var(--mesh); }
 :focus-visible { outline: 2px solid var(--mesh); outline-offset: 2px; border-radius: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 
 /* ============ BUTTONS (shared press and hover) ============ */
@@ -40,3 +41,6 @@ button:active { transform: scale(0.97); }
   button { transition: none; }
   button:active { transform: none; }
 }
+
+.skip-link { position: absolute; left: -9999px; top: 0; z-index: 100; background: var(--ground); color: var(--text); padding: 10px 16px; border: 1px solid var(--mesh); border-radius: 0 0 8px 0; font-size: var(--step--1); }
+.skip-link:focus { left: 0; }
