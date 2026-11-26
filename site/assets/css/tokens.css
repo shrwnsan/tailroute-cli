@@ -20,6 +20,11 @@
   --vpn-soft: rgba(232, 163, 61, 0.09);
   --vpn-line: rgba(232, 163, 61, 0.35);
 
+  /* nav veils: the sticky bar and the mobile menu overlay read the page
+     through them; both sit on the ground colour */
+  --nav-veil: rgba(13, 13, 11, 0.75);
+  --nav-veil-strong: rgba(13, 13, 11, 0.97);
+
   /* type scale */
   --step--1: 13px;
   --step-0: 16.5px;
