@@ -52,7 +52,7 @@ OWN_DOMAIN = "tailroute.app"
 # silently) and the Cloudflare Web Analytics beacon, which per Cloudflare
 # "does not collect or use your visitors' personal data". Nothing else may
 # load cross-origin.
-ANALYTICS_HOSTS = frozenset({"pulse.tailroute.app", "static.cloudflareinsights.com"})
+ANALYTICS_HOSTS = frozenset({"pulse.tailroute.app"})
 
 # Claims the page must never make again: unsourced, stale, or contradictory.
 BANNED_PHRASES = (
