@@ -263,16 +263,15 @@ nav { position: sticky; top: 0; z-index: 60; background: rgba(13,13,11,0.75); -w
 
 .install { max-width: 640px; border: 1px solid var(--line-2); border-radius: 16px; background: var(--surface); overflow: hidden; }
 .install-tabs { display: flex; border-bottom: 1px solid var(--line); }
-.install-tab { flex: 1; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: transparent; border: none; color: var(--text-faint); padding: 11px 10px; cursor: pointer; position: relative; }
+.install-tab { flex: 1; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; letter-spacing: 0.06em; background: transparent; border: none; color: var(--text-faint); padding: 11px 10px; cursor: pointer; position: relative; }
 .install-tab[aria-selected="true"] { color: var(--text); }
 .install-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--mesh); }
-.install-tab .tagx { font-size: 9px; color: var(--mesh); margin-left: 6px; }
-.install-panel { display: flex; align-items: center; gap: 14px; padding: 15px 16px 15px 18px; }
+.install-tab .tagx { font-size: var(--step--1); color: var(--mesh); margin-left: 6px; }
+.install-panel { display: flex; align-items: center; flex-wrap: wrap; row-gap: 8px; gap: 14px; padding: 15px 16px 15px 18px; }
 .install-panel[hidden] { display: none; }
-.install-cmd { font-family: var(--font-mono); font-size: 13.5px; flex: 1; white-space: pre; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
-.install-cmd::-webkit-scrollbar { display: none; }
+.install-cmd { font-family: var(--font-mono); font-size: 0.82em; flex: 1 1 300px; white-space: pre-wrap; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
 .install-ps1 { color: var(--mesh); margin-right: 4px; }
-.install-note { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.install-note { font-family: var(--font-mono); font-size: 0.64em; flex-basis: 100%; order: 3; color: var(--text-faint); }
 
 /* the active tab's label is the tab itself; the per-panel label is no-JS only */
 html.js .install-label { display: none; }
@@ -286,7 +285,7 @@ html.js .install-label { display: none; }
 button[data-copy] { display: grid; grid-template-areas: "stack"; grid-template-columns: auto; justify-content: center; }
 button[data-copy] > span { grid-area: stack; }
 
-.copy { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mesh-ink); background: var(--mesh); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
+.copy { font-family: var(--font-mono); font-size: 0.67em; font-weight: 500; letter-spacing: 0.08em; color: var(--mesh-ink); background: var(--mesh); border: none; border-radius: 9px; padding: 9px 16px; cursor: pointer; flex-shrink: 0; }
 .copy.ok { background: var(--text); }
 .copy.fail { background: var(--vpn) !important; color: var(--mesh-ink) !important; }
 @media (hover: hover) and (pointer: fine) {
@@ -298,15 +297,13 @@ html:not(.js) .install-tabs { display: none; }
 html:not(.js) .install-panel,
 html:not(.js) .install-panel[hidden] { display: block; }
 html:not(.js) .install-panel + .install-panel { border-top: 1px solid var(--line); }
-html:not(.js) .install-label { display: block; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); margin: 0 0 8px; }
+html:not(.js) .install-label { display: block; font-family: var(--font-mono); font-size: 0.64em; color: var(--text-faint); margin: 0 0 8px; }
 html:not(.js) .install-cmd, html:not(.js) .install-note { display: block; }
 html:not(.js) .install-panel button[data-copy] { margin-top: 10px; }
 
 @media (max-width: 620px) {
   .install-tab .tagx { display: none; }
-  .install-cmd { font-size: 12px; }
-  .install-panel { flex-wrap: wrap; }
-  .install-cmd { flex-basis: 100%; }
+  .install-cmd { font-size: 0.73em; }
 }
 /* ============ HERO ============ */
 .hero { padding: 92px 0 64px; position: relative; }
