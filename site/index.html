@@ -322,17 +322,64 @@
       <p class="k limits-k">Honest limits</p>
       <h2 class="">What it can&rsquo;t fix</h2>
       <p class="lede">Told up front, not discovered later.</p>
+      <p class="matrix-frame">tailroute works with any VPN that takes the default route—whatever VPN you&rsquo;re forced to run.
+        What varies is whether that VPN also blocks Tailscale&rsquo;s address range (<code>100.64/10</code>) at a layer
+        below the routing table. This is everything we know so far, with the evidence for each row:</p>
+      <table class="compat">
+        <caption>VPN compatibility, with the evidence for each row</caption>
+        <thead>
+          <tr>
+            <th scope="col">VPN</th>
+            <th scope="col">DNS fix</th>
+            <th scope="col">Direct peer traffic</th>
+            <th scope="col">Workaround</th>
+            <th scope="col">Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Mullvad</th>
+            <td data-l="DNS fix">Works at the DNS layer: DNS resolved normally with Mullvad connected alone, and failed only in the Mullvad&nbsp;+&nbsp;Tailscale exit-node combination.</td>
+            <td data-l="Direct peer traffic">Blocked—Mullvad&rsquo;s Network Extension drops packets to <code>100.64/10</code> under every tested setting: split tunnel enabled, per-app exclusions, Allow LAN enabled.</td>
+            <td data-l="Workaround">tsnet SOCKS5 proxy (validated while the VPN is active); disconnect Mullvad when mesh access is needed; Mullvad exit nodes purchased through Tailscale (single tunnel); SSH to a peer&rsquo;s public IP (fails if the peer firewall allows only <code>100.64/10</code>). Not viable: Tailscale exit node alongside Mullvad (DNS and SSH both fail); <code>mullvad tunnel set allowed-ips</code> excluding <code>100.64/10</code> (breaks Tailscale entirely).</td>
+            <td data-l="Evidence"><span class="ev">Tested</span></td>
+          </tr>
+          <tr>
+            <th scope="row">NordVPN</th>
+            <td data-l="DNS fix">not recorded</td>
+            <td data-l="Direct peer traffic">Blocked on all tested protocols: NordLynx (auto) and OpenVPN UDP and TCP, with Threat Protection ON or paused. NordLynx&rsquo;s AllowedIPs (<code>0.0.0.0/1, 128.0.0.0/1</code>) cover all IPv4 including CGNAT, and the Threat Protection system extension stays enabled even when the feature is paused in the UI.</td>
+            <td data-l="Workaround">No NordVPN-specific setting found. General workarounds apply: tsnet SOCKS5 proxy (validated against Network Extension blocking), disconnect NordVPN for mesh access, SSH to a peer&rsquo;s public IP.</td>
+            <td data-l="Evidence"><span class="ev">Tested</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Any VPN that takes the default route <span class="compat-eg">e.g. Cisco AnyConnect, GlobalProtect, Zscaler</span></th>
+            <td data-l="DNS fix">not recorded</td>
+            <td data-l="Direct peer traffic">Expected blocked where the client&rsquo;s Network Extension intercepts all outbound traffic and drops packets not destined for the VPN tunnel—packets to <code>100.64/10</code> never reach the routing table. The mechanism was observed on tested Network-Extension VPNs; these brands themselves were not tested.</td>
+            <td data-l="Workaround">General options per the research: tsnet SOCKS5 proxy, disconnect the VPN for mesh access, peer public IP.</td>
+            <td data-l="Evidence"><span class="ev">Classified</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report yours ↗</a></th>
+            <td data-l="DNS fix">—</td>
+            <td data-l="Direct peer traffic">—</td>
+            <td data-l="Workaround">—</td>
+            <td data-l="Evidence">—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="matrix-legend">Tested means run against our own setup with the result recorded; Classified means the same Network Extension mechanism, identified but not lab-tested; Reported means a user report.</p>
       <div class="honest">
         <h3>Network Extensions can still block the mesh</h3>
         <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic—including packets to Tailscale&rsquo;s CGNAT range
-           (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
-           bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
-        <div class="vpnline">
-          <span>Mullvad—CGNAT blocked</span>
-          <span>NordVPN—CGNAT blocked</span>
-          <span>older VPNs—often fine</span>
-        </div>
-        <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
+          (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
+          bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
+        <h3>Also on the record</h3>
+        <ul class="onrecord">
+          <li>While the VPN is active, MagicDNS names don&rsquo;t resolve—reach peers by their <code>100.x</code> address or through a tunnel.</li>
+          <li>Firefox DNS over HTTPS bypasses the managed <code>/etc/hosts</code> entries, so tunnel names stop resolving in Firefox.</li>
+          <li>Out of scope, decided after Phase 0 research: MagicDNS split DNS while on a VPN, multiple simultaneous VPNs, and IPv6.</li>
+        </ul>
+        <p class="limits-note">Your VPN missing from the matrix? <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a>—reports feed this matrix.</p>
       </div>
     </div>
   </section>
