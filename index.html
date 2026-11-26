@@ -510,15 +510,65 @@ h1 em { font-style: normal; color: var(--mesh); }
 @media (max-width: 1000px) {
   .split-cards { grid-template-columns: 1fr; gap: 32px; }
 }
-.limits-note { margin-top: 14px; font-size: 13.5px; }
+/* Honest-limits section: VPN compatibility matrix and the on-the-record
+   panel. Everything is scoped under #limits; colours come from the shared
+   token file, type sizes from the scale tokens or em (nothing under 13px,
+   no uppercase). */
 
-/* ============ HONESTY ============ */
-.honest { border: 1px solid var(--vpn-line); background: var(--vpn-soft); border-radius: 16px; padding: 28px; }
-.honest h3 { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: var(--vpn); margin-bottom: 12px; }
-.honest p { color: var(--text-dim); font-size: 14.5px; max-width: 860px; }
-.honest p b { color: var(--text); }
-.honest .vpnline { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
-.honest .vpnline span { font-family: var(--font-mono); font-size: 11px; color: var(--vpn); border: 1px solid var(--vpn-line); border-radius: 999px; padding: 4px 11px; }
+#limits .matrix-frame { max-width: 860px; color: var(--text-dim); margin-bottom: 28px; }
+#limits .matrix-frame code { font-size: 0.95em; }
+
+/* ============ COMPATIBILITY MATRIX ============ */
+#limits .compat { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+#limits .compat caption { caption-side: top; text-align: left; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); padding: 0 0 12px; }
+#limits .compat code { font-size: 0.95em; white-space: normal; overflow-wrap: break-word; }
+#limits .compat thead th { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; text-align: left; color: var(--text-faint); padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+#limits .compat tbody th,
+#limits .compat tbody td { font-size: 0.875em; text-align: left; vertical-align: top; padding: 16px; border-bottom: 1px solid var(--line); }
+#limits .compat tbody tr:last-child th,
+#limits .compat tbody tr:last-child td { border-bottom: 0; }
+#limits .compat tbody th { color: var(--text); font-weight: 700; }
+#limits .compat tbody td { color: var(--text-dim); }
+#limits .compat .compat-eg { display: block; margin-top: 6px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--text-faint); }
+#limits .compat .ev { display: inline-block; font-family: var(--font-mono); font-size: var(--step--1); line-height: 1; color: var(--vpn); border: 1px solid var(--vpn-line); border-radius: 999px; padding: 5px 10px; white-space: nowrap; }
+#limits .matrix-legend { max-width: 860px; margin-top: 12px; font-size: var(--step--1); color: var(--text-faint); }
+
+/* mid widths: tighter cell padding keeps the auto-layout columns inside the card */
+@media (max-width: 1000px) {
+  #limits .compat thead th,
+  #limits .compat tbody th,
+  #limits .compat tbody td { padding: 12px 10px; }
+  #limits .compat .ev { padding: 4px 8px; }
+}
+
+/* ============ ON THE RECORD ============ */
+#limits .honest { margin-top: 44px; border: 1px solid var(--vpn-line); background: var(--vpn-soft); border-radius: 16px; padding: 28px; }
+#limits .honest h3 { color: var(--vpn); margin: 28px 0 12px; }
+#limits .honest h3:first-child { margin-top: 0; }
+#limits .honest p { color: var(--text-dim); font-size: 0.875em; max-width: 860px; }
+#limits .honest p b { color: var(--text); }
+#limits .honest code { font-size: 0.95em; }
+#limits .onrecord { padding-left: 22px; max-width: 860px; color: var(--text-dim); font-size: 0.875em; }
+#limits .onrecord li + li { margin-top: 10px; }
+#limits .onrecord li::marker { color: var(--vpn); }
+#limits .honest .limits-note { margin-top: 18px; font-size: var(--step--1); }
+
+/* ============ STACKED CARDS below 620px ============ */
+@media (max-width: 620px) {
+  #limits .compat { display: block; background: none; border: 0; border-radius: 0; }
+  #limits .compat caption { display: block; max-width: 480px; }
+  /* keep the column headers for assistive tech, out of the visual flow */
+  #limits .compat thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); }
+  #limits .compat tbody { display: block; }
+  #limits .compat tbody tr { display: block; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  #limits .compat tbody tr:last-child { margin-bottom: 0; }
+  #limits .compat tbody th,
+  #limits .compat tbody td { display: block; padding: 12px 16px; border-bottom: 0; }
+  #limits .compat tbody th { border-bottom: 1px solid var(--line); }
+  #limits .compat tbody td + td { border-top: 1px solid var(--line); }
+  #limits .compat tbody td::before { content: attr(data-l); display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--vpn); }
+  #limits .honest { padding: 20px; }
+}
 #faq { padding-top: 0; }
 
 /* ============ FAQ ============ */
@@ -880,17 +930,64 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       <p class="k limits-k">Honest limits</p>
       <h2 class="">What it can&rsquo;t fix</h2>
       <p class="lede">Told up front, not discovered later.</p>
+      <p class="matrix-frame">tailroute works with any VPN that takes the default route—whatever VPN you&rsquo;re forced to run.
+        What varies is whether that VPN also blocks Tailscale&rsquo;s address range (<code>100.64/10</code>) at a layer
+        below the routing table. This is everything we know so far, with the evidence for each row:</p>
+      <table class="compat">
+        <caption>VPN compatibility, with the evidence for each row</caption>
+        <thead>
+          <tr>
+            <th scope="col">VPN</th>
+            <th scope="col">DNS fix</th>
+            <th scope="col">Direct peer traffic</th>
+            <th scope="col">Workaround</th>
+            <th scope="col">Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Mullvad</th>
+            <td data-l="DNS fix">Works at the DNS layer: DNS resolved normally with Mullvad connected alone, and failed only in the Mullvad&nbsp;+&nbsp;Tailscale exit-node combination.</td>
+            <td data-l="Direct peer traffic">Blocked—Mullvad&rsquo;s Network Extension drops packets to <code>100.64/10</code> under every tested setting: split tunnel enabled, per-app exclusions, Allow LAN enabled.</td>
+            <td data-l="Workaround">tsnet SOCKS5 proxy (validated while the VPN is active); disconnect Mullvad when mesh access is needed; Mullvad exit nodes purchased through Tailscale (single tunnel); SSH to a peer&rsquo;s public IP (fails if the peer firewall allows only <code>100.64/10</code>). Not viable: Tailscale exit node alongside Mullvad (DNS and SSH both fail); <code>mullvad tunnel set allowed-ips</code> excluding <code>100.64/10</code> (breaks Tailscale entirely).</td>
+            <td data-l="Evidence"><span class="ev">Tested</span></td>
+          </tr>
+          <tr>
+            <th scope="row">NordVPN</th>
+            <td data-l="DNS fix">not recorded</td>
+            <td data-l="Direct peer traffic">Blocked on all tested protocols: NordLynx (auto) and OpenVPN UDP and TCP, with Threat Protection ON or paused. NordLynx&rsquo;s AllowedIPs (<code>0.0.0.0/1, 128.0.0.0/1</code>) cover all IPv4 including CGNAT, and the Threat Protection system extension stays enabled even when the feature is paused in the UI.</td>
+            <td data-l="Workaround">No NordVPN-specific setting found. General workarounds apply: tsnet SOCKS5 proxy (validated against Network Extension blocking), disconnect NordVPN for mesh access, SSH to a peer&rsquo;s public IP.</td>
+            <td data-l="Evidence"><span class="ev">Tested</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Any VPN that takes the default route <span class="compat-eg">e.g. Cisco AnyConnect, GlobalProtect, Zscaler</span></th>
+            <td data-l="DNS fix">not recorded</td>
+            <td data-l="Direct peer traffic">Expected blocked where the client&rsquo;s Network Extension intercepts all outbound traffic and drops packets not destined for the VPN tunnel—packets to <code>100.64/10</code> never reach the routing table. The mechanism was observed on tested Network-Extension VPNs; these brands themselves were not tested.</td>
+            <td data-l="Workaround">General options per the research: tsnet SOCKS5 proxy, disconnect the VPN for mesh access, peer public IP.</td>
+            <td data-l="Evidence"><span class="ev">Classified</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report yours ↗</a></th>
+            <td data-l="DNS fix">—</td>
+            <td data-l="Direct peer traffic">—</td>
+            <td data-l="Workaround">—</td>
+            <td data-l="Evidence">—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="matrix-legend">Tested means run against our own setup with the result recorded; Classified means the same Network Extension mechanism, identified but not lab-tested; Reported means a user report.</p>
       <div class="honest">
         <h3>Network Extensions can still block the mesh</h3>
         <p>Modern macOS VPN apps intercept <b>all</b> outbound traffic—including packets to Tailscale&rsquo;s CGNAT range
-           (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
-           bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
-        <div class="vpnline">
-          <span>Mullvad—CGNAT blocked</span>
-          <span>NordVPN—CGNAT blocked</span>
-          <span>older VPNs—often fine</span>
-        </div>
-        <p class="limits-note">Also on the record: VPN active → MagicDNS names don&rsquo;t resolve (use IPs or tunnels) · Firefox DoH bypasses <code>/etc/hosts</code> · won&rsquo;t-fix by research: split-DNS, multi-VPN, IPv6. <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a></p>
+          (<code>100.64/10</code>). tailroute fixes the DNS conflict and can bridge peers through its proxy, but it cannot
+          bypass Network-Extension packet interception. When direct mesh traffic is blocked, use the SOCKS5 proxy or a browser tunnel.</p>
+        <h3>Also on the record</h3>
+        <ul class="onrecord">
+          <li>While the VPN is active, MagicDNS names don&rsquo;t resolve—reach peers by their <code>100.x</code> address or through a tunnel.</li>
+          <li>Firefox DNS over HTTPS bypasses the managed <code>/etc/hosts</code> entries, so tunnel names stop resolving in Firefox.</li>
+          <li>Out of scope, decided after Phase 0 research: MagicDNS split DNS while on a VPN, multiple simultaneous VPNs, and IPv6.</li>
+        </ul>
+        <p class="limits-note">Your VPN missing from the matrix? <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">Report your VPN&rsquo;s behavior ↗</a>—reports feed this matrix.</p>
       </div>
     </div>
   </section>
