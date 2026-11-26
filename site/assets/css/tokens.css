@@ -45,8 +45,5 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "Geist Mono", monospace;
 
-  /* paper tokens: used by the light core cards until that section moves to dark surfaces */
-  --paper: #f4f2ea;
-  --paper-ink: #15150f;
-  --paper-dim: #5d5c52;
+  --shadow: rgba(0, 0, 0, 0.5);
 }
