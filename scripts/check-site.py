@@ -813,7 +813,10 @@ def check_activation(page):
                 'install component has no tab marked aria-selected="true"',
             ))
         else:
-            selected_targets.add(target)
+            # components use per-instance element ids (hero-panel-cli,
+            # final-panel-cli), so compare the tab position — the suffix —
+            # not the id itself
+            selected_targets.add(target.rsplit("-", 1)[-1])
     if len(selected_targets) > 1:
         fails.append(Failure(
             page.rel, 1,
