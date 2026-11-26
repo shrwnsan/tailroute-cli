@@ -160,10 +160,7 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "Geist Mono", monospace;
 
-  /* paper tokens: used by the light core cards until that section moves to dark surfaces */
-  --paper: #f4f2ea;
-  --paper-ink: #15150f;
-  --paper-dim: #5d5c52;
+  --shadow: rgba(0, 0, 0, 0.5);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -232,7 +229,7 @@ nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webki
 .nav-menu[open] summary { position: fixed; top: 13px; right: 28px; z-index: 72; }
 .nav-menu[open] .i-menu { opacity: 0; }
 .nav-menu[open] .i-x { opacity: 1; color: var(--text); }
-.nav-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 220px; background: var(--surface-3); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); padding: 8px; z-index: 70; }
+.nav-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 220px; background: var(--surface-3); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px var(--shadow); padding: 8px; z-index: 70; }
 .nav-panel a { display: block; padding: 12px 14px; border-radius: 9px; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-dim); text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
 @media (hover: hover) and (pointer: fine) {
   /* hover touches colour only, never position or size */
@@ -292,7 +289,7 @@ nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webki
 .install-panel[hidden] { display: none; }
 .install-cmd { font-family: var(--font-mono); font-size: 0.82em; flex: 1 1 300px; white-space: pre-wrap; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
 .install-ps1 { color: var(--mesh); margin-right: 4px; }
-.install-note { font-family: var(--font-mono); font-size: 0.64em; flex-basis: 100%; order: 3; color: var(--text-faint); }
+.install-note { font-family: var(--font-mono); font-size: var(--step--1); flex-basis: 100%; order: 3; color: var(--text-faint); }
 
 /* the active tab's label is the tab itself; the per-panel label is no-JS only */
 html.js .install-label { display: none; }
@@ -347,51 +344,24 @@ h1 { line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: b
 #hero-install .install-activate code { font-size: 1em; white-space: normal; }
 html:not(.js) #hero-install .install-activate { display: block; margin-top: 8px; }
 
-/* hero product visual */
-.hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
-.hcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 18px 44px rgba(0,0,0,0.32); transition: transform 0.25s cubic-bezier(0.2,0.65,0.3,1), box-shadow 0.25s cubic-bezier(0.2,0.65,0.3,1), border-color 0.25s ease; }
-.hcard:hover, .hcard:focus-within { transform: translateY(-3px); box-shadow: 0 30px 70px rgba(0,0,0,0.45); border-color: var(--line-2); }
-.hcard .dot { filter: saturate(0.35) brightness(0.82); opacity: 0.85; transition: filter 0.25s ease, opacity 0.25s ease; }
-.hcard:hover .dot, .hcard:focus-within .dot { filter: none; opacity: 1; }
-.hcard .act { transition: filter 0.25s ease; }
-.hcard:hover .hcard-bar .act { filter: brightness(1.08); }
-.hcard-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
-.hcard-bar > span:first-child { font-weight: 600; color: var(--text-dim); }
-.hcard-bar .act { color: var(--mesh-ink); background: var(--mesh); border-radius: 6px; padding: 2px 9px; font-weight: 600; }
-.hcard-bar .sp { flex: 1; }
-.hbar { position: relative; display: flex; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.02); }
-.dots { display: flex; gap: 7px; }
-.dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18); }
-.dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
-.hbar-title { position: absolute; left: 50%; transform: translateX(-50%); max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-dim); }
-.hbar-title.mono { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--text-faint); }
-.hcard-body { padding: 12px 14px; font-family: var(--font-mono); font-size: 11.5px; }
-.hrow { display: flex; justify-content: space-between; gap: 14px; padding: 5px 2px; color: var(--text-dim); }
-.hrow span:last-child { color: var(--text); }
-.hrow .ok { color: var(--mesh); } .hrow .warnc { color: var(--vpn); }
-.hcomment { font-size: 10.5px; color: var(--text-faint); padding: 0 2px 6px; }
+
 
 /* stat band */
 .band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-top: 56px; }
 .stat { background: var(--surface-3); padding: 16px 18px; display: flex; align-items: center; gap: 10px; }
-.stat dd { margin: 0; order: -1; font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
+.stat dd { margin: 0; order: -1; font-family: var(--font-display); font-weight: 800; font-size: var(--step-2); letter-spacing: -0.02em; }
 .stat dd i { font-style: normal; color: var(--mesh); }
 .stat dt { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); flex: 1; min-width: 0; }
 
 @media (max-width: 1000px) {
   .hero-grid { grid-template-columns: 1fr; }
   .hero-grid > * { min-width: 0; }
-  .hero-visual { max-width: 560px; padding-top: 0; }
   .band { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
   h1 { font-size: var(--step-4-narrow); }
   .band { grid-template-columns: 1fr; }
-  .stat dd { font-size: 21px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hcard:hover, .hcard:focus-within { transform: none; }
-  .hcard, .hcard .dot, .hcard .act { transition: none; }
+  .stat dd { font-size: 1.27em; }
 }
 /* ============ HERO ROUTE DIAGRAM ============ */
 /* The hero's route diagram replaces the two mock cards. The stylesheet
@@ -738,7 +708,6 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <script defer src="assets/js/copy.js"></script>
 <script defer src="assets/js/diagram.js"></script>
 <script defer src="assets/js/install.js"></script>
-<script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/nav.js"></script>
 <!-- Plausible analytics: self-hosted, first-party (same registrable domain).
      Ingest = pulse.tailroute.app; keep it DNS-only — never CDN-proxy it. -->
@@ -949,7 +918,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   <section class="features" id="features">
     <div class="wrap">
       <p class="k">How it works</p>
-      <h2 class="">A daemon that makes the call, so you don&rsquo;t.</h2>
+      <h2>A daemon that makes the call, so you don&rsquo;t.</h2>
       <p class="lede">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
 
       <table class="statetable">
@@ -1015,7 +984,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   <section id="limits">
     <div class="wrap">
       <p class="k limits-k">Honest limits</p>
-      <h2 class="">What it can&rsquo;t fix</h2>
+      <h2>What it can&rsquo;t fix</h2>
       <p class="lede">Told up front, not discovered later.</p>
       <p class="matrix-frame">tailroute works with any VPN that takes the default route—whatever VPN you&rsquo;re forced to run.
         What varies is whether that VPN also blocks Tailscale&rsquo;s address range (<code>100.64/10</code>) at a layer
@@ -1085,7 +1054,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   <section class="split" id="core">
     <div class="wrap">
       <p class="k">The model</p>
-      <h2 class="">One engine. Two apps.</h2>
+      <h2>One engine. Two apps.</h2>
       <p class="choose">Live in the terminal? Take the CLI. Want it in the menu bar? The app ships the same engine and includes the CLI.</p>
       <p class="lede">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
 
@@ -1129,7 +1098,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <section id="faq">
     <div class="wrap">
       <p class="k">FAQ</p>
-      <h2 class="">Asked, answered</h2>
+      <h2>Asked, answered</h2>
       <div class="faq">
         <details class="q">
           <summary>Can I use Tailscale and my VPN at the same time on a Mac? <span class="pm" aria-hidden="true">+</span></summary>

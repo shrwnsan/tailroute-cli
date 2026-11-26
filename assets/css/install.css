@@ -12,7 +12,7 @@
 .install-panel[hidden] { display: none; }
 .install-cmd { font-family: var(--font-mono); font-size: 0.82em; flex: 1 1 300px; white-space: pre-wrap; overflow-x: auto; scrollbar-width: none; /* neutralise the base `code` look if a panel uses <code> */ background: none; border: none; border-radius: 0; padding: 0; }
 .install-ps1 { color: var(--mesh); margin-right: 4px; }
-.install-note { font-family: var(--font-mono); font-size: 0.64em; flex-basis: 100%; order: 3; color: var(--text-faint); }
+.install-note { font-family: var(--font-mono); font-size: var(--step--1); flex-basis: 100%; order: 3; color: var(--text-faint); }
 
 /* the active tab's label is the tab itself; the per-panel label is no-JS only */
 html.js .install-label { display: none; }
