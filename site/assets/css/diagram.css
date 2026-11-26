@@ -1,0 +1,42 @@
+/* ============ HERO ROUTE DIAGRAM ============ */
+/* The hero's route diagram replaces the two mock cards. The stylesheet
+   draws the final frame only: amber (--vpn-mark) = the Mac to VPN to
+   internet route, green (--mesh-mark) = the Mac to proxy to peers route.
+   Every coloured path also carries words, so the stroke pair is never
+   the only signal. The draw-in keyframes live at the bottom of this
+   file behind html.js .route.is-playing and the reduced-motion query. */
+
+.route { font-size: var(--step--1); }
+
+/* one card, two layouts: the wide figure serves 620px and up, the
+   narrow figure takes over below it; equal specificity, later rule wins */
+.route-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 18px 44px color-mix(in srgb, black 30%, transparent); }
+.route svg { display: block; width: 100%; height: auto; }
+svg.fig-wide { aspect-ratio: 390 / 290; }
+svg.fig-narrow { display: none; aspect-ratio: 330 / 330; }
+@media (max-width: 620px) {
+  svg.fig-wide { display: none; }
+  svg.fig-narrow { display: block; }
+}
+/* single-column hero: the visual keeps the mock cards' width cap */
+@media (max-width: 1000px) {
+  .route { max-width: 560px; }
+}
+
+/* nodes and their word labels */
+.route-node rect { fill: var(--surface-2); stroke: var(--line-2); stroke-width: 1.25; }
+.route-name { font-family: var(--font-mono); font-size: 1.1em; font-weight: 600; fill: var(--text); }
+.route-lab { font-family: var(--font-mono); font-size: 1em; fill: var(--text-dim); }
+
+/* the two routes plus the direct route that breaks */
+.route-path { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 1; }
+.route-path.vpn { stroke: var(--vpn-mark); }
+.route-path.mesh { stroke: var(--mesh-mark); }
+.route-direct { fill: none; stroke: var(--mesh-mark); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.012 0.026; opacity: 0.4; }
+.route-x { fill: none; stroke: var(--text-faint); stroke-width: 2.25; stroke-linecap: round; }
+.tip-vpn { fill: var(--vpn-mark); }
+.tip-mesh { fill: var(--mesh-mark); }
+
+/* standing caption under the figure */
+.route-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.route-final { margin: 0; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); }
