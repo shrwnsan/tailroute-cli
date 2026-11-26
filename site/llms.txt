@@ -6,9 +6,9 @@ The tool answers one question: "How do I keep Tailscale and my VPN working at th
 
 ## Install
 
-- `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install` (CLI daemon, Apache-2.0, macOS 15+)
-- `brew install --cask shrwnsan/tap/tailroute` (menu bar app, same engine, free during early access)
-- No account. No telemetry. Uninstall restores the previous MagicDNS state.
+- `brew install shrwnsan/tap/tailroute-cli` then `sudo tailroute install` (CLI daemon, Apache-2.0, macOS 15+); then connect the VPN as usual and run `tailroute status` — while the VPN is connected, MagicDNS reads disabled (as set by daemon)
+- `brew install --cask shrwnsan/tap/tailroute` (menu bar app, same engine, free during early access); then open Tailroute, approve it in System Settings > Privacy & Security > Open Anyway, connect the VPN as usual and run `tailroute status`
+- The daemon has no account and makes no external calls of any kind. Uninstall restores the previous MagicDNS state.
 
 ## Pages
 
