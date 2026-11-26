@@ -279,35 +279,38 @@
   <section class="split" id="core">
     <div class="wrap">
       <p class="k">The model</p>
-      <h2 class="">One engine. <em>Two apps.</em></h2>
+      <h2 class="">One engine. Two apps.</h2>
+      <p class="choose">Live in the terminal? Take the CLI. Want it in the menu bar? The app ships the same engine and includes the CLI.</p>
       <p class="lede">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
 
       <div class="split-cards">
         <div class="sc core">
-          <p class="sc-tag">The core—CLI daemon</p>
+          <p class="sc-tag">The core, a CLI daemon</p>
           <h3>Everything, in your terminal</h3>
           <p class="sc-body">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
           <p class="price">$0 <small>forever · Apache-2.0 · no account</small></p>
-          <ul class="sc-core-list">
+          <ul>
             <li>Every feature, no gates—proxies, tunnels, helpers</li>
             <li>Homebrew or source; runs as a root launchd service</li>
             <li>Your traffic never touches our infrastructure (there isn&rsquo;t any)</li>
           </ul>
-          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="✓ copied—paste into Terminal" data-copy-fail="copy failed—select the command">brew install shrwnsan/tap/tailroute-cli</button>
+          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli">brew install shrwnsan/tap/tailroute-cli</button>
+          <p class="sc-note">Then run <code>sudo tailroute install</code>, connect your VPN as usual, and check <code>tailroute status</code>.</p>
           <p class="sc-foot">star it, fork it, audit it—that&rsquo;s the point</p>
         </div>
 
         <div class="sc app">
-          <p class="sc-tag">The shell—menu bar app</p>
+          <p class="sc-tag">The shell, a menu bar app</p>
           <h3>Set it and forget it</h3>
-          <p class="sc-body alt">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
+          <p class="sc-body">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
           <p class="price">Free <small>during early access · planned one-time license at v1.0—never a subscription</small></p>
-          <ul class="sc-app-list">
+          <ul>
             <li>Menu bar icon with live connection state</li>
             <li>First-run onboarding and a diagnostic panel</li>
-            <li>Brew-aware updates with DMG download</li>
+            <li>Brew-aware update alerts</li>
           </ul>
-          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="✓ copied—paste into Terminal" data-copy-fail="copy failed—select the command">brew install --cask shrwnsan/tap/tailroute</button>
+          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
+          <p class="sc-note gk-note">The app isn’t notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy & Security → Open Anyway.</p>
           <p class="sc-foot">early adopters shape the v1.0 roadmap—file issues</p>
         </div>
       </div>
