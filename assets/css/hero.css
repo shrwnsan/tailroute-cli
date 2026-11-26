@@ -5,7 +5,8 @@
 .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
 .eyebrow span { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 12px; }
 .eyebrow span.hot { color: var(--mesh); border-color: var(--mesh-line); background: var(--mesh-soft); }
-h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(2.8rem, 6vw, 5rem); line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: balance; }
+/* h1 size, face, and weight come from base.css (the shared scale) */
+h1 { line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: balance; }
 h1 em { font-style: normal; color: var(--mesh); }
 .hero-sub { max-width: 620px; color: var(--text-dim); font-size: 18px; margin: 26px 0 34px; }
 .hero-sub b { color: var(--text); font-weight: 600; }
@@ -54,7 +55,7 @@ h1 em { font-style: normal; color: var(--mesh); }
   .band { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
-  h1 { font-size: clamp(2.2rem, 10vw, 2.8rem); }
+  h1 { font-size: var(--step-4-narrow); }
   .band { grid-template-columns: 1fr; }
   .stat dd { font-size: 21px; }
 }
