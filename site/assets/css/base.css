@@ -1,6 +1,6 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { background: var(--ground); color: var(--text); font-family: var(--font-body); font-size: 16.5px; line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+body { background: var(--ground); color: var(--text); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
 ::selection { background: var(--mesh); color: var(--mesh-ink); }
 a { color: var(--mesh); }
 code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.06em 0.4em; white-space: nowrap; }
@@ -8,13 +8,22 @@ code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surfa
 
 /* ============ SECTION SCAFFOLD ============ */
 section { padding: 96px 0; }
+/* sticky nav is 61px tall on desktop, 65px at <=1000px; use the larger so
+   anchored sections never slide under the bar */
+section[id] { scroll-margin-top: 65px; }
 /* .limits-k stays ahead of .k: equal specificity, so source order decides
    and the label keeps .k's colour, exactly as in the single-sheet layout. */
 .limits-k { color: var(--vpn); }
-.k { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mesh); margin-bottom: 16px; }
-h2 { font-family: var(--font-display); font-weight: 800; font-size: clamp(2rem, 3.6vw, 2.9rem); letter-spacing: -0.02em; line-height: 1.04; }
+/* section labels are sentence case: no uppercase transform, no letter-spacing */
+.k { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--mesh); margin-bottom: 16px; }
+/* headings default to the display face on the shared scale; section sheets
+   may only add layout, not re-size */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; }
+h1 { font-size: var(--step-4); line-height: 1.04; }
+h2 { font-size: var(--step-3); line-height: 1.04; }
+h3 { font-size: var(--step-1); }
 h2 em { font-style: normal; color: var(--mesh); }
-.lede { max-width: 680px; color: var(--text-dim); font-size: 17px; margin: 16px 0 44px; }
+.lede { max-width: 680px; color: var(--text-dim); font-size: var(--step-1); margin: 16px 0 44px; }
 
 :focus-visible { outline: 2px solid var(--mesh); outline-offset: 2px; border-radius: 4px; }
 

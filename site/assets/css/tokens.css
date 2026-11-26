@@ -11,10 +11,12 @@
   --text-faint: #8a887d;
   --mesh: #c6f24e;
   --mesh-ink: #161a05;
-  --mesh-mark: #74a41a; /* diagram and chart strokes */
+  --mesh-mark: #46730d; /* diagram and chart strokes; pairs with --vpn-mark and
+                           passes the colour-vision check against it */
   --mesh-soft: rgba(198, 242, 78, 0.10);
   --mesh-line: rgba(198, 242, 78, 0.32);
   --vpn: #e8a33d;
+  --vpn-mark: #c4861f; /* the vpn-path stroke where it meets the mesh stroke */
   --vpn-soft: rgba(232, 163, 61, 0.09);
   --vpn-line: rgba(232, 163, 61, 0.35);
 
@@ -24,7 +26,8 @@
   --step-1: 20px;
   --step-2: 28px;
   --step-3: clamp(2rem, 3.6vw, 2.9rem);
-  --step-4: clamp(2.4rem, 5.6vw, 4.5rem);
+  --step-4: clamp(2.8rem, 6vw, 5rem);
+  --step-4-narrow: clamp(2.2rem, 10vw, 2.8rem);
 
   /* motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
