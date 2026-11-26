@@ -675,7 +675,6 @@ html.js .route-replay { display: inline-block; }
   #limits .compat tbody td::before { content: attr(data-l); display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--vpn); }
   #limits .honest { padding: 20px; }
 }
-#faq { padding-top: 0; }
 
 /* ============ FAQ ============ */
 .faq { max-width: 800px; margin-top: 36px; }
@@ -1011,50 +1010,6 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <!-- /region:features -->
 
 
-<!-- region:core owner:core -->
-  <!-- OPEN CORE SPLIT -->
-  <section class="split" id="core">
-    <div class="wrap">
-      <p class="k">The model</p>
-      <h2 class="">One engine. Two apps.</h2>
-      <p class="choose">Live in the terminal? Take the CLI. Want it in the menu bar? The app ships the same engine and includes the CLI.</p>
-      <p class="lede">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
-
-      <div class="split-cards">
-        <div class="sc core">
-          <p class="sc-tag">The core, a CLI daemon</p>
-          <h3>Everything, in your terminal</h3>
-          <p class="sc-body">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
-          <p class="price">$0 <small>forever · Apache-2.0 · no account</small></p>
-          <ul>
-            <li>Every feature, no gates—proxies, tunnels, helpers</li>
-            <li>Homebrew or source; runs as a root launchd service</li>
-            <li>Your traffic never touches our infrastructure (there isn&rsquo;t any)</li>
-          </ul>
-          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli">brew install shrwnsan/tap/tailroute-cli</button>
-          <p class="sc-note">Then run <code>sudo tailroute install</code>, connect your VPN as usual, and check <code>tailroute status</code>.</p>
-          <p class="sc-foot">star it, fork it, audit it—that&rsquo;s the point</p>
-        </div>
-
-        <div class="sc app">
-          <p class="sc-tag">The shell, a menu bar app</p>
-          <h3>Set it and forget it</h3>
-          <p class="sc-body">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
-          <p class="price">Free <small>during early access · planned one-time license at v1.0—never a subscription</small></p>
-          <ul>
-            <li>Menu bar icon with live connection state</li>
-            <li>First-run onboarding and a diagnostic panel</li>
-            <li>Brew-aware update alerts</li>
-          </ul>
-          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
-          <p class="sc-note gk-note">The app isn’t notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy & Security → Open Anyway.</p>
-          <p class="sc-foot">early adopters shape the v1.0 roadmap—file issues</p>
-        </div>
-      </div>
-    </div>
-  </section>
-<!-- /region:core -->
-
 <!-- region:limits owner:limits -->
   <!-- HONESTY -->
   <section id="limits">
@@ -1124,6 +1079,50 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
     </div>
   </section>
 <!-- /region:limits -->
+
+<!-- region:core owner:core -->
+  <!-- OPEN CORE SPLIT -->
+  <section class="split" id="core">
+    <div class="wrap">
+      <p class="k">The model</p>
+      <h2 class="">One engine. Two apps.</h2>
+      <p class="choose">Live in the terminal? Take the CLI. Want it in the menu bar? The app ships the same engine and includes the CLI.</p>
+      <p class="lede">Open core, honestly drawn: the engine is free and open source forever. The app is polish on the same engine—free while we sand the edges, a one-time license when it&rsquo;s v1.0.</p>
+
+      <div class="split-cards">
+        <div class="sc core">
+          <p class="sc-tag">The core, a CLI daemon</p>
+          <h3>Everything, in your terminal</h3>
+          <p class="sc-body">The full engine: MagicDNS toggling, SOCKS5 proxy, browser tunnels, helpers, integrity gate.</p>
+          <p class="price">$0 <small>forever · Apache-2.0 · no account</small></p>
+          <ul>
+            <li>Every feature, no gates—proxies, tunnels, helpers</li>
+            <li>Homebrew or source; runs as a root launchd service</li>
+            <li>Your traffic never touches our infrastructure (there isn&rsquo;t any)</li>
+          </ul>
+          <button class="sc-btn" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli">brew install shrwnsan/tap/tailroute-cli</button>
+          <p class="sc-note">Then run <code>sudo tailroute install</code>, connect your VPN as usual, and check <code>tailroute status</code>.</p>
+          <p class="sc-foot">star it, fork it, audit it—that&rsquo;s the point</p>
+        </div>
+
+        <div class="sc app">
+          <p class="sc-tag">The shell, a menu bar app</p>
+          <h3>Set it and forget it</h3>
+          <p class="sc-body">The same engine behind a native macOS UI: onboarding, live state, proxy and tunnel controls, update alerts.</p>
+          <p class="price">Free <small>during early access · planned one-time license at v1.0—never a subscription</small></p>
+          <ul>
+            <li>Menu bar icon with live connection state</li>
+            <li>First-run onboarding and a diagnostic panel</li>
+            <li>Brew-aware update alerts</li>
+          </ul>
+          <button class="sc-btn" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute">brew install --cask shrwnsan/tap/tailroute</button>
+          <p class="sc-note gk-note">The app isn’t notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy & Security → Open Anyway.</p>
+          <p class="sc-foot">early adopters shape the v1.0 roadmap—file issues</p>
+        </div>
+      </div>
+    </div>
+  </section>
+<!-- /region:core -->
 
 <!-- region:faq owner:faq -->
   <!-- FAQ -->
@@ -1284,35 +1283,6 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </script>
 <!-- /region:faq -->
 
-<!-- region:support owner:support -->
-  <!-- SUPPORT -->
-<section id="support">
-    <div class="wrap">
-      <div class="sup-card">
-        <div>
-          <p class="k">Support the work</p>
-          <h2>Open source isn&rsquo;t free to build.</h2>
-          <p class="sup-note">The CLI stays free and open source. If tailroute saved your sanity mid-deadline, a star or a sponsorship keeps the hardening sprint going.</p>
-          <div class="sup-actions">
-            <a class="btn-solid" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">Star on GitHub</a>
-            <!-- TODO: uncomment once a channel is live
-            <a class="btn-ghost2" href="https://github.com/sponsors/shrwnsan" target="_blank" rel="noopener">♥ GitHub Sponsors</a>
-            <a class="btn-ghost2" href="https://www.ko-fi.com/YOUR_HANDLE" target="_blank" rel="noopener">Ko-fi</a>
-            -->
-          </div>
-        </div>
-        <div class="milestone">
-          <p>Next milestone</p>
-          <b>Why does macOS warn about the app?</b>
-          <div class="gk-note">Builds are ad-hoc signed today. The $99/yr Apple Developer ID buys notarized builds, so macOS opens Tailroute without the System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway detour. Sponsorship goes here first.<span class="vh">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway.</span></div>
-        </div>
-      </div>
-    </div>
-  </section>
-<!-- /region:support -->
-
-</main>
-
 <!-- region:finale owner:finale -->
   <!-- FINAL INSTALL -->
 <section id="install" class="finale">
@@ -1361,6 +1331,35 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
   </div>
 </section>
 <!-- /region:finale -->
+
+<!-- region:support owner:support -->
+  <!-- SUPPORT -->
+<section id="support">
+    <div class="wrap">
+      <div class="sup-card">
+        <div>
+          <p class="k">Support the work</p>
+          <h2>Open source isn&rsquo;t free to build.</h2>
+          <p class="sup-note">The CLI stays free and open source. If tailroute saved your sanity mid-deadline, a star or a sponsorship keeps the hardening sprint going.</p>
+          <div class="sup-actions">
+            <a class="btn-solid" href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">Star on GitHub</a>
+            <!-- TODO: uncomment once a channel is live
+            <a class="btn-ghost2" href="https://github.com/sponsors/shrwnsan" target="_blank" rel="noopener">♥ GitHub Sponsors</a>
+            <a class="btn-ghost2" href="https://www.ko-fi.com/YOUR_HANDLE" target="_blank" rel="noopener">Ko-fi</a>
+            -->
+          </div>
+        </div>
+        <div class="milestone">
+          <p>Next milestone</p>
+          <b>Why does macOS warn about the app?</b>
+          <div class="gk-note">Builds are ad-hoc signed today. The $99/yr Apple Developer ID buys notarized builds, so macOS opens Tailroute without the System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway detour. Sponsorship goes here first.<span class="vh">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+<!-- /region:support -->
+
+</main>
 
 <!-- region:footer owner:footer -->
 <footer>
