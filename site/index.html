@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="assets/css/nav.css">
 <link rel="stylesheet" href="assets/css/install.css">
 <link rel="stylesheet" href="assets/css/hero.css">
+<link rel="stylesheet" href="assets/css/diagram.css">
 <link rel="stylesheet" href="assets/css/features.css">
 <link rel="stylesheet" href="assets/css/finale.css">
 <link rel="stylesheet" href="assets/css/core.css">
@@ -21,6 +22,7 @@
 <link rel="stylesheet" href="assets/css/support.css">
 <link rel="stylesheet" href="assets/css/footer.css">
 <script defer src="assets/js/copy.js"></script>
+<script defer src="assets/js/diagram.js"></script>
 <script defer src="assets/js/install.js"></script>
 <script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/nav.js"></script>
@@ -155,26 +157,65 @@
           </div>
         </div>
 
-        <div class="hero-visual" aria-hidden="true">
-          <div class="hcard">
-            <div class="hcard-bar"><span>Finder</span><span class="sp">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span><span class="act">◆ tailroute</span><span>09:41</span></div>
-            <div class="hcard-body">
-              <div class="hrow"><span>State</span><span class="ok">Coexisting—VPN + Tailscale</span></div>
-              <div class="hrow"><span>MagicDNS</span><span class="warnc">disabled (auto)</span></div>
-              <div class="hrow"><span>Proxy</span><span>127.0.0.1:1055 · running</span></div>
-              <div class="hrow"><span>Tunnels</span><span>2 healthy</span></div>
-            </div>
+        <div class="route">
+          <div class="route-card">
+            <svg class="fig-wide" role="img" viewBox="0 0 390 290">
+              <title>How a Mac routes traffic while a VPN and Tailscale run at the same time</title>
+              <desc>Final state of the diagram. The Mac has two live routes. Internet traffic flows from the Mac through the VPN. Tailscale peer traffic flows from the Mac through a local proxy on 127.0.0.1:1055 to peers on 100.x addresses. This is the coexistence state: MagicDNS is off and the proxy is up while the VPN is connected. When the VPN disconnects, tailroute restores MagicDNS within seconds of the route change, with a 60-second safety check for anything missed.</desc>
+              <g class="route-node"><rect x="14" y="122" width="72" height="38" rx="9"/><text class="route-name" x="50" y="146" text-anchor="middle">Mac</text></g>
+              <g class="route-node"><rect x="138" y="22" width="62" height="38" rx="9"/><text class="route-name" x="169" y="46" text-anchor="middle">VPN</text></g>
+              <g class="route-node"><rect x="258" y="22" width="118" height="38" rx="9"/><text class="route-name" x="317" y="46" text-anchor="middle">internet</text></g>
+              <g class="route-node"><rect x="134" y="190" width="82" height="38" rx="9"/><text class="route-name" x="175" y="214" text-anchor="middle">proxy</text></g>
+              <g class="route-node"><rect x="258" y="190" width="96" height="38" rx="9"/><text class="route-name" x="306" y="214" text-anchor="middle">peers</text></g>
+              <path class="route-path vpn route-vpn-1" pathLength="1" d="M87,130 C121,122 125,41 133,41"/>
+              <path class="route-path vpn route-vpn-2" pathLength="1" d="M200,41 L248,41"/>
+              <path class="route-path mesh route-mesh-1" pathLength="1" d="M87,152 C121,160 125,209 133,209"/>
+              <path class="route-path mesh route-mesh-2" pathLength="1" d="M216,209 L248,209"/>
+              <path class="route-direct" d="M87,141 C180,136 250,146 294,180"/>
+              <path class="route-x" d="M290.5,176.5 L301.5,187.5 M301.5,176.5 L290.5,187.5"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(128,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(248,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(124,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(248,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <text class="route-lab route-lab-vpn" x="169" y="80" text-anchor="middle">your VPN</text>
+              <text class="route-lab route-lab-int" x="317" y="80" text-anchor="middle">the internet</text>
+              <text class="route-lab route-lab-proxy" x="175" y="250" text-anchor="middle">local proxy</text>
+              <text class="route-lab route-lab-proxy" x="175" y="266" text-anchor="middle">127.0.0.1:1055</text>
+              <text class="route-lab route-lab-peers" x="306" y="250" text-anchor="middle">your peers, 100.x</text>
+            </svg>
+            <svg class="fig-narrow" role="img" viewBox="0 0 330 330">
+              <title>How a Mac routes traffic while a VPN and Tailscale run at the same time</title>
+              <desc>Final state of the diagram. The Mac has two live routes. Internet traffic flows from the Mac through the VPN. Tailscale peer traffic flows from the Mac through a local proxy on 127.0.0.1:1055 to peers on 100.x addresses. This is the coexistence state: MagicDNS is off and the proxy is up while the VPN is connected. When the VPN disconnects, tailroute restores MagicDNS within seconds of the route change, with a 60-second safety check for anything missed.</desc>
+              <g class="route-node"><rect x="125" y="16" width="80" height="38" rx="9"/><text class="route-name" x="165" y="40" text-anchor="middle">Mac</text></g>
+              <g class="route-node"><rect x="30" y="122" width="62" height="38" rx="9"/><text class="route-name" x="61" y="146" text-anchor="middle">VPN</text></g>
+              <g class="route-node"><rect x="22" y="246" width="96" height="38" rx="9"/><text class="route-name" x="70" y="270" text-anchor="middle">internet</text></g>
+              <g class="route-node"><rect x="206" y="122" width="84" height="38" rx="9"/><text class="route-name" x="248" y="146" text-anchor="middle">proxy</text></g>
+              <g class="route-node"><rect x="208" y="246" width="84" height="38" rx="9"/><text class="route-name" x="250" y="270" text-anchor="middle">peers</text></g>
+              <path class="route-path vpn route-vpn-1" pathLength="1" d="M133,54 C96,80 61,88 61,118"/>
+              <path class="route-path vpn route-vpn-2" pathLength="1" d="M61,160 L61,242"/>
+              <path class="route-path mesh route-mesh-1" pathLength="1" d="M197,54 C234,80 248,88 248,118"/>
+              <path class="route-path mesh route-mesh-2" pathLength="1" d="M248,160 L248,242"/>
+              <path class="route-direct" d="M160,54 L160,176 C160,204 180,218 204,222"/>
+              <path class="route-x" d="M206.5,218.5 L217.5,229.5 M217.5,218.5 L206.5,229.5"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(65,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(65,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(252,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(252,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <text class="route-lab route-lab-vpn" x="61" y="180" text-anchor="middle">your VPN</text>
+              <text class="route-lab route-lab-proxy" x="248" y="180" text-anchor="middle">local proxy</text>
+              <text class="route-lab route-lab-proxy" x="248" y="196" text-anchor="middle">127.0.0.1:1055</text>
+              <text class="route-lab route-lab-int" x="70" y="304" text-anchor="middle">the internet</text>
+              <text class="route-lab route-lab-peers" x="250" y="304" text-anchor="middle">your peers, 100.x</text>
+            </svg>
           </div>
-          <div class="hcard">
-            <div class="hbar"><span class="dots"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i></span><span class="hbar-title mono">tailroute status</span></div>
-            <div class="hcard-body">
-              <p class="hcomment"># sample output</p>
-              <div class="hrow"><span>daemon</span><span class="ok">running (pid 4821)</span></div>
-              <div class="hrow"><span>tailscale</span><span>utun4 (100.101.12.40)</span></div>
-              <div class="hrow"><span>vpn</span><span>utun3 (default route)</span></div>
-              <div class="hrow"><span>magicdns</span><span class="warnc">disabled (vpn_active)</span></div>
-              <div class="hrow"><span>last check</span><span>12s ago</span></div>
-            </div>
+          <div class="route-rail" aria-hidden="true">
+            <p class="route-cap route-cap-1">Tailscale only</p>
+            <p class="route-cap route-cap-2">VPN connects</p>
+            <p class="route-cap route-cap-3">Peers time out</p>
+          </div>
+          <div class="route-foot">
+            <p class="route-final">tailroute: MagicDNS off, proxy up</p>
+            <button class="route-replay" type="button">Replay</button>
           </div>
         </div>
       </div>
