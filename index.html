@@ -456,25 +456,24 @@ h1 em { font-style: normal; color: var(--mesh); }
   .term-foot span { display: flex; flex-direction: column; gap: 2px; }
   .term-foot b { margin-left: 0; }
 }
-/* finale CTA band */
-.finale { background: var(--mesh); color: var(--mesh-ink); padding: 84px 0; }
-.finale h2 { color: var(--mesh-ink); font-size: clamp(2.2rem, 4.4vw, 3.6rem); }
-.finale .fin-sub { font-size: 17px; color: rgba(22,26,5,0.72); margin: 14px 0 34px; max-width: 620px; font-weight: 500; }
-.fin-installs { display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
-.fin-chip { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.55); border: 2px solid var(--mesh-ink); border-radius: 12px; padding: 11px 14px 11px 16px; }
-.fin-chip .flabel { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; width: 104px; flex-shrink: 0; }
-.fin-chip .fcmd { font-family: var(--font-mono); font-size: 13px; flex: 1; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
-.fin-chip .fcmd::-webkit-scrollbar { display: none; }
-.fin-chip button { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; background: var(--mesh-ink); color: var(--mesh); border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; flex-shrink: 0; }
-.fin-chip button.ok { background: #fffef9; color: var(--mesh-ink); }
-.fin-micro { margin-top: 16px; font-family: var(--font-mono); font-size: 11px; color: rgba(22,26,5,0.65); }
+/* final install: the page's one numbered sequence, on the page background.
+   Section padding, heading sizes, and the .lede line come from base.css. */
 
-.fin-chip button.fail { background: var(--vpn) !important; color: var(--mesh-ink) !important; }
+.finale .fin-steps { list-style: none; counter-reset: fin-step; max-width: 780px; margin: 44px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px; }
+.finale .fin-steps li { counter-increment: fin-step; position: relative; padding-left: 2.25em; }
+.finale .fin-steps li::before { content: counter(fin-step); position: absolute; left: 0; top: 0.3em; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--mesh); }
+.finale .fin-steps h3 { margin-bottom: 10px; }
+.finale .fin-steps p { color: var(--text-dim); max-width: 640px; }
+.finale .fin-steps .install { margin-top: 14px; }
 
-@media (max-width: 620px) {
-  .fin-chip { flex-wrap: wrap; }
-  .fin-chip .fcmd { flex-basis: 100%; border-top: 2px solid var(--mesh-ink); padding-top: 9px; }
-}
+/* base.css pins code to one line; the Open Anyway path is long enough to
+   overflow a phone, so this section lets its inline commands wrap */
+.finale code { white-space: normal; }
+
+/* the activation line under each command; install.css leaves it to the page */
+.finale .install-activate { flex-basis: 100%; order: 3; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); }
+
+.finale .fin-after { margin-top: 44px; font-size: var(--step--1); color: var(--text-dim); max-width: 640px; }
 /* Open core split: two cards on the page ground. The core card is the
    featured fill with the mesh accents; the app card is the outlined panel
    with the amber accent. The small lines under the two buttons (activation
@@ -1182,24 +1181,50 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 </main>
 
 <!-- region:finale owner:finale -->
-<!-- FINALE CTA -->
-<section class="finale">
+  <!-- FINAL INSTALL -->
+<section id="install" class="finale">
   <div class="wrap">
-    <h2 class="">Two minutes. Then never<br>think about it again.</h2>
-    <p class="fin-sub">Install, run one command, connect your VPN and Tailscale like you always do. There is no daily usage—that&rsquo;s the whole point.</p>
-    <div class="fin-installs">
-      <div class="fin-chip">
-        <span class="flabel">Menu bar app</span>
-        <span class="fcmd">$ brew install --cask shrwnsan/tap/tailroute</span>
-        <button type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-      <div class="fin-chip">
-        <span class="flabel">CLI daemon</span>
-        <span class="fcmd">$ brew install shrwnsan/tap/tailroute-cli</span>
-        <button type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-ok="copied ✓" data-copy-fail="copy failed">copy</button>
-      </div>
-    </div>
-    <p class="fin-micro">no account · no telemetry · uninstall restores everything</p>
+    <h2>Install it once. It takes it from there.</h2>
+    <p class="lede">Both commands install the same engine. Connect your VPN and Tailscale the way you always do&mdash;there is no daily usage, and that&rsquo;s the whole point.</p>
+    <ol class="fin-steps">
+      <li>
+        <h3>Install</h3>
+        <div class="install" data-install id="final-install">
+          <div class="install-tabs" role="tablist" aria-label="Install">
+            <button class="install-tab" type="button" role="tab" id="final-tab-cli" aria-controls="final-panel-cli" aria-selected="true">CLI daemon</button>
+            <button class="install-tab" type="button" role="tab" id="final-tab-app" aria-controls="final-panel-app" aria-selected="false" tabindex="-1">Menu bar app</button>
+          </div>
+          <div class="install-panel" role="tabpanel" id="final-panel-cli" aria-labelledby="final-tab-cli">
+            <p class="install-label">CLI daemon</p>
+            <code class="install-cmd"><span class="install-ps1">$</span><span id="final-cmd-cli">brew install shrwnsan/tap/tailroute-cli</span></code>
+            <span class="install-note">The full engine, Apache-2.0, as a root launchd daemon.</span>
+            <p class="install-activate">Then run <code>sudo tailroute install</code>&mdash;check <code>tailroute status</code> any time.</p>
+            <button class="copy" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-target="final-cmd-cli" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+          </div>
+          <div class="install-panel" role="tabpanel" id="final-panel-app" aria-labelledby="final-tab-app" hidden>
+            <p class="install-label">Menu bar app</p>
+            <code class="install-cmd"><span class="install-ps1">$</span><span id="final-cmd-app">brew install --cask shrwnsan/tap/tailroute</span></code>
+            <span class="install-note">The same engine behind a menu bar icon. Includes the CLI.</span>
+            <span class="install-note gk-note">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in <code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code>.</span>
+            <p class="install-activate">Then open Tailroute and approve it&mdash;check <code>tailroute status</code> any time.</p>
+            <button class="copy" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-target="final-cmd-app" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+          </div>
+        </div>
+      </li>
+      <li>
+        <h3>Activate</h3>
+        <p>CLI daemon: run <code>sudo tailroute install</code>. Menu bar app: open Tailroute. <span class="gk-note">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in <code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code>.</span></p>
+      </li>
+      <li>
+        <h3>Connect</h3>
+        <p>Connect your VPN and Tailscale the way you always do.</p>
+      </li>
+      <li>
+        <h3>Verify</h3>
+        <p>Run <code>tailroute status</code> and watch the daemon make its first correct call: while your VPN is connected, MagicDNS state reads disabled (as set by daemon).</p>
+      </li>
+    </ol>
+    <p class="fin-after">Changed your mind? <code>sudo tailroute uninstall</code> restores MagicDNS and removes everything. The full manual: <a href="docs/#diagnostics">diagnostics and logs</a>.</p>
   </div>
 </section>
 <!-- /region:finale -->
