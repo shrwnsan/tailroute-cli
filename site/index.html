@@ -369,15 +369,16 @@
           <div class="a">The <b>CLI daemon</b> (<code>brew install tailscale</code>) is fully supported—tailroute toggles DNS over its unix socket.
             The GUI app works with limitations (fall-back MagicDNS detection), and the Mac App Store version is not supported.</div>
         </details>
+        <details class="q gk-note"><summary>Why does macOS ask me to approve the app the first time it opens? <span class="pm" aria-hidden="true">+</span></summary><div class="a">The app isn't notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy &amp; Security → Open Anyway. The CLI daemon installs without this step.</div></details>
         <details class="q">
           <summary>Does it phone home? <span class="pm" aria-hidden="true">+</span></summary>
-          <div class="a">No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network
+          <div class="a">No. The daemon has no telemetry, makes no external network calls, and needs no account. It never intercepts or logs your traffic. The only network
             activity is the proxy and tunnels you configure, pointing at your own tailnet.</div>
         </details>
         <details class="q">
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
-            <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
-            strict input validation, absolute paths only, MagicDNS restored when the daemon stops.
+            <div class="a">Because it shows its work: <code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed.
+            Strict input validation, absolute paths only, MagicDNS restored when the daemon stops.
             The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q">
@@ -445,10 +446,18 @@
       },
       {
         "@type": "Question",
+        "name": "Why does macOS ask me to approve the app the first time it opens?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The app isn't notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy & Security → Open Anyway. The CLI daemon installs without this step."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "Does it phone home?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network activity is the proxy and tunnels you configure, pointing at your own tailnet."
+          "text": "No. The daemon has no telemetry, makes no external network calls, and needs no account. It never intercepts or logs your traffic. The only network activity is the proxy and tunnels you configure, pointing at your own tailnet."
         }
       },
       {
@@ -456,7 +465,7 @@
         "name": "It runs as root—why should I trust it?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
+          "text": "Because it shows its work: sudo tailroute install writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed. Strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
         }
       },
       {
