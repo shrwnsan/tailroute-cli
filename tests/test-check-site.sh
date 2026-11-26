@@ -318,26 +318,28 @@ PY
     assert_not_contains "FAIL third-party" "$CHECK_OUT"
 }
 
-test_third_party_allows_cloudflare_beacon() {
+test_third_party_flags_cloudflare_beacon() {
+    # The site loads exactly one analytics script (the self-hosted Plausible
+    # ingest). The Cloudflare Web Analytics beacon is no longer approved and
+    # must be reported as third-party if it ever reappears.
     local dir
     dir=$(make_fixture)
     write_good_page "$dir"
-    python3 - "$dir/index.html" <<'PY'
+    python3 - "$dir/index.html" <<'INNER'
 import sys
 
 path = sys.argv[1]
 text = open(path, encoding="utf-8").read()
 script = "<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{\"token\": \"x\"}'></script>"
 open(path, "w", encoding="utf-8").write(text.replace("</head>", script + "\n</head>"))
-PY
+INNER
     run_checker "$dir"
-    assert_eq "0" "$CHECK_RC" "the Cloudflare Web Analytics beacon must pass: $CHECK_OUT"
-    assert_not_contains "FAIL third-party" "$CHECK_OUT"
+    assert_match "FAIL third-party" "$CHECK_OUT" "the Cloudflare beacon must be flagged: $CHECK_OUT"
 }
 
 test_third_party_still_flags_third_party_analytics() {
-    # Only the approved analytics hosts (see ANALYTICS_HOSTS:
-    # pulse.tailroute.app and static.cloudflareinsights.com) may load
+    # Only the approved analytics host (see ANALYTICS_HOSTS:
+    # pulse.tailroute.app) may load
     # cross-origin; other analytics SaaS hosts are third-party. The
     # Plausible ingest must never be CDN-proxied instead: a proxy
     # challenges cross-origin event POSTs and pageviews drop silently.
