@@ -517,13 +517,18 @@ h1 em { font-style: normal; color: var(--mesh); }
 /* ============ FAQ ============ */
 .faq { max-width: 800px; margin-top: 36px; }
 details.q { border-bottom: 1px solid var(--line); }
-details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--font-display); font-weight: 700; font-size: 1.03em; letter-spacing: -0.01em; }
 details.q summary::-webkit-details-marker { display: none; }
-details.q summary .pm { font-family: var(--font-mono); color: var(--mesh); font-size: 18px; flex-shrink: 0; }
-details.q[open] summary .pm { transform: rotate(45deg); }
-details.q .a { padding: 0 4px 22px; color: var(--text-dim); font-size: 15px; max-width: 720px; }
+details.q summary .pm { font-family: var(--font-mono); color: var(--mesh); font-size: 1.06em; flex-shrink: 0; display: inline-block; transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1); }
+details[open] .pm { transform: rotate(45deg); }
+details.q .a { padding: 0 4px 22px; color: var(--text-dim); font-size: 0.91em; max-width: 720px; }
 details.q .a b { color: var(--text); }
 details.q .a code { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  details.q summary .pm { transition: none; }
+  details[open] .pm { transform: none; }
+}
 #support { padding-top: 0; }
 
 .sup-note { color: var(--text-dim); margin-top: 14px; max-width: 480px; }
@@ -912,15 +917,16 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
           <div class="a">The <b>CLI daemon</b> (<code>brew install tailscale</code>) is fully supported—tailroute toggles DNS over its unix socket.
             The GUI app works with limitations (fall-back MagicDNS detection), and the Mac App Store version is not supported.</div>
         </details>
+        <details class="q gk-note"><summary>Why does macOS ask me to approve the app the first time it opens? <span class="pm" aria-hidden="true">+</span></summary><div class="a">The app isn't notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy &amp; Security → Open Anyway. The CLI daemon installs without this step.</div></details>
         <details class="q">
           <summary>Does it phone home? <span class="pm" aria-hidden="true">+</span></summary>
-          <div class="a">No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network
+          <div class="a">No. The daemon has no telemetry, makes no external network calls, and needs no account. It never intercepts or logs your traffic. The only network
             activity is the proxy and tunnels you configure, pointing at your own tailnet.</div>
         </details>
         <details class="q">
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
-            <div class="a">Because it shows its work: install-time <b>SHA-256 integrity manifest</b> verified before any library loads,
-            strict input validation, absolute paths only, MagicDNS restored when the daemon stops.
+            <div class="a">Because it shows its work: <code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed.
+            Strict input validation, absolute paths only, MagicDNS restored when the daemon stops.
             The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q">
@@ -988,10 +994,18 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       },
       {
         "@type": "Question",
+        "name": "Why does macOS ask me to approve the app the first time it opens?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The app isn't notarized yet. The first time you open it, macOS asks you to approve it in System Settings → Privacy & Security → Open Anyway. The CLI daemon installs without this step."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "Does it phone home?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. No telemetry, no external network calls, no account, no traffic interception or logging. The only network activity is the proxy and tunnels you configure, pointing at your own tailnet."
+          "text": "No. The daemon has no telemetry, makes no external network calls, and needs no account. It never intercepts or logs your traffic. The only network activity is the proxy and tunnels you configure, pointing at your own tailnet."
         }
       },
       {
@@ -999,7 +1013,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
         "name": "It runs as root—why should I trust it?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Because it shows its work: install-time SHA-256 integrity manifest verified before any library loads, strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
+          "text": "Because it shows its work: sudo tailroute install writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed. Strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
         }
       },
       {
