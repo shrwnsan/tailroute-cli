@@ -13,6 +13,9 @@
 <meta property="og:url" content="https://tailroute.app/docs/">
 <meta property="og:image" content="https://tailroute.app/og.png">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="tailroute-cli—Tailscale + VPN coexistence for macOS">
+<meta name="twitter:description" content="A launchd daemon toggles MagicDNS when your VPN connects—internet stays up, peers stay reachable. No telemetry. Apache-2.0.">
+<meta name="twitter:image" content="https://tailroute.app/og.png">
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
   <link rel="preload" href="../assets/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="../assets/css/fonts.css">
@@ -394,8 +397,9 @@
   <div class="synopsis">
     <div><span class="p">$</span> tailroute status</div>
   </div>
-  <p class="note indent">daemon: running · tailscale: utun4 · vpn: utun3 ·
-     magicdns: disabled (vpn_active) · last check: 12s ago</p>
+  <p class="note indent">Daemon: Running (PID 812) · Tailscale: utun4 (100.64.0.2) · VPN: utun3 (active) ·
+     MagicDNS state: false (as set by daemon) · Last action: disable at 2026-11-20T09:12:05Z ·
+     SOCKS5 Proxy: Running (pid 4812, 127.0.0.1:1055) · Proxy monitor: healthy</p>
   <p>Preview without changes: <code>tailroute --dry-run</code>.
      Logs: <code>tail -f /var/log/tailroute.log</code>.</p>
 
@@ -480,7 +484,7 @@
 
 </main>
 <footer>
-  <p class="colophon">Site analytics: cookie-free, aggregate-only (Plausible + Cloudflare)—the daemon doesn’t call home either.</p>
+  <p class="colophon">Site analytics: cookie-free, aggregate-only, self-hosted Plausible—the daemon doesn’t call home either.</p>
   <p class="legal">CLI: Apache-2.0 · App: proprietary · © 2026 <a href="https://github.com/shrwnsan/tailroute-cli">tailroute</a> · not affiliated with Tailscale Inc. · <a class="backlink" href="../">← tailroute</a></p>
 </footer>
 <script>

@@ -425,7 +425,8 @@
         </details>
         <details class="q">
           <summary>Does it work with Mullvad or NordVPN? <span class="pm" aria-hidden="true">+</span></summary>
-          <div class="a">The <b>DNS fix works</b>—internet stays up through the VPN with Tailscale connected. But both VPNs block
+          <div class="a">The <b>DNS fix works in our testing</b>—internet stays up through the VPN with Tailscale connected;
+            the matrix below records exactly what was measured for each VPN. But both VPNs block
             direct traffic to Tailscale&rsquo;s CGNAT range at the Network-Extension layer, so <b>direct peer connections fail</b>;
             use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes.</div>
         </details>
@@ -450,7 +451,7 @@
           <summary>It runs as root—why should I trust it? <span class="pm" aria-hidden="true">+</span></summary>
             <div class="a">Because it shows its work: <code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed.
             Strict input validation, absolute paths only, MagicDNS restored when the daemon stops.
-            The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
+            The whole thing is <a href="https://github.com/shrwnsan/tailroute-cli" target="_blank" rel="noopener">~8,500 lines of auditable bash and Go (8,283 sh + 217 Go, wc -l, Nov 2026)</a>. Prefer the manual? Read the <a href="docs/">full man page</a>—shipped with this site.</div>
         </details>
         <details class="q">
           <summary>What happens when I quit the VPN or uninstall? <span class="pm" aria-hidden="true">+</span></summary>
@@ -496,7 +497,7 @@
         "name": "Does it work with Mullvad or NordVPN?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The DNS fix works—internet stays up through the VPN with Tailscale connected. But both VPNs block direct traffic to Tailscale's CGNAT range at the Network-Extension layer, so direct peer connections fail; use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes."
+          "text": "The DNS fix works in our testing—internet stays up through the VPN with Tailscale connected; the matrix below records exactly what was measured for each VPN. But both VPNs block direct traffic to Tailscale's CGNAT range at the Network-Extension layer, so direct peer connections fail; use the built-in SOCKS5 proxy (automatic) or a browser tunnel instead. Details in the compatibility notes."
         }
       },
       {
@@ -536,7 +537,7 @@
         "name": "It runs as root—why should I trust it?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Because it shows its work: sudo tailroute install writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed. Strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,300 lines of auditable bash and Go (8,096 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
+          "text": "Because it shows its work: sudo tailroute install writes a SHA-256 manifest of the installed files. The daemon checks it before loading any code and refuses to start if anything changed. Strict input validation, absolute paths only, MagicDNS restored when the daemon stops. The whole thing is ~8,500 lines of auditable bash and Go (8,283 sh + 217 Go, wc -l, Nov 2026). Prefer the manual? Read the full man page, shipped with this site."
         }
       },
       {
@@ -609,7 +610,7 @@
       </li>
       <li>
         <h3>Verify</h3>
-        <p>Run <code>tailroute status</code> and watch the daemon make its first correct call: while your VPN is connected, MagicDNS state reads disabled (as set by daemon).</p>
+        <p>Run <code>tailroute status</code> and watch the daemon make its first correct call: while your VPN is connected, MagicDNS state reads false (as set by daemon).</p>
       </li>
     </ol>
     <p class="fin-after">Changed your mind? <code>sudo tailroute uninstall</code> restores MagicDNS and removes everything. The full manual: <a href="docs/#diagnostics">diagnostics and logs</a>.</p>
