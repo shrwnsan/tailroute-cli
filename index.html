@@ -393,82 +393,71 @@ html:not(.js) #hero-install .install-activate { display: block; margin-top: 8px;
   .hcard:hover, .hcard:focus-within { transform: none; }
   .hcard, .hcard .dot, .hcard .act { transition: none; }
 }
-.compat-head { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; align-items: center; }
-.compat-copy { max-width: 560px; }
-.matrix-foot { margin-top: 16px; }
-.matrix-note { margin-top: 16px; font-size: 13.5px; }
+/* How it works: the three-state table and the problem-and-response rows.
+   Every selector scopes to the section's .features root; every value comes
+   from tokens.css. */
 
-/* ============ BENTO ============ */
-.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
-.b-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; position: relative; overflow: hidden; transition: border-color 0.2s ease, transform 0.2s ease; }
-.b-card:hover { border-color: var(--line-2); transform: translateY(-2px); }
-.b-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 200px at 80% -20%, rgba(198,242,78,0.05), transparent 70%); pointer-events: none; }
-.b7 { grid-column: span 7; } .b5 { grid-column: span 5; }
-.b4 { grid-column: span 4; } .b8 { grid-column: span 8; } .b12 { grid-column: span 12; }
-.b-k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
-.b-card h3 { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
-.b-card p { color: var(--text-dim); font-size: 14.5px; }
-.b-card p b { color: var(--text); font-weight: 600; }
+/* ---- the three-state table ---- */
+.features .statetable { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.features .statetable caption { caption-side: top; text-align: left; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); padding: 0 0 12px; }
+/* the proxy header carries a host:port code; let it wrap instead of overflowing */
+.features .statetable code { white-space: normal; overflow-wrap: break-word; }
+.features .statetable thead th { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; text-align: left; color: var(--text-faint); padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+.features .statetable tbody th,
+.features .statetable tbody td { font-size: 0.9em; text-align: left; vertical-align: top; padding: 16px; border-bottom: 1px solid var(--line); }
+.features .statetable tbody tr:last-child th,
+.features .statetable tbody tr:last-child td { border-bottom: 0; }
+.features .statetable tbody th { color: var(--text); font-weight: 600; }
+.features .statetable tbody td { color: var(--text-dim); }
+/* the first row is tinted, so it owns the table's top corners */
+.features .statetable tbody tr:first-child th { border-top-left-radius: 15px; }
+.features .statetable tbody tr:first-child td:last-child { border-top-right-radius: 15px; }
 
-.terminal { background: #101010; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; }
-.term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
-.term-bar i:first-child { background: var(--mesh); }
-.term-bar span { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); margin-left: 6px; }
-/* fixed 10-line capacity (matches the loop's cap) so the demo never shifts
-   layout; extra lines exit the top, scrollback-style */
-.term-body { padding: 16px; height: calc(1.8em * 10 + 32px); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; font-family: var(--font-mono); font-size: 12.4px; line-height: 1.8; }
-.term-body > div { flex: none; }
-.tl-cmd { color: var(--text); } .tl-cmd::before { content: "❯ "; color: var(--mesh); }
-.tl-out { color: var(--text-dim); } .tl-dim { color: var(--text-faint); }
-.tl-ok { color: var(--mesh); } .tl-warn { color: var(--vpn); }
-.term-foot { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
-.term-foot span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--text-faint); white-space: nowrap; }
-/* value floors are sized to the widest bold glyph run per chip
-   (ch tracks regular weight—bold runs run wider); family is pinned
-   here rather than inherited so all three values share one declaration */
-.term-foot b { font-family: var(--font-mono); font-weight: 600; margin-left: 4px; min-width: 3.5ch; display: inline-block; }
-.term-foot span:nth-child(2) b { min-width: 4.5ch; } /* down */
-.term-foot span:last-child b { min-width: 8ch; } /* COEXIST—row wrap must not depend on loop state */
-.fon { color: var(--mesh); } .foff { color: var(--vpn); }
+/* colour backs the words, never replaces them: amber marks the rows the VPN
+   causes, lime marks the healthy mesh row, the do-nothing row stays neutral */
+.features .statetable tbody tr.st-vpn { background: var(--vpn-soft); }
+.features .statetable tbody tr.st-vpn th { box-shadow: inset 3px 0 0 var(--vpn); }
+.features .statetable tbody tr.st-mesh { background: var(--mesh-soft); }
+.features .statetable tbody tr.st-mesh th { box-shadow: inset 3px 0 0 var(--mesh); }
 
-.mrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
-.mrow:last-child { border-bottom: none; }
-.led { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.led-l { background: var(--vpn); box-shadow: 0 0 8px rgba(232,163,61,0.5); }
-.led-m { background: var(--mesh); box-shadow: 0 0 8px rgba(198,242,78,0.4); }
-.led-o { background: var(--line-2); }
-.mrow b { font-weight: 600; font-size: 13.5px; width: 130px; flex-shrink: 0; }
-.mrow span { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
-.urlpill { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; color: var(--text); background: var(--surface-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 12px; margin-top: 14px; }
-.urlpill i { font-style: normal; color: var(--mesh); }
-.vpnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.vpnrow span { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); border: 1px solid var(--line-2); border-radius: 999px; padding: 4px 11px; }
-.vpnrow span.t { color: var(--mesh); border-color: var(--mesh-line); background: var(--mesh-soft); }
+.features .states-note { max-width: 680px; margin-top: 12px; margin-bottom: 44px; font-size: var(--step--1); color: var(--text-dim); }
+.features .states-note b { color: var(--text); font-weight: 600; }
 
-/* problem → response rows */
-.bento .probband { grid-column: span 12; }
-.probband { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); margin-bottom: 14px; }
-.prob { background: var(--surface-3); padding: 24px 26px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
-.prob p { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
-.prob h4 { font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; color: var(--text-dim); }
-.resp { padding: 24px 26px; }
-.resp h3 { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
-.resp h3 i { font-style: normal; color: var(--mesh); margin-right: 8px; }
-.resp p { color: var(--text-dim); font-size: 14.5px; }
-.resp p b { color: var(--text); font-weight: 600; }
+/* ---- problem-and-response rows ---- */
+.features .probband { display: grid; grid-template-columns: 0.85fr 1.15fr; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); margin-bottom: 14px; }
+.features .prob { background: var(--surface-3); padding: 24px 26px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
+/* the problem side is plain body type on the shared scale: situation line,
+   then the short line it earns */
+.features .prob p { color: var(--text-dim); font-size: var(--step-1); margin-bottom: 8px; }
+.features .prob h4 { font-size: var(--step-1); font-weight: 600; color: var(--text); }
+.features .resp { padding: 24px 26px; }
+.features .resp h3 { margin-bottom: 8px; }
+.features .resp p { color: var(--text-dim); font-size: 0.9em; }
+.features .resp p b { color: var(--text); font-weight: 600; }
 
-@media (max-width: 1000px) {
-  .b7, .b5, .b8, .b4 { grid-column: span 12; }
-}
+.features .urlpill { display: inline-block; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text); background: var(--surface-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 12px; margin-top: 14px; }
+
 @media (max-width: 620px) {
-  .probband { grid-template-columns: 1fr; }
-  .prob { border-right: none; border-bottom: 1px solid var(--line); }
+  .features .probband { grid-template-columns: 1fr; }
+  .features .prob { border-right: none; border-bottom: 1px solid var(--line); }
 
-  /* stacked status chips: label over value—chip width stays loop-independent */
-  .term-foot { gap: 16px; }
-  .term-foot span { display: flex; flex-direction: column; gap: 2px; }
-  .term-foot b { margin-left: 0; }
+  /* the table stacks: one card per state, the column headers travel
+     into data-l labels; the thead stays for screen readers */
+  .features .statetable { display: block; background: none; border: 0; border-radius: 0; }
+  /* a caption inside a block-displayed table collapses to min-content;
+     let it flow at the card width instead */
+  .features .statetable caption { display: block; }
+  .features .statetable thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); }
+  .features .statetable tbody { display: block; }
+  .features .statetable tbody tr { display: block; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .features .statetable tbody tr:last-child { margin-bottom: 0; }
+  .features .statetable tbody th,
+  .features .statetable tbody td { display: block; padding: 12px 16px; border-bottom: 0; }
+  .features .statetable tbody th { border-bottom: 1px solid var(--line); }
+  /* restore the divider the desktop last-row reset removed */
+  .features .statetable tbody tr:last-child th { border-bottom: 1px solid var(--line); }
+  .features .statetable tbody td + td { border-top: 1px solid var(--line); }
+  .features .statetable tbody td::before { content: attr(data-l); display: block; margin-bottom: 4px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; color: var(--text-faint); }
 }
 /* final install: the page's one numbered sequence, on the page background.
    Section padding, heading sizes, and the .lede line come from base.css. */
@@ -813,84 +802,65 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
 <!-- /region:hero -->
 
 <!-- region:features owner:features -->
-  <!-- BENTO FEATURES -->
-  <section id="features">
+  <!-- HOW IT WORKS -->
+  <section class="features" id="features">
     <div class="wrap">
-      <p class="k">What it does</p>
-      <h2 class="">A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
+      <p class="k">How it works</p>
+      <h2 class="">A daemon that makes the call, so you don&rsquo;t.</h2>
       <p class="lede">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
 
-      <div class="bento">
-        <div class="b-card b7">
-          <p class="b-k">demo · the decision loop, replayed</p>
-          <div class="terminal">
-            <div class="term-bar"><i></i><i></i><i></i><span>tailroute daemon—demo loop</span></div>
-            <div class="term-body" id="term-body"></div>
-            <div class="term-foot">
-              <span>MAGICDNS<b id="st-dns" class="foff">off</b></span>
-              <span>PROXY<b id="st-proxy" class="fon">up</b></span>
-              <span>STATE<b id="st-phase">COEXIST</b></span>
-            </div>
-          </div>
-        </div>
+      <table class="statetable">
+        <caption>Three states, zero judgment calls</caption>
+        <thead>
+          <tr>
+            <th scope="col">Condition</th>
+            <th scope="col">MagicDNS</th>
+            <th scope="col">Proxy on <code>127.0.0.1:1055</code></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="st-vpn">
+            <th scope="row">Tailscale and your VPN are both active</th>
+            <td data-l="MagicDNS"><code>off</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>up</code></td>
+          </tr>
+          <tr class="st-mesh">
+            <th scope="row">Tailscale only</th>
+            <td data-l="MagicDNS"><code>on</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>stopped</code></td>
+          </tr>
+          <tr>
+            <th scope="row">No Tailscale</th>
+            <td data-l="MagicDNS"><code>unchanged</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>unchanged</code> (keeps watching)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="states-note">If the state is ambiguous — two VPNs active at once, say — tailroute logs a warning and changes nothing. <b>When in doubt, do nothing.</b></p>
 
-        <div class="b-card b5">
-          <p class="b-k">the matrix</p>
-          <h3>Three states, zero judgment calls</h3>
-          <div class="matrix-foot">
-            <div class="mrow"><span class="led led-l"></span><b>VPN + Tailscale</b><span>dns off · proxy up</span></div>
-            <div class="mrow"><span class="led led-m"></span><b>Tailscale only</b><span>dns on · proxy down</span></div>
-            <div class="mrow"><span class="led led-o"></span><b>No Tailscale</b><span>watching…</span></div>
-          </div>
-          <p class="matrix-note"><b>No Tailscale?</b> It changes nothing. <b>Daemon stopped?</b> Any MagicDNS it turned off goes back on.</p>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
+        <div class="resp"><h3>SOCKS5 mesh proxy</h3>
+          <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
+          the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
+          Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
+      </div>
 
-        <div class="probband">
-          <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
-          <div class="resp"><h3><i>01</i>SOCKS5 mesh proxy</h3>
-            <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
-            the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
-            Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
+        <div class="resp"><h3>Browser tunnels</h3>
+          <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
+          <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
+          Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
+          <span class="urlpill">mypeer.yourtailnet.ts.net:8443</span></div>
+      </div>
 
-        <div class="probband">
-          <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
-          <div class="resp"><h3><i>02</i>Browser tunnels</h3>
-            <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
-            <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
-            Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
-            <span class="urlpill"><i>→</i> mypeer.yourtailnet.ts.net:8443</span></div>
-        </div>
-
-        <div class="probband">
-          <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
-          <div class="resp"><h3><i>03</i>Self-verifying install</h3>
-            <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
-            refuse to start, and say what changed. Strict validation, absolute paths, MagicDNS restored when
-            the daemon stops, 667 tests and counting.</p></div>
-        </div>
-
-        <div class="b-card b12">
-          <div class="compat-head">
-            <div class="compat-copy">
-              <p class="b-k">compatibility</p>
-              <h3>Works with any utun-route VPN</h3>
-              <p>The daemon classifies routing changes from any VPN that takes the default route—including corporate clients
-              like Cisco AnyConnect, GlobalProtect or Zscaler (classified, not lab-tested:
-              <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">report yours ↗</a>)
-—no per-VPN plugins, no allowlists.</p>
-            </div>
-            <div class="vpnrow">
-              <span class="t">Mullvad · tested</span>
-              <span class="t">NordVPN · tested</span>
-              <span>ProtonVPN</span>
-              <span>Surfshark</span>
-              <span>ExpressVPN</span>
-              <span>corporate VPNs · any utun default-route</span>
-              <span>your VPN ↗</span>
-            </div>
-          </div>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+        <div class="resp"><h3>Self-verifying install</h3>
+          <p><code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon
+          checks it before loading any code and refuses to start if anything changed. Strict validation,
+          absolute paths, MagicDNS restored when the daemon stops, 667 tests and counting.</p></div>
       </div>
     </div>
   </section>
