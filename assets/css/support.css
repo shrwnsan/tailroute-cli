@@ -1,18 +1,21 @@
-#support { padding-top: 0; }
+/* Support: unboxed — the section reads as plain content on the page ground.
+   Section padding, heading size, and the .k label come from base.css. */
 
 .sup-note { color: var(--text-dim); margin-top: 14px; max-width: 480px; }
 
-/* ============ SUPPORT ============ */
-.sup-card { border: 1px solid var(--line-2); border-radius: 20px; padding: 40px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; background: linear-gradient(120deg, var(--surface), var(--surface-3)); }
-.sup-card h2 { font-size: clamp(1.7rem, 2.8vw, 2.3rem); }
+.sup-card { display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; }
 .milestone { background: var(--surface-3); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
-.milestone p { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 10px; }
-.milestone b { font-size: 15px; font-weight: 600; display: block; margin-bottom: 4px; }
-.milestone span { font-size: 13px; color: var(--text-dim); }
+.milestone p { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); margin-bottom: 10px; }
+.milestone b { font-size: var(--step-0); font-weight: 600; display: block; margin-bottom: 4px; }
+.milestone .gk-note { font-size: var(--step--1); color: var(--text-dim); }
+/* the canonical Gatekeeper sentence rides along inside .gk-note; visually hidden */
+.milestone .vh { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sup-actions { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
-.btn-lime { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: 13px; font-weight: 600; background: var(--mesh); color: var(--mesh-ink); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
-.btn-lime:hover { filter: brightness(1.05); }
-.btn-ghost2 { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: 13px; color: var(--text); border: 1px solid var(--line-2); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+.btn-solid { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: var(--step--1); font-weight: 600; background: var(--text); color: var(--ground); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
+.btn-solid:hover { filter: brightness(1.05); }
+/* ghost pair for the sponsor links; styled now so the commented markup is
+   ready the moment a channel goes live */
+.btn-ghost2 { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: var(--step--1); color: var(--text); border: 1px solid var(--line-2); border-radius: 12px; padding: 13px 22px; text-decoration: none; }
 .btn-ghost2:hover { border-color: var(--mesh-line); }
 
 @media (max-width: 1000px) {
