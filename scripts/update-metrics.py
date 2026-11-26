@@ -200,13 +200,13 @@ def _replace_chart(html, releases):
     since = total - before
     spring_txt = "one release in spring" if before == 1 else f"{before} releases in spring"
 
-    svg = f"""          <svg viewBox="{CHART_VB[0]} {CHART_VB[1]} {CHART_VB[2]} {CHART_VB[3]}" role="img" aria-label="Cumulative tagged releases, {first_d.strftime('%B')} to {last_d.strftime('%B %Y')}: {spring_txt}, then {since} more from late August, ending at {total}">
+    svg = f"""          <svg viewBox="{CHART_VB[0]} {CHART_VB[1]} {CHART_VB[2]} {CHART_VB[3]}" role="img" tabindex="0" aria-label="Cumulative tagged releases, {first_d.strftime('%B')} to {last_d.strftime('%B %Y')}: {spring_txt}, then {since} more from late August, ending at {total}">
 {chr(10).join(grid)}
 {chr(10).join(ticks)}
-            <path d="{area}" fill="rgba(116,164,26,0.10)" stroke="none"/>
+            <path d="{area}" fill="var(--mark)" fill-opacity="0.1" stroke="none"/>
             <path d="M{poly}" fill="none" stroke="var(--mark)" stroke-width="2" stroke-linejoin="round"/>
             <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="4.5" fill="var(--mark)" stroke="var(--card)" stroke-width="2"/>
-            <text x="{last_x:.1f}" y="{last_y - 6:.1f}" text-anchor="end" style="font-family:var(--mono);font-size:11px;font-weight:600" fill="var(--text)">{total}</text>
+            <text x="{last_x:.1f}" y="{last_y - 6:.1f}" text-anchor="end" style="font-family:var(--mono);font-size:13px;font-weight:600" fill="var(--text)">{total}</text>
             <line id="xhair" x1="0" y1="{last_y:.1f}" x2="0" y2="{Y_BASE}" stroke="var(--line2)" stroke-width="1" opacity="0"/>
             <circle id="hoverdot" r="4" fill="var(--text)" stroke="var(--card)" stroke-width="2" opacity="0"/>
           </svg>"""
@@ -239,7 +239,7 @@ def _replace_chart(html, releases):
     else:
         out = hi.sub(f'<span class="chart-hi">{since} of {total} releases shipped since Aug 24</span>', out)
 
-    svg_re = _re.compile(r'^[ \t]*<svg viewBox="[^"]*" role="img" aria-label="Cumulative tagged releases[^"]*">.*?^[ \t]*</svg>', _re.M | _re.S)
+    svg_re = _re.compile(r'^[ \t]*<svg viewBox="[^"]*" role="img"(?: tabindex="0")? aria-label="Cumulative tagged releases[^"]*">.*?^[ \t]*</svg>', _re.M | _re.S)
     if not svg_re.search(out):
         print("update-metrics: WARNING chart svg not found")
     else:
