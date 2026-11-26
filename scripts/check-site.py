@@ -108,18 +108,26 @@ LEGACY_TOKENS = (
 # Every install path ends with the user verifying the daemon state.
 ACTIVATION_TEXT = "tailroute status"
 
-# Text and stroke tokens the contrast check vouches for, each against the
-# page's three dark surfaces; --mesh-ink is vouched against its --mesh fill.
-# The minimum is the WCAG AA bar for normal text.
+# Tokens the contrast check vouches for, each against the page's three dark
+# surfaces; --mesh-ink is vouched against its --mesh fill. Text and UI accents
+# are held to the WCAG AA bar for normal text (4.5:1). The two -* -mark tokens
+# exist only as diagram and chart strokes (never as text; their labels are
+# separate text elements in text tokens), so they are held to the WCAG
+# non-text bar (3:1) — and the pair must additionally stay separable under
+# common colour-vision deficiency, which the stroke values' comment records.
 AA_MIN_CONTRAST = 4.5
+STROKE_MIN_CONTRAST = 3.0
 CONTRAST_PAIRS = (
     ("--text", ("--ground", "--surface", "--surface-2")),
     ("--text-dim", ("--ground", "--surface", "--surface-2")),
     ("--text-faint", ("--ground", "--surface", "--surface-2")),
     ("--mesh", ("--ground", "--surface", "--surface-2")),
-    ("--mesh-mark", ("--ground", "--surface", "--surface-2")),
     ("--vpn", ("--ground", "--surface", "--surface-2")),
     ("--mesh-ink", ("--mesh",)),
+)
+STROKE_PAIRS = (
+    ("--mesh-mark", ("--ground", "--surface", "--surface-2")),
+    ("--vpn-mark", ("--ground", "--surface", "--surface-2")),
 )
 
 # The one Gatekeeper disclosure sentence every .gk-note element must carry.
@@ -933,6 +941,22 @@ def check_contrast(css_sources):
                     tokens.rel, fg_line,
                     f"{fg_name} on {bg_name} is {ratio:.2f}:1"
                     f" — below the {AA_MIN_CONTRAST}:1 AA minimum",
+                ))
+    for fg_name, bg_names in STROKE_PAIRS:
+        fg_line = props.get(fg_name, ("", 1))[1]
+        fg_rgb = rgb_of(fg_name, fg_line)
+        if fg_rgb is None:
+            continue
+        for bg_name in bg_names:
+            bg_rgb = rgb_of(bg_name, fg_line)
+            if bg_rgb is None:
+                continue
+            ratio = contrast_ratio(fg_rgb, bg_rgb)
+            if ratio < STROKE_MIN_CONTRAST:
+                fails.append(Failure(
+                    tokens.rel, fg_line,
+                    f"{fg_name} on {bg_name} is {ratio:.2f}:1"
+                    f" — below the {STROKE_MIN_CONTRAST}:1 non-text minimum",
                 ))
     return fails
 
