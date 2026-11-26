@@ -190,84 +190,65 @@
 <!-- /region:hero -->
 
 <!-- region:features owner:features -->
-  <!-- BENTO FEATURES -->
-  <section id="features">
+  <!-- HOW IT WORKS -->
+  <section class="features" id="features">
     <div class="wrap">
-      <p class="k">What it does</p>
-      <h2 class="">A daemon that makes the call, <em>so you don&rsquo;t.</em></h2>
+      <p class="k">How it works</p>
+      <h2 class="">A daemon that makes the call, so you don&rsquo;t.</h2>
       <p class="lede">Every routing-table change lands in one of three states, and the response is always the same. You do nothing.</p>
 
-      <div class="bento">
-        <div class="b-card b7">
-          <p class="b-k">demo · the decision loop, replayed</p>
-          <div class="terminal">
-            <div class="term-bar"><i></i><i></i><i></i><span>tailroute daemon—demo loop</span></div>
-            <div class="term-body" id="term-body"></div>
-            <div class="term-foot">
-              <span>MAGICDNS<b id="st-dns" class="foff">off</b></span>
-              <span>PROXY<b id="st-proxy" class="fon">up</b></span>
-              <span>STATE<b id="st-phase">COEXIST</b></span>
-            </div>
-          </div>
-        </div>
+      <table class="statetable">
+        <caption>Three states, zero judgment calls</caption>
+        <thead>
+          <tr>
+            <th scope="col">Condition</th>
+            <th scope="col">MagicDNS</th>
+            <th scope="col">Proxy on <code>127.0.0.1:1055</code></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="st-vpn">
+            <th scope="row">Tailscale and your VPN are both active</th>
+            <td data-l="MagicDNS"><code>off</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>up</code></td>
+          </tr>
+          <tr class="st-mesh">
+            <th scope="row">Tailscale only</th>
+            <td data-l="MagicDNS"><code>on</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>stopped</code></td>
+          </tr>
+          <tr>
+            <th scope="row">No Tailscale</th>
+            <td data-l="MagicDNS"><code>unchanged</code></td>
+            <td data-l="Proxy on 127.0.0.1:1055"><code>unchanged</code> (keeps watching)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="states-note">If the state is ambiguous — two VPNs active at once, say — tailroute logs a warning and changes nothing. <b>When in doubt, do nothing.</b></p>
 
-        <div class="b-card b5">
-          <p class="b-k">the matrix</p>
-          <h3>Three states, zero judgment calls</h3>
-          <div class="matrix-foot">
-            <div class="mrow"><span class="led led-l"></span><b>VPN + Tailscale</b><span>dns off · proxy up</span></div>
-            <div class="mrow"><span class="led led-m"></span><b>Tailscale only</b><span>dns on · proxy down</span></div>
-            <div class="mrow"><span class="led led-o"></span><b>No Tailscale</b><span>watching…</span></div>
-          </div>
-          <p class="matrix-note"><b>No Tailscale?</b> It changes nothing. <b>Daemon stopped?</b> Any MagicDNS it turned off goes back on.</p>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
+        <div class="resp"><h3>SOCKS5 mesh proxy</h3>
+          <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
+          the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
+          Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
+      </div>
 
-        <div class="probband">
-          <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
-          <div class="resp"><h3><i>01</i>SOCKS5 mesh proxy</h3>
-            <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
-            the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
-            Helpers included: <code>sshproxy</code>, <code>curlproxy</code>, generated SSH config.</p></div>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
+        <div class="resp"><h3>Browser tunnels</h3>
+          <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
+          <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
+          Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
+          <span class="urlpill">mypeer.yourtailnet.ts.net:8443</span></div>
+      </div>
 
-        <div class="probband">
-          <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
-          <div class="resp"><h3><i>02</i>Browser tunnels</h3>
-            <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
-            <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
-            Adaptive path: SOCKS5 when the VPN is up, direct when it isn&rsquo;t.</p>
-            <span class="urlpill"><i>→</i> mypeer.yourtailnet.ts.net:8443</span></div>
-        </div>
-
-        <div class="probband">
-          <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
-          <div class="resp"><h3><i>03</i>Self-verifying install</h3>
-            <p>An install-time <b>SHA-256 integrity manifest is verified before any library loads</b>—tampered files
-            refuse to start, and say what changed. Strict validation, absolute paths, MagicDNS restored when
-            the daemon stops, 667 tests and counting.</p></div>
-        </div>
-
-        <div class="b-card b12">
-          <div class="compat-head">
-            <div class="compat-copy">
-              <p class="b-k">compatibility</p>
-              <h3>Works with any utun-route VPN</h3>
-              <p>The daemon classifies routing changes from any VPN that takes the default route—including corporate clients
-              like Cisco AnyConnect, GlobalProtect or Zscaler (classified, not lab-tested:
-              <a href="https://github.com/shrwnsan/tailroute-cli/issues/new?template=vpn-compat.yml" target="_blank" rel="noopener">report yours ↗</a>)
-—no per-VPN plugins, no allowlists.</p>
-            </div>
-            <div class="vpnrow">
-              <span class="t">Mullvad · tested</span>
-              <span class="t">NordVPN · tested</span>
-              <span>ProtonVPN</span>
-              <span>Surfshark</span>
-              <span>ExpressVPN</span>
-              <span>corporate VPNs · any utun default-route</span>
-              <span>your VPN ↗</span>
-            </div>
-          </div>
-        </div>
+      <div class="probband">
+        <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+        <div class="resp"><h3>Self-verifying install</h3>
+          <p><code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon
+          checks it before loading any code and refuses to start if anything changed. Strict validation,
+          absolute paths, MagicDNS restored when the daemon stops, 667 tests and counting.</p></div>
       </div>
     </div>
   </section>
