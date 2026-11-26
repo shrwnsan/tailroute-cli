@@ -218,7 +218,7 @@ open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
 PY
 }
 
-REGION_NAMES=(assets meta nav hero features core limits faq support finale footer)
+REGION_NAMES=(assets meta nav hero features limits core faq finale support footer)
 
 region_marker_lines() {
     local name
@@ -722,9 +722,9 @@ test_regions_flags_wrong_order() {
     local dir
     dir=$(make_fixture)
     write_region_page "$dir"
-    replace_once "$dir" '<!-- region:core owner:lead --><!-- /region:core -->
-<!-- region:limits owner:lead --><!-- /region:limits -->' '<!-- region:limits owner:lead --><!-- /region:limits -->
-<!-- region:core owner:lead --><!-- /region:core -->'
+    replace_once "$dir" '<!-- region:limits owner:lead --><!-- /region:limits -->
+<!-- region:core owner:lead --><!-- /region:core -->' '<!-- region:core owner:lead --><!-- /region:core -->
+<!-- region:limits owner:lead --><!-- /region:limits -->'
     run_checker_regions_on "$dir"
     assert_eq "1" "$CHECK_RC"
     assert_contains "FAIL regions" "$CHECK_OUT"
