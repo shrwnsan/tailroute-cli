@@ -31,7 +31,7 @@
 
 <!-- region:meta owner:meta -->
 <title>tailroute-cli—Tailscale + VPN coexistence for macOS</title>
-  <meta name="description" content="A macOS daemon that toggles Tailscale's MagicDNS when your VPN connects—internet through the VPN, peers through the mesh. No telemetry. Apache-2.0 CLI.">
+  <meta name="description" content="Run your VPN and Tailscale at the same time on a Mac. tailroute-cli toggles MagicDNS when your VPN connects—internet through the VPN, peers through the mesh. No telemetry. Apache-2.0 CLI.">
   <link rel="canonical" href="https://tailroute.app/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="tailroute-cli">
@@ -41,7 +41,7 @@
   <meta property="og:image" content="https://tailroute.app/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="tailroute-cli—Tailscale + VPN coexistence for macOS">
-  <meta name="twitter:description" content="Keep working. VPN up, tailnet up.">
+  <meta name="twitter:description" content="Internet through your VPN. Peers through your mesh. One daemon toggles MagicDNS when your VPN connects.">
   <meta name="twitter:image" content="https://tailroute.app/og.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <script type="application/ld+json">
@@ -115,38 +115,37 @@
     <div class="wrap">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow">
-            <span class="hot">Open core · Apache-2.0 CLI</span>
-            <span>macOS 15+</span>
-            <span>restores DNS on stop</span>
-          </div>
-          <h1 class=""><em>Keep working.</em><br>VPN up, tailnet&nbsp;up.</h1>
-          <p class="hero-sub">tailroute watches your Mac&rsquo;s routing table and toggles Tailscale&rsquo;s MagicDNS when your VPN connects—and back when it drops—<b>internet through the VPN, peers through the mesh.</b> A root daemon that
-            verifies its own install, restores MagicDNS when it stops, and runs entirely local.</p>
+          <p class="eyebrow">For one Mac running Tailscale alongside a second VPN&mdash;corporate or commercial.</p>
+          <h1>Run your VPN and Tailscale at the same time on a Mac.</h1>
+          <p class="hero-sub">When your VPN connects, MagicDNS stops resolving and peers time out. tailroute watches the routing table and makes the call for you: <b>internet through the VPN, peers through the mesh.</b> It undoes itself when the VPN disconnects.</p>
 
           <div class="install" data-install id="hero-install">
             <div class="install-tabs" role="tablist" aria-label="Install target">
-              <button class="install-tab" type="button" role="tab" id="hero-tab-app" aria-controls="hero-panel-app" aria-selected="true">Menu bar app <span class="tagx">early access · free</span></button>
-              <button class="install-tab" type="button" role="tab" id="hero-tab-cli" aria-controls="hero-panel-cli" aria-selected="false" tabindex="-1">CLI daemon <span class="tagx">apache-2.0</span></button>
+              <button class="install-tab" type="button" role="tab" id="hero-tab-app" aria-controls="hero-panel-app" aria-selected="false" tabindex="-1">Menu bar app <span class="tagx">early access · free</span></button>
+              <button class="install-tab" type="button" role="tab" id="hero-tab-cli" aria-controls="hero-panel-cli" aria-selected="true">CLI daemon <span class="tagx">apache-2.0</span></button>
             </div>
-            <div class="install-panel" role="tabpanel" id="hero-panel-app" aria-labelledby="hero-tab-app">
-              <p class="install-label">Menu bar app</p>
-              <code class="install-cmd"><span class="install-ps1">$</span><span id="hero-cmd-app">brew install --cask shrwnsan/tap/tailroute</span></code>
-              <span class="install-note">includes the CLI</span>
-              <button class="copy" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-target="hero-cmd-app" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
-            </div>
-            <div class="install-panel" role="tabpanel" id="hero-panel-cli" aria-labelledby="hero-tab-cli" hidden>
+            <div class="install-panel" role="tabpanel" id="hero-panel-cli" aria-labelledby="hero-tab-cli">
               <p class="install-label">CLI daemon</p>
               <code class="install-cmd"><span class="install-ps1">$</span><span id="hero-cmd-cli">brew install shrwnsan/tap/tailroute-cli</span></code>
-              <span class="install-note">then: sudo tailroute install</span>
+              <span class="install-note">The full engine, Apache-2.0, as a root launchd daemon.</span>
+              <span class="install-activate">After it installs, run <code>sudo tailroute install</code>, connect your VPN as usual, then run <code>tailroute status</code> and watch it make the call.</span>
               <button class="copy" type="button" data-copy="brew install shrwnsan/tap/tailroute-cli" data-copy-target="hero-cmd-cli" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
             </div>
+            <div class="install-panel" role="tabpanel" id="hero-panel-app" aria-labelledby="hero-tab-app" hidden>
+              <p class="install-label">Menu bar app</p>
+              <code class="install-cmd"><span class="install-ps1">$</span><span id="hero-cmd-app">brew install --cask shrwnsan/tap/tailroute</span></code>
+              <span class="install-note">The same engine behind a menu bar icon. Includes the CLI.</span>
+              <span class="install-note gk-note">The app isn&rsquo;t notarized yet. The first time you open it, macOS asks you to approve it in System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway.</span>
+              <span class="install-activate">Open Tailroute, connect your VPN as usual, then run <code>tailroute status</code> and watch it make the call.</span>
+              <button class="copy" type="button" data-copy="brew install --cask shrwnsan/tap/tailroute" data-copy-target="hero-cmd-app" data-copy-ok="Copied ✓" data-copy-fail="copy failed">Copy</button>
+            </div>
           </div>
-          <p class="microcopy">Requires Tailscale <i>·</i> No account <i>·</i> No telemetry <i>·</i> Uninstall restores everything</p>
+          <p class="microcopy">Uninstall restores everything, including MagicDNS. The daemon has no account and no telemetry.</p>
 
           <div class="hero-cta">
-            <a class="ghost" href="#core">Free core vs the app ↓</a>
-            <a class="ghost" href="docs/">Full docs ↗</a>
+            <a class="ghost" href="docs/">Read the manual</a>
+            <a class="ghost" href="#limits">Honest limits</a>
+            <a class="ghost" href="#core">Free core vs the app</a>
             <!-- DMG direct download: uncomment only once builds are notarized. Two blockers on record:
                  (1) until notarization, a raw DMG link contradicts the project's brew-only install path;
                  (2) the DMG is ad-hoc signed, so browser downloads trip macOS 15+ "Apple could not verify".
@@ -180,10 +179,10 @@
       </div>
 
       <dl class="band">
-        <div class="stat"><dt>tagged releases · public since mar ’26</dt><dd data-metric="releases"><i>40</i></dd></div>
-        <div class="stat"><dt>shell tests · 348 → 667 in eleven weeks</dt><dd>667</dd></div>
-        <div class="stat"><dt>telemetry · external calls · accounts</dt><dd><i>0</i></dd></div>
-        <div class="stat"><dt>forever · apache-2.0 core</dt><dd><i>$0</i></dd></div>
+        <div class="stat"><dt>tagged releases since March 2026</dt><dd data-metric="releases"><i>40</i></dd></div>
+        <div class="stat"><dt>shell tests</dt><dd>667</dd></div>
+        <div class="stat"><dt>external calls or accounts in the daemon</dt><dd><i>0</i></dd></div>
+        <div class="stat"><dt>the core, Apache-2.0, forever</dt><dd><i>$0</i></dd></div>
       </dl>
     </div>
   </header>
