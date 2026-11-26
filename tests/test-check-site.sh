@@ -89,6 +89,7 @@ write_tokens_css() {
   --mesh-ink: #161a05;
   --mesh-mark: #74a41a;
   --vpn: #e8a33d;
+  --vpn-mark: #c4861f;
 }
 CSS
 }
@@ -479,7 +480,6 @@ test_anchors_flags_unresolvable_docs_fragment() {
     dir=$(make_fixture)
     write_good_page "$dir"
     write_docs_page "$dir"
-    replace_once "$dir/docs/index.html" '<span data-metric="cli-version">v0.8.17</span>' '' 
     replace_once "$dir" '</body>' '<a href="docs/#diagnostics">Diagnostics</a></body>'
     run_checker "$dir"
     assert_eq "1" "$CHECK_RC"

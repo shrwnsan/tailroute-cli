@@ -201,17 +201,23 @@
      to the manual's register; no entrance animations. ---- */
   .health { --mark: var(--green); --card: var(--paper); --line2: var(--rule); --text: var(--ink);
     margin: 2.2rem 0 0; }
+  @media (prefers-color-scheme: dark) {
+    /* the chart stroke steps to a value inside the validated lightness band
+       on this surface; the text greens above stay as they are (AA text uses) */
+    .health { --mark: #74a41a; }
+  }
   .health .chart-card { position: relative; border: 1px solid var(--rule); padding: 1rem 1.1rem .6rem; }
   .health .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .6rem; }
-  .health .chart-title { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
-  .health .chart-hi { font-family: var(--mono); font-size: .8rem; color: var(--green); }
+  .health .chart-title { font-size: .8rem; color: var(--dim); }
+  .health .chart-hi { font-family: var(--mono); font-size: .8rem; color: var(--ink); }
   .health svg { width: 100%; height: auto; display: block; }
   .health .axis { stroke: var(--rule); stroke-width: 1; }
-  .health .axtext { font-family: var(--mono); font-size: 11px; fill: var(--faint); }
+  .health .axtext { font-family: var(--mono); font-size: 13px; fill: var(--faint); }
   .health .chart-tip { position: absolute; pointer-events: none; opacity: 0; background: var(--ink);
     color: var(--paper); font-family: var(--mono); font-size: .75rem; padding: .3rem .55rem;
     white-space: nowrap; transform: translateY(-130%); z-index: 2; }
-  .health .chart-tip b { color: var(--accent); }
+  .health .chart-tip b { color: inherit; }
+  .health .chart-tip.below { transform: translateY(14px); }
   .health .data summary { cursor: pointer; font-size: .8rem; color: var(--dim); margin-top: .5rem; }
   .health .data table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
   .health .data td, .health .data th { text-align: left; padding: .25rem .5rem; border-bottom: 1px solid var(--rule); }
@@ -221,7 +227,6 @@
   .health .feed-v { font-family: var(--mono); font-weight: 600; color: var(--green); min-width: 3.4rem; }
   .health .feed-t { font-size: .92rem; }
   .health .feed-d { font-family: var(--mono); font-size: .75rem; color: var(--faint); margin-top: .15rem; }
-  .health .sprint { font-size: .85rem; color: var(--dim); border-left: 3px solid var(--green); padding-left: .8rem; }
 </style>
 </head>
 <body>
@@ -402,7 +407,7 @@
             <span class="chart-title">Tagged releases, cumulative</span>
 <span class="chart-hi">38 of 40 releases shipped since Aug 24</span>
           </div>
-          <svg viewBox="0 -14 728 260" role="img" aria-label="Cumulative tagged releases, March to November 2026: 2 releases in spring, then 38 more from late August, ending at 40">
+          <svg viewBox="0 -14 728 260" role="img" tabindex="0" aria-label="Cumulative tagged releases, March to November 2026: 2 releases in spring, then 38 more from late August, ending at 40">
             <line class="axis" x1="46" y1="214.0" x2="702" y2="214.0"/>
             <text class="axtext" x="38" y="217.0" text-anchor="end">0</text>
             <line class="axis" x1="46" y1="162.0" x2="702" y2="162.0" opacity="0.5"/>
@@ -421,7 +426,7 @@
             <text class="axtext" x="486.2" y="232" text-anchor="middle">Sep</text>
             <text class="axtext" x="569.8" y="232" text-anchor="middle">Oct</text>
             <text class="axtext" x="656.2" y="232" text-anchor="middle">Nov</text>
-            <path d="M46.0,208.8 L46.0,208.8 L82.2,203.6 L463.9,198.4 L483.5,193.2 L486.2,156.8 L489.0,94.4 L491.8,78.8 L514.1,73.6 L544.8,68.4 L547.5,63.2 L550.3,58.0 L567.0,52.8 L642.3,47.6 L653.4,42.4 L661.8,32.0 L670.1,26.8 L684.1,21.6 L698.0,6.0 L698.0,214 L46,214 Z" fill="rgba(116,164,26,0.10)" stroke="none"/>
+            <path d="M46.0,208.8 L46.0,208.8 L82.2,203.6 L463.9,198.4 L483.5,193.2 L486.2,156.8 L489.0,94.4 L491.8,78.8 L514.1,73.6 L544.8,68.4 L547.5,63.2 L550.3,58.0 L567.0,52.8 L642.3,47.6 L653.4,42.4 L661.8,32.0 L670.1,26.8 L684.1,21.6 L698.0,6.0 L698.0,214 L46,214 Z" fill="var(--mark)" fill-opacity="0.1" stroke="none"/>
             <path d="M46.0,208.8 L82.2,203.6 L463.9,198.4 L483.5,193.2 L486.2,156.8 L489.0,94.4 L491.8,78.8 L514.1,73.6 L544.8,68.4 L547.5,63.2 L550.3,58.0 L567.0,52.8 L642.3,47.6 L653.4,42.4 L661.8,32.0 L670.1,26.8 L684.1,21.6 L698.0,6.0" fill="none" stroke="var(--mark)" stroke-width="2" stroke-linejoin="round"/>
             <circle cx="698.0" cy="6.0" r="4.5" fill="var(--mark)" stroke="var(--card)" stroke-width="2"/>
             <text x="698.0" y="0.0" text-anchor="end" style="font-family:var(--mono);font-size:11px;font-weight:600" fill="var(--text)">40</text>
@@ -464,7 +469,6 @@
             <div class="feed-item"><span class="feed-v">0.9.3</span><div><p class="feed-t"><b>Homebrew installs find their own proxy</b>—Apple Silicon no longer reports <code>Binary: Not installed</code>, and <code>proxy start</code> stops waiting on a prompt nobody can answer.</p><p class="feed-d">2026-11-03 · tests 544 → 554</p></div></div>
           </div>
           </div>
-<p class="sprint"><b>22 releases in 72 hours</b> (Sep 1–3)—the v0.7→v0.8 hardening sprint: a burst of fixes after the 0.8.0 rewrite, each one tagged and tested. Full history: <a href="https://github.com/shrwnsan/tailroute-cli/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md ↗</a></p>
   </section>
 
   <h2 id="see-also">See also</h2>
