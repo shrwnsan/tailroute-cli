@@ -40,3 +40,65 @@ svg.fig-narrow { display: none; aspect-ratio: 330 / 330; }
 /* standing caption under the figure */
 .route-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .route-final { margin: 0; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); }
+
+/* ---- the one orchestrated motion moment ---- */
+
+/* caption rail: one reserved line under the card; the step captions
+   crossfade inside it during the run. The sequence is aria-hidden —
+   the svg <desc> carries the meaning for assistive tech. */
+.route-rail { position: relative; height: 1.6em; margin-top: 10px; }
+.route-cap { position: absolute; inset: 0; margin: 0; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); opacity: 0; }
+
+/* Replay is a JS affordance: hidden without JavaScript and under
+   reduced motion — those visitors get the final frame directly. */
+.route-replay { display: none; font-family: var(--font-mono); font-size: 1em; color: var(--text-dim); background: none; border: 1px solid var(--line-2); border-radius: 8px; padding: 3px 12px; cursor: pointer; transition: color var(--dur-press) var(--ease-out), border-color var(--dur-press) var(--ease-out); }
+html.js .route-replay { display: inline-block; }
+.route-replay:hover { color: var(--text); border-color: var(--mesh); }
+@media (prefers-reduced-motion: reduce) {
+  html.js .route-replay { display: none; }
+  .route-replay { transition: none; }
+}
+
+/* The 2.4s storyboard, told with stroke-dashoffset and opacity only.
+   Every path carries pathLength="1", so dashoffset 1 is fully hidden
+   and 0 fully drawn. The last keyframe of each animation equals the
+   static default above, so the final frame is the resting page. */
+@keyframes route-vpn-1 { 0%, 12.5% { stroke-dashoffset: 1; } 21%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-vpn-2 { 0%, 21% { stroke-dashoffset: 1; } 29.17%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-mesh-1 { 0%, 54.17% { stroke-dashoffset: 1; } 66%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-mesh-2 { 0%, 66% { stroke-dashoffset: 1; } 79.17%, 100% { stroke-dashoffset: 0; } }
+@keyframes route-direct-fade { 0%, 37.5% { opacity: 0.9; } 45.83%, 100% { opacity: 0.4; } }
+@keyframes route-x-in { 0%, 37.5% { opacity: 0; } 45.83%, 100% { opacity: 1; } }
+@keyframes route-lab-vpn-in { 0%, 12.5% { opacity: 0; } 19%, 100% { opacity: 1; } }
+@keyframes route-lab-int-in { 0%, 23% { opacity: 0; } 29.5%, 100% { opacity: 1; } }
+@keyframes route-lab-proxy-in { 0%, 56% { opacity: 0; } 63%, 100% { opacity: 1; } }
+@keyframes route-lab-peers-in { 0%, 71% { opacity: 0; } 77.5%, 100% { opacity: 1; } }
+@keyframes route-tip-v1-in { 0%, 17% { opacity: 0; } 21.5%, 100% { opacity: 1; } }
+@keyframes route-tip-v2-in { 0%, 25% { opacity: 0; } 29.5%, 100% { opacity: 1; } }
+@keyframes route-tip-m1-in { 0%, 62% { opacity: 0; } 66.5%, 100% { opacity: 1; } }
+@keyframes route-tip-m2-in { 0%, 75% { opacity: 0; } 79.5%, 100% { opacity: 1; } }
+@keyframes route-cap-1 { 0%, 12.5% { opacity: 1; } 17%, 100% { opacity: 0; } }
+@keyframes route-cap-2 { 0%, 12.5% { opacity: 0; } 17%, 37.5% { opacity: 1; } 42%, 100% { opacity: 0; } }
+@keyframes route-cap-3 { 0%, 37.5% { opacity: 0; } 42%, 58% { opacity: 1; } 64%, 100% { opacity: 0; } }
+@keyframes route-final-in { 0%, 54.17% { opacity: 0; } 70.83%, 100% { opacity: 1; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js .route.is-playing .route-vpn-1 { animation: route-vpn-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-vpn-2 { animation: route-vpn-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-mesh-1 { animation: route-mesh-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-mesh-2 { animation: route-mesh-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-direct { animation: route-direct-fade 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-x { animation: route-x-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-vpn { animation: route-lab-vpn-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-int { animation: route-lab-int-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-proxy { animation: route-lab-proxy-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-lab-peers { animation: route-lab-peers-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-v1 { animation: route-tip-v1-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-v2 { animation: route-tip-v2-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-m1 { animation: route-tip-m1-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-tip-m2 { animation: route-tip-m2-in 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-1 { animation: route-cap-1 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-2 { animation: route-cap-2 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-cap-3 { animation: route-cap-3 2400ms var(--ease-out) both; }
+  html.js .route.is-playing .route-final { animation: route-final-in 2400ms var(--ease-out) both; }
+}

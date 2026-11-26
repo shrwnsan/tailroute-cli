@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="assets/css/support.css">
 <link rel="stylesheet" href="assets/css/footer.css">
 <script defer src="assets/js/copy.js"></script>
+<script defer src="assets/js/diagram.js"></script>
 <script defer src="assets/js/install.js"></script>
 <script defer src="assets/js/terminal.js"></script>
 <script defer src="assets/js/nav.js"></script>
@@ -172,10 +173,10 @@
               <path class="route-path mesh route-mesh-2" pathLength="1" d="M216,209 L248,209"/>
               <path class="route-direct" d="M87,141 C180,136 250,146 294,180"/>
               <path class="route-x" d="M290.5,176.5 L301.5,187.5 M301.5,176.5 L290.5,187.5"/>
-              <path class="tip-vpn" transform="translate(128,37)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-vpn" transform="translate(248,37)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-mesh" transform="translate(124,205)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-mesh" transform="translate(248,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(128,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(248,37)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(124,205)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(248,205)" d="M0,0 L10,4 L0,8 Z"/>
               <text class="route-lab route-lab-vpn" x="169" y="80" text-anchor="middle">your VPN</text>
               <text class="route-lab route-lab-int" x="317" y="80" text-anchor="middle">the internet</text>
               <text class="route-lab route-lab-proxy" x="175" y="250" text-anchor="middle">local proxy</text>
@@ -196,10 +197,10 @@
               <path class="route-path mesh route-mesh-2" pathLength="1" d="M248,160 L248,242"/>
               <path class="route-direct" d="M160,54 L160,176 C160,204 180,218 204,222"/>
               <path class="route-x" d="M206.5,218.5 L217.5,229.5 M217.5,218.5 L206.5,229.5"/>
-              <path class="tip-vpn" transform="translate(65,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-vpn" transform="translate(65,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-mesh" transform="translate(252,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
-              <path class="tip-mesh" transform="translate(252,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v1" transform="translate(65,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-vpn route-tip-v2" transform="translate(65,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m1" transform="translate(252,112) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
+              <path class="tip-mesh route-tip-m2" transform="translate(252,236) rotate(90)" d="M0,0 L10,4 L0,8 Z"/>
               <text class="route-lab route-lab-vpn" x="61" y="180" text-anchor="middle">your VPN</text>
               <text class="route-lab route-lab-proxy" x="248" y="180" text-anchor="middle">local proxy</text>
               <text class="route-lab route-lab-proxy" x="248" y="196" text-anchor="middle">127.0.0.1:1055</text>
@@ -207,8 +208,14 @@
               <text class="route-lab route-lab-peers" x="250" y="304" text-anchor="middle">your peers, 100.x</text>
             </svg>
           </div>
+          <div class="route-rail" aria-hidden="true">
+            <p class="route-cap route-cap-1">Tailscale only</p>
+            <p class="route-cap route-cap-2">VPN connects</p>
+            <p class="route-cap route-cap-3">Peers time out</p>
+          </div>
           <div class="route-foot">
             <p class="route-final">tailroute: MagicDNS off, proxy up</p>
+            <button class="route-replay" type="button">Replay</button>
           </div>
         </div>
       </div>
