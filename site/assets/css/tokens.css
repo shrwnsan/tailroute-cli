@@ -3,6 +3,7 @@
   --ground: #0d0d0b;
   --surface: #161613;
   --surface-2: #1b1b17;
+  --surface-3: #121210;
   --line: #262620;
   --line-2: #38382e;
   --text: #f0efe8;
@@ -11,7 +12,11 @@
   --mesh: #c6f24e;
   --mesh-ink: #161a05;
   --mesh-mark: #74a41a; /* diagram and chart strokes */
+  --mesh-soft: rgba(198, 242, 78, 0.10);
+  --mesh-line: rgba(198, 242, 78, 0.32);
   --vpn: #e8a33d;
+  --vpn-soft: rgba(232, 163, 61, 0.09);
+  --vpn-line: rgba(232, 163, 61, 0.35);
 
   /* type scale */
   --step--1: 13px;
@@ -32,26 +37,8 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "Geist Mono", monospace;
 
-  /* legacy aliases: temporary — removed once no stylesheet references them */
-  --bg: var(--ground);
-  --bg2: #121210;
-  --card: var(--surface);
-  --card2: var(--surface-2);
-  --line2: var(--line-2);
-  --dim: var(--text-dim);
-  --faint: var(--text-faint);
-  --lime: var(--mesh);
-  --lime-soft: rgba(198, 242, 78, 0.10);
-  --lime-line: rgba(198, 242, 78, 0.32);
-  --lime-ink: var(--mesh-ink);
-  --mark: var(--mesh-mark);
-  --amber: var(--vpn);
-  --amber-soft: rgba(232, 163, 61, 0.09);
-  --amber-line: rgba(232, 163, 61, 0.35);
+  /* paper tokens: used by the light core cards until that section moves to dark surfaces */
   --paper: #f4f2ea;
   --paper-ink: #15150f;
   --paper-dim: #5d5c52;
-  --disp: var(--font-display);
-  --sans: var(--font-body);
-  --mono: var(--font-mono);
 }
