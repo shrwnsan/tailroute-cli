@@ -192,6 +192,7 @@ h2 em { font-style: normal; color: var(--mesh); }
 :focus-visible { outline: 2px solid var(--mesh); outline-offset: 2px; border-radius: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 
 /* ============ BUTTONS (shared press and hover) ============ */
@@ -204,6 +205,9 @@ button:active { transform: scale(0.97); }
   button { transition: none; }
   button:active { transform: none; }
 }
+
+.skip-link { position: absolute; left: -9999px; top: 0; z-index: 100; background: var(--ground); color: var(--text); padding: 10px 16px; border: 1px solid var(--mesh); border-radius: 0 0 8px 0; font-size: var(--step--1); }
+.skip-link:focus { left: 0; }
 /* ============ NAV ============ */
 nav { position: sticky; top: 0; z-index: 60; background: var(--nav-veil); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .nav-in { position: relative; max-width: 1180px; margin: 0 auto; padding: 13px 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
@@ -503,7 +507,7 @@ html.js .route-replay { display: inline-block; }
 /* the problem side is plain body type on the shared scale: situation line,
    then the short line it earns */
 .features .prob p { color: var(--text-dim); font-size: var(--step-1); margin-bottom: 8px; }
-.features .prob h4 { font-size: var(--step-1); font-weight: 600; color: var(--text); }
+.features .prob-head { font-size: var(--step-1); font-weight: 600; color: var(--text); }
 .features .resp { padding: 24px 26px; }
 .features .resp h3 { margin-bottom: 8px; }
 .features .resp p { color: var(--text-dim); font-size: 0.9em; }
@@ -951,7 +955,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       <p class="states-note">If the state is ambiguous — two VPNs active at once, say — tailroute logs a warning and changes nothing. <b>When in doubt, do nothing.</b></p>
 
       <div class="probband">
-        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><h4>Every peer times out.</h4></div>
+        <div class="prob"><p>When the VPN connects—on hotel or café Wi-Fi, this is your Tuesday.</p><p class="prob-head">Every peer times out.</p></div>
         <div class="resp"><h3>SOCKS5 mesh proxy</h3>
           <p>A tsnet-based proxy on <code>127.0.0.1:1055</code> routes peer traffic through the mesh even when
           the VPN blocks the CGNAT range. <b>Starts and stops with the VPN—never configured by you.</b>
@@ -959,7 +963,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       </div>
 
       <div class="probband">
-        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><h4>Cert warnings, extensions, luck.</h4></div>
+        <div class="prob"><p>When you need a peer&rsquo;s dashboard</p><p class="prob-head">Cert warnings, extensions, luck.</p></div>
         <div class="resp"><h3>Browser tunnels</h3>
           <p>One command registers a launchd-managed tunnel and maps a managed <code>/etc/hosts</code> entry—
           <b>a valid, real <code>.ts.net</code> certificate in Safari, Chrome, or Firefox.</b>
@@ -968,7 +972,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 40px; }
       </div>
 
       <div class="probband">
-        <div class="prob"><p>When it asks for root</p><h4>Why trust a DNS-flipping daemon?</h4></div>
+        <div class="prob"><p>When it asks for root</p><p class="prob-head">Why trust a DNS-flipping daemon?</p></div>
         <div class="resp"><h3>Self-verifying install</h3>
           <p><code>sudo tailroute install</code> writes a SHA-256 manifest of the installed files. The daemon
           checks it before loading any code and refuses to start if anything changed. Strict validation,
