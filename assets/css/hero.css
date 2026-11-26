@@ -1,21 +1,23 @@
 /* ============ HERO ============ */
-.hero { padding: 92px 0 64px; position: relative; }
-.hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 55% 45% at 70% -5%, rgba(198,242,78,0.075), transparent 70%); pointer-events: none; }
+.hero { padding: 68px 0 64px; position: relative; }
+.hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 55% 45% at 70% -5%, color-mix(in srgb, var(--mesh) 7.5%, transparent), transparent 70%); pointer-events: none; }
 .hero-grid { position: relative; display: grid; grid-template-columns: 1.12fr 0.88fr; gap: 56px; align-items: start; }
-.eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
-.eyebrow span { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 12px; }
-.eyebrow span.hot { color: var(--mesh); border-color: var(--mesh-line); background: var(--mesh-soft); }
+.eyebrow { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-dim); margin-bottom: 20px; }
 /* h1 size, face, and weight come from base.css (the shared scale) */
 h1 { line-height: 0.98; letter-spacing: -0.025em; max-width: 880px; text-wrap: balance; }
-h1 em { font-style: normal; color: var(--mesh); }
-.hero-sub { max-width: 620px; color: var(--text-dim); font-size: 18px; margin: 26px 0 34px; }
+.hero-sub { max-width: 620px; color: var(--text-dim); font-size: var(--step-1); margin: 26px 0 22px; }
 .hero-sub b { color: var(--text); font-weight: 600; }
 
 .hero-cta { display: flex; gap: 14px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
-.microcopy { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--text-faint); margin-top: 14px; }
-.microcopy i { font-style: normal; color: var(--mesh); }
-.ghost { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-dim); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 2px; }
+.microcopy { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); margin-top: 14px; }
+.ghost { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-dim); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 2px; }
 .ghost:hover { color: var(--text); border-color: var(--mesh); }
+
+/* the activation line under each hero command; install.css reserves the
+   class but leaves its layout to the page */
+#hero-install .install-activate { flex-basis: 100%; order: 4; font-size: var(--step--1); color: var(--text-dim); }
+#hero-install .install-activate code { font-size: 1em; white-space: normal; }
+html:not(.js) #hero-install .install-activate { display: block; margin-top: 8px; }
 
 /* hero product visual */
 .hero-visual { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
@@ -46,7 +48,7 @@ h1 em { font-style: normal; color: var(--mesh); }
 .stat { background: var(--surface-3); padding: 16px 18px; display: flex; align-items: center; gap: 10px; }
 .stat dd { margin: 0; order: -1; font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
 .stat dd i { font-style: normal; color: var(--mesh); }
-.stat dt { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); flex: 1; min-width: 0; }
+.stat dt { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-faint); flex: 1; min-width: 0; }
 
 @media (max-width: 1000px) {
   .hero-grid { grid-template-columns: 1fr; }
