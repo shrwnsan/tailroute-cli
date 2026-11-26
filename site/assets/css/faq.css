@@ -3,10 +3,15 @@
 /* ============ FAQ ============ */
 .faq { max-width: 800px; margin-top: 36px; }
 details.q { border-bottom: 1px solid var(--line); }
-details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+details.q summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 4px; font-family: var(--font-display); font-weight: 700; font-size: 1.03em; letter-spacing: -0.01em; }
 details.q summary::-webkit-details-marker { display: none; }
-details.q summary .pm { font-family: var(--font-mono); color: var(--mesh); font-size: 18px; flex-shrink: 0; }
-details.q[open] summary .pm { transform: rotate(45deg); }
-details.q .a { padding: 0 4px 22px; color: var(--text-dim); font-size: 15px; max-width: 720px; }
+details.q summary .pm { font-family: var(--font-mono); color: var(--mesh); font-size: 1.06em; flex-shrink: 0; display: inline-block; transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1); }
+details[open] .pm { transform: rotate(45deg); }
+details.q .a { padding: 0 4px 22px; color: var(--text-dim); font-size: 0.91em; max-width: 720px; }
 details.q .a b { color: var(--text); }
 details.q .a code { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  details.q summary .pm { transition: none; }
+  details[open] .pm { transform: none; }
+}
