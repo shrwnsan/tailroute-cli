@@ -18,7 +18,7 @@ is the other frontend.
 | `bin/tailroute.sh` | main executable: command dispatch, install/uninstall, integrity gate |
 | `bin/lib-*.sh` | detection, DNS, event loop, locking, logging, validation, tunnel libs |
 | `proxy/` | Go SOCKS5 proxy (`tailroute-proxy`), built for darwin arm64/amd64 |
-| `site/` | landing page + `/docs` (vanilla HTML/CSS/JS; PR-checked by `tests/test-check-site.sh`) |
+| `site/` | landing page, `/docs`, `llms.txt` agent brief (vanilla HTML/CSS/JS; PR-checked by `tests/test-check-site.sh`) |
 | `tests/` | test harness — `bash tests/run-tests.sh` runs everything |
 | `etc/` | launchd plist, newsyslog config |
 
@@ -30,7 +30,10 @@ shellcheck bin/*.sh          # linting — must pass, no exceptions
 ```
 
 Add unit tests to `tests/test-lib-*.sh` for lib changes. Site changes
-should pass `tests/test-check-site.sh`.
+should pass `tests/test-check-site.sh`. `site/llms.txt` is the
+agent-facing brief and is hand-maintained: when site copy changes,
+refresh it in the same PR — every claim must trace to the live pages,
+and the banned-phrase check scans it.
 
 ## Code Style
 
